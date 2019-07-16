@@ -1,7 +1,11 @@
 use num_integer::Integer;
 use num_rational::Ratio;
 use num_traits::{zero, Zero};
-use std::fmt::{self, Display, Formatter};
+use std::fmt::{self, Debug, Display, Formatter};
+use std::mem;
+use std::ops::Neg;
+use std::ops::Sub;
+use std::ops::SubAssign;
 use std::ops::{Add, AddAssign, Mul, MulAssign};
 use std::slice;
 use std::vec;
@@ -410,6 +414,85 @@ where
     }
 }
 
+impl<T> SubAssign for Polynomial<T>
+where
+    T: SubAssign<T> + Zero + Neg<Output = T>,
+{
+    fn sub_assign(&mut self, rhs: Polynomial<T>) {
+        pairwise_op_eq_move(self, rhs, SubAssign::sub_assign, |_| {}, Neg::neg)
+    }
+}
+
+impl<'a, T> SubAssign<&'a Polynomial<T>> for Polynomial<T>
+where
+    T: SubAssign<&'a T> + Zero,
+    &'a T: Neg<Output = T>,
+{
+    fn sub_assign(&mut self, rhs: &'a Polynomial<T>) {
+        pairwise_op_eq_ref(self, rhs, SubAssign::sub_assign, |_| {}, Neg::neg)
+    }
+}
+
+impl<T> Sub for Polynomial<T>
+where
+    T: SubAssign<T> + Zero + Neg<Output = T>,
+{
+    type Output = Polynomial<T>;
+    fn sub(mut self, rhs: Polynomial<T>) -> Self::Output {
+        self -= rhs;
+        self
+    }
+}
+
+impl<'a, T> Sub<&'a Polynomial<T>> for Polynomial<T>
+where
+    T: SubAssign<&'a T> + Clone + Zero,
+    &'a T: Neg<Output = T>,
+{
+    type Output = Polynomial<T>;
+    fn sub(mut self, rhs: &'a Polynomial<T>) -> Self::Output {
+        self -= rhs;
+        self
+    }
+}
+
+impl<'a, T> Sub<Polynomial<T>> for &'a Polynomial<T>
+where
+    T: Clone + Zero + Neg<Output = T>,
+    &'a T: Sub<T, Output = T>,
+{
+    type Output = Polynomial<T>;
+    fn sub(self, mut rhs: Polynomial<T>) -> Self::Output {
+        let mut temp = None;
+        let mut temp2 = None;
+        pairwise_op_eq_ref(
+            &mut rhs,
+            self,
+            |r, l| {
+                let r_value = mem::replace(r, temp.take().unwrap_or_else(zero));
+                temp = Some(mem::replace(r, l - r_value));
+            },
+            |r| {
+                let r_value = mem::replace(r, temp2.take().unwrap_or_else(zero));
+                temp2 = Some(mem::replace(r, -r_value));
+            },
+            Clone::clone,
+        );
+        rhs
+    }
+}
+
+impl<'a, T> Sub for &'a Polynomial<T>
+where
+    &'a T: Sub<&'a T, Output = T> + Neg<Output = T>,
+    T: Clone + Zero,
+{
+    type Output = Polynomial<T>;
+    fn sub(self, rhs: Self) -> Self::Output {
+        pairwise_op_ref_ref(self, rhs, Sub::sub, Clone::clone, Neg::neg)
+    }
+}
+
 impl<T: Zero + AddAssign> Zero for Polynomial<T> {
     fn zero() -> Self {
         Default::default()
@@ -459,4 +542,91 @@ mod tests {
         let poly = Polynomial::from(vec![1, 2, 3, 4]);
         assert_eq!(format!("{}", poly), "1 + 2*x + 3*x^2 + 4*x^3");
     }
+
+    #[allow(clippy::too_many_arguments)]
+    fn test_op_helper<
+        T: Clone + PartialEq + Debug,
+        OpEqMove: Fn(&mut T, T),
+        OpEqRef: Fn(&mut T, &T),
+        OpRefRef: Fn(&T, &T) -> T,
+        OpMoveRef: Fn(T, &T) -> T,
+        OpRefMove: Fn(&T, T) -> T,
+        OpMoveMove: Fn(T, T) -> T,
+    >(
+        l: T,
+        r: T,
+        expected: &T,
+        op_eq_move: OpEqMove,
+        op_eq_ref: OpEqRef,
+        op_ref_ref: OpRefRef,
+        op_move_ref: OpMoveRef,
+        op_ref_move: OpRefMove,
+        op_move_move: OpMoveMove,
+    ) {
+        let mut eq_move_result = l.clone();
+        op_eq_move(&mut eq_move_result, r.clone());
+        assert_eq!(eq_move_result, *expected);
+        let mut eq_ref_result = l.clone();
+        op_eq_ref(&mut eq_ref_result, &r);
+        assert_eq!(eq_ref_result, *expected);
+        assert_eq!(op_ref_ref(&l, &r), *expected);
+        assert_eq!(op_ref_move(&l, r.clone()), *expected);
+        assert_eq!(op_move_ref(l.clone(), &r), *expected);
+        assert_eq!(op_move_move(l, r), *expected);
+    }
+
+    #[test]
+    fn test_add() {
+        let test = |l: Polynomial<i32>, r: Polynomial<i32>, expected: &Polynomial<i32>| {
+            test_op_helper(
+                l,
+                r,
+                expected,
+                |l, r| *l += r,
+                |l, r| *l += r,
+                |l, r| l + r,
+                |l, r| l + r,
+                |l, r| l + r,
+                |l, r| l + r,
+            );
+        };
+        test(
+            vec![1, 2, 3, 4].into(),
+            vec![5, 6, 7, 8].into(),
+            &vec![6, 8, 10, 12].into(),
+        );
+        test(
+            vec![1, 2, 3, 4, -1].into(),
+            vec![5, 6, 7, 8, 1].into(),
+            &vec![6, 8, 10, 12].into(),
+        );
+    }
+
+    #[test]
+    fn test_sub() {
+        let test = |l: Polynomial<i32>, r: Polynomial<i32>, expected: &Polynomial<i32>| {
+            test_op_helper(
+                l,
+                r,
+                expected,
+                |l, r| *l -= r,
+                |l, r| *l -= r,
+                |l, r| l - r,
+                |l, r| l - r,
+                |l, r| l - r,
+                |l, r| l - r,
+            );
+        };
+        test(
+            vec![1, 2, 3, 4].into(),
+            vec![8, 7, 6, 5].into(),
+            &vec![-7, -5, -3, -1].into(),
+        );
+        test(
+            vec![1, 2, 3, 4, 10].into(),
+            vec![8, 7, 6, 5, 10].into(),
+            &vec![-7, -5, -3, -1].into(),
+        );
+    }
+
 }
