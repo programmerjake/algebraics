@@ -3,4 +3,5 @@
 pub(crate) mod add;
 pub(crate) mod mul;
 pub(crate) mod sub;
+pub(crate) mod div_rem;
 pub(crate) mod util;

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // See Notices.txt for copyright information
 use crate::prelude::*;
+use num_integer::Integer;
 use num_rational::Ratio;
 use num_traits::{zero, Zero};
 use std::fmt::{self, Display, Formatter};
@@ -10,6 +11,13 @@ use std::vec;
 
 mod ops;
 
+/// A single-variable polynomial.
+///
+/// the term at index `n` is `self.coefficients()[n] * pow(x, n)`
+///
+/// # Invariants
+///
+/// `self.coefficients().last()` is either `None` or `Some(v)` where `!v.is_zero()`
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Polynomial<T> {
     coefficients: Vec<T>,
@@ -36,6 +44,22 @@ impl<T: Zero> From<Vec<T>> for Polynomial<T> {
         let mut retval = Self { coefficients };
         retval.remove_extra_zeros();
         retval
+    }
+}
+
+impl<T: Zero + Clone + Integer> From<Vec<T>> for Polynomial<Ratio<T>> {
+    fn from(coefficients: Vec<T>) -> Self {
+        let coefficients = coefficients.into_iter().map(Into::into).collect();
+        let mut retval = Self { coefficients };
+        retval.remove_extra_zeros();
+        retval
+    }
+}
+
+impl<T: Zero + Clone + Integer> From<Polynomial<T>> for Polynomial<Ratio<T>> {
+    fn from(src: Polynomial<T>) -> Self {
+        let coefficients = src.into_iter().map(Into::into).collect();
+        Self { coefficients }
     }
 }
 
@@ -202,7 +226,7 @@ impl<'a, T> IntoIterator for &'a mut Polynomial<T> {
 impl<T: Display> Display for Polynomial<T> {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         if self.coefficients.is_empty() {
-            write!(f, "<empty polynomial>")
+            write!(f, "0")
         } else {
             for (power, coefficient) in self.coefficients.iter().enumerate() {
                 match power {
@@ -279,15 +303,15 @@ mod tests {
 
     #[test]
     fn test_display() {
-        let poly = Polynomial::<i32>::from(vec![]);
-        assert_eq!(format!("{}", poly), "<empty polynomial>");
-        let poly = Polynomial::from(vec![1]);
+        let mut poly = Polynomial::<i32>::from(vec![]);
+        assert_eq!(format!("{}", poly), "0");
+        poly = Polynomial::from(vec![1]);
         assert_eq!(format!("{}", poly), "1");
-        let poly = Polynomial::from(vec![1, 2]);
+        poly = Polynomial::from(vec![1, 2]);
         assert_eq!(format!("{}", poly), "1 + 2*x");
-        let poly = Polynomial::from(vec![1, 2, 3]);
+        poly = Polynomial::from(vec![1, 2, 3]);
         assert_eq!(format!("{}", poly), "1 + 2*x + 3*x^2");
-        let poly = Polynomial::from(vec![1, 2, 3, 4]);
+        poly = Polynomial::from(vec![1, 2, 3, 4]);
         assert_eq!(format!("{}", poly), "1 + 2*x + 3*x^2 + 4*x^3");
     }
 

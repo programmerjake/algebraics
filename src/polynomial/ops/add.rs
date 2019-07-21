@@ -76,13 +76,7 @@ impl<T: Zero + AddAssign> Zero for Polynomial<T> {
         self.coefficients.clear()
     }
     fn is_zero(&self) -> bool {
-        // test in reverse order since high coefficient is usually non-zero
-        for coefficient in self.iter().rev() {
-            if !coefficient.is_zero() {
-                return false;
-            }
-        }
-        true
+        self.coefficients.is_empty()
     }
 }
 
