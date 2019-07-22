@@ -3,7 +3,9 @@
 use crate::prelude::*;
 use num_integer::Integer;
 use num_rational::Ratio;
+use num_traits::One;
 use num_traits::{zero, Zero};
+use std::borrow::Cow;
 use std::fmt::{self, Display, Formatter};
 use std::ops::{AddAssign, Mul, MulAssign};
 use std::slice;
@@ -18,7 +20,7 @@ mod ops;
 /// # Invariants
 ///
 /// `self.coefficients().last()` is either `None` or `Some(v)` where `!v.is_zero()`
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug, Hash)]
 pub struct Polynomial<T> {
     coefficients: Vec<T>,
 }
@@ -105,6 +107,29 @@ impl<T> Polynomial<T> {
                 Some(lhs) => Some(lhs.gcd(rhs)),
             })
             .unwrap_or_else(zero)
+    }
+}
+
+impl<T: Clone + Integer + AddAssign + One + for<'a> Mul<&'a T, Output = T>> Polynomial<Ratio<T>> {
+    pub fn split_out_denominator(self) -> (Polynomial<T>, T) {
+        let lcm = self.iter().fold(None, |a: Option<Cow<T>>, b: &Ratio<T>| {
+            Some(match a {
+                None => Cow::Borrowed(b.denom()),
+                Some(a) => Cow::Owned(a.lcm(b.denom())),
+            })
+        });
+        let lcm = match lcm {
+            None => return (Zero::zero(), One::one()),
+            Some(lcm) => lcm.into_owned(),
+        };
+        let coefficients: Vec<_> = self
+            .into_iter()
+            .map(|v| {
+                let (numer, denom) = v.into();
+                numer * &lcm / denom
+            })
+            .collect();
+        (coefficients.into(), lcm)
     }
 }
 
@@ -315,4 +340,21 @@ mod tests {
         assert_eq!(format!("{}", poly), "1 + 2*x + 3*x^2 + 4*x^3");
     }
 
+    #[test]
+    fn test_split_out_denominator() {
+        let mut poly: Polynomial<Ratio<i32>> = Zero::zero();
+        assert_eq!(poly.split_out_denominator(), (vec![].into(), 1));
+        poly = From::<Vec<Ratio<_>>>::from(vec![
+            (46, 205).into(),
+            (43, 410).into(),
+            (71, 410).into(),
+            (62, 615).into(),
+        ]);
+        assert_eq!(
+            poly.split_out_denominator(),
+            (vec![276, 129, 213, 124].into(), 1230)
+        );
+        poly = From::<Vec<Ratio<_>>>::from(vec![(1, 2).into()]);
+        assert_eq!(poly.split_out_denominator(), (vec![1].into(), 2));
+    }
 }
