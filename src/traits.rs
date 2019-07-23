@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // See Notices.txt for copyright information
+use std::fmt::Debug;
+use std::convert::TryInto;
+use crate::polynomial::Polynomial;
 use num_bigint::{BigInt, BigUint};
 use num_integer::Integer;
 use num_rational::Ratio;
@@ -26,8 +29,9 @@ pub trait PolynomialEval<T> {
     fn eval(self, x: &T) -> T;
 }
 
-pub trait Derivative<Output = Self> {
-    fn derivative(self) -> Output;
+pub trait Derivative {
+    type Output;
+    fn derivative(self) -> Self::Output;
 }
 
 pub trait DivIsRemainderless<Rhs = Self>: Div<Rhs> {}
@@ -133,3 +137,45 @@ impl<T> PolynomialDivSupported for T where
         + for<'a> DivIsRemainderless<&'a Self>
 {
 }
+
+pub trait IsolatedRealRoot<T: Clone + Integer> {
+    fn root_polynomial(&self) -> &Polynomial<T>;
+    fn multiplicity(&self) -> usize;
+    fn lower_bound(&self) -> &Ratio<T>;
+    fn upper_bound(&self)-> &Ratio<T>;
+}
+
+pub trait MakeCoefficient<T> {
+    fn make_coefficient(v: T) -> Self;
+}
+
+impl<I: TryInto<T> + Integer, T: Clone + Integer> MakeCoefficient<I> for Ratio<T> where I::Error: Debug {
+    fn make_coefficient(v: I) -> Self {
+        Ratio::from_integer(v.try_into().unwrap())
+    }
+}
+
+macro_rules! impl_make_coefficient {
+    ($t:ty) => {
+        impl<T: TryInto<$t> + Integer> MakeCoefficient<T> for $t where T::Error: Debug {
+            fn make_coefficient(v: T) -> $t {
+                v.try_into().unwrap()
+            }
+        }
+    };
+}
+
+impl_make_coefficient!(u8);
+impl_make_coefficient!(u16);
+impl_make_coefficient!(u32);
+impl_make_coefficient!(u64);
+impl_make_coefficient!(u128);
+impl_make_coefficient!(i8);
+impl_make_coefficient!(i16);
+impl_make_coefficient!(i32);
+impl_make_coefficient!(i64);
+impl_make_coefficient!(i128);
+impl_make_coefficient!(usize);
+impl_make_coefficient!(isize);
+impl_make_coefficient!(BigInt);
+impl_make_coefficient!(BigUint);

@@ -86,6 +86,24 @@ where
     }
 }
 
+impl<T: Neg<Output = T> + Zero> Neg for Polynomial<T> {
+    type Output = Polynomial<T>;
+    fn neg(self) -> Polynomial<T> {
+        self.into_iter().map(Neg::neg).collect::<Vec<T>>().into()
+    }
+}
+
+impl<T> Neg for &'_ Polynomial<T>
+where
+    for<'a> &'a T: Neg<Output = T>,
+    T: Zero,
+{
+    type Output = Polynomial<T>;
+    fn neg(self) -> Polynomial<T> {
+        self.into_iter().map(Neg::neg).collect::<Vec<T>>().into()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
