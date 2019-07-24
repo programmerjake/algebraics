@@ -3,6 +3,7 @@
 pub mod polynomial;
 pub mod prelude;
 pub mod traits;
+pub mod quadratic_numbers;
 
 pub mod util {
     use num_traits::Zero;
