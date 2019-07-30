@@ -567,103 +567,104 @@ impl PartialOrd<BigRational> for RealQuadraticNumber {
     }
 }
 
-fn quadratic_less_than(lhs: RealQuadraticNumber, rhs: RealQuadraticNumber) -> bool {
-    let p_plus_sqrt_r_all_over_q_less_than_zero = |p: f64, r: f64, q: f64| {
-        // returns (p + r.sqrt()) / q < 0
-        debug_assert!(q != 0.0);
-        if q > 0.0 {
-            r < p * p && r >= 0.0 && p <= 0.0
-        } else if p > 0.0 {
-            r >= 0.0
+fn quadratic_less_than(lhs: &RealQuadraticNumber, rhs: &RealQuadraticNumber) -> bool {
+    let p_plus_sqrt_r_all_over_q_less_than_zero = |p: &BigInt, r: &BigInt, q: &BigInt| {
+        // returns (p + sqrt(r)) / q < 0
+        debug_assert!(!q.is_zero());
+        if q.is_positive() {
+            *r < p * p && !r.is_negative() && !p.is_positive()
+        } else if p.is_positive() {
+            !r.is_negative()
         } else {
-            r > p * p
+            *r > p * p
         }
     };
     debug_assert!(!lhs.quadratic_term().is_zero());
     debug_assert!(!rhs.quadratic_term().is_zero());
     debug_assert!(!lhs.poly.discriminant().is_negative());
     debug_assert!(!rhs.poly.discriminant().is_negative());
-    // FIXME: convert back to BigInts
-    let a1 = lhs.quadratic_term().to_f64().unwrap();
-    let b1 = lhs.linear_term().to_f64().unwrap();
-    let c1 = lhs.constant_term().to_f64().unwrap();
-    let a2 = rhs.quadratic_term().to_f64().unwrap();
-    let b2 = rhs.linear_term().to_f64().unwrap();
-    let c2 = rhs.constant_term().to_f64().unwrap();
-    match (a1 < 0.0, a2 < 0.0) {
+    let a1 = lhs.quadratic_term();
+    let b1 = lhs.linear_term();
+    let c1 = lhs.constant_term();
+    let a2 = rhs.quadratic_term();
+    let b2 = rhs.linear_term();
+    let c2 = rhs.constant_term();
+    let const2 = BigInt::from(2);
+    let const4 = BigInt::from(4);
+    match (a1.is_negative(), a2.is_negative()) {
         (false, false) => {
             let p = b2 * a1 - b1 * a2;
-            let r = (b1 * b1 - 4.0 * a1 * c1) * (a2 * a2);
-            if p_plus_sqrt_r_all_over_q_less_than_zero(p, r, a1) {
+            let r = (b1 * b1 - &const4 * a1 * c1) * (a2 * a2);
+            if p_plus_sqrt_r_all_over_q_less_than_zero(&p, &r, a1) {
                 true
-            } else if p < 0.0 {
-                let r2n = (b2 * b2 - 4.0 * a2 * c2) * (a1 * a1) - r - p * p;
-                let r2d = 2.0 * p;
-                if r2n > 0.0 {
+            } else if p.is_negative() {
+                let r2n = (b2 * b2 - const4 * a2 * c2) * (a1 * a1) - &r - &p * &p;
+                let r2d = const2 * p;
+                if r2n.is_positive() {
                     true
                 } else {
-                    r * (r2d * r2d) > r2n * r2n
+                    r * (&r2d * &r2d) > &r2n * &r2n
                 }
             } else {
-                let r2n = (b2 * b2 - 4.0 * a2 * c2) * (a1 * a1) - r - p * p;
-                let r2d = 2.0 * p;
-                if r2n < 0.0 {
+                let r2n = (b2 * b2 - const4 * a2 * c2) * (a1 * a1) - &r - &p * &p;
+                let r2d = const2 * p;
+                if r2n.is_negative() {
                     false
                 } else {
-                    r * (r2d * r2d) < r2n * r2n
+                    r * (&r2d * &r2d) < &r2n * &r2n
                 }
             }
         }
         (false, true) => {
-            let d1 = b1 * b1 - 4.0 * a1 * c1;
+            let d1 = b1 * b1 - &const4 * a1 * c1;
             let p = b1 * a2 - b2 * a1;
-            let r = (b2 * b2 - 4.0 * a2 * c2) * (a1 * a1);
-            if p_plus_sqrt_r_all_over_q_less_than_zero(p, r, a2) {
+            let r = (b2 * b2 - const4 * a2 * c2) * (a1 * a1);
+            if p_plus_sqrt_r_all_over_q_less_than_zero(&p, &r, a2) {
                 false
-            } else if p > 0.0 {
-                let r2n = d1 * (a2 * a2) - p * p - r;
-                let r2d = 2.0 * p;
-                if r2n / r2d < 0.0 {
+            } else if p.is_positive() {
+                let r2n = d1 * (a2 * a2) - &p * &p - &r;
+                let r2d = const2 * p;
+                if r2n.is_negative() {
                     true
                 } else {
-                    r * r2d * r2d > r2n * r2n
+                    r * &r2d * &r2d > &r2n * &r2n
                 }
             } else {
-                let r2n = d1 * (a2 * a2) - p * p - r;
-                let r2d = 2.0 * p;
-                if r2n > 0.0 {
+                let r2n = d1 * (a2 * a2) - &p * &p - &r;
+                let r2d = const2 * p;
+                if r2n.is_positive() {
                     false
                 } else {
-                    r * r2d * r2d < r2n * r2n
+                    r * &r2d * &r2d < &r2n * &r2n
                 }
             }
         }
         (true, false) => {
-            let d1 = b1 * b1 - 4.0 * a1 * c1;
-            let d2 = b2 * b2 - 4.0 * a2 * c2;
+            let d1 = b1 * b1 - &const4 * a1 * c1;
+            let d2 = b2 * b2 - const4 * a2 * c2;
             let p = b2 * a1 - b1 * a2;
             let r = d2 * (a1 * a1);
-            if p_plus_sqrt_r_all_over_q_less_than_zero(p, r, -a2) {
+            if p_plus_sqrt_r_all_over_q_less_than_zero(&p, &r, &-a2) {
                 true
-            } else if p > 0.0 {
-                let r2n = d1 * (a2 * a2) - p * p - r;
-                let r2d = 2.0 * p;
-                if r2n < 0.0 {
+            } else if p.is_positive() {
+                let r2n = d1 * (a2 * a2) - &p * &p - &r;
+                let r2d = const2 * p;
+                if r2n.is_negative() {
                     false
                 } else {
-                    r * r2d * r2d < r2n * r2n
+                    r * &r2d * &r2d < &r2n * &r2n
                 }
             } else {
-                let r2n = d1 * (a2 * a2) - p * p - r;
-                let r2d = 2.0 * p;
-                if r2n > 0.0 {
+                let r2n = d1 * (a2 * a2) - &p * &p - &r;
+                let r2d = const2 * &p;
+                if r2n.is_positive() {
                     true
                 } else {
-                    r * r2d * r2d > r2n * r2n
+                    r * &r2d * &r2d > &r2n * &r2n
                 }
             }
         }
-        (true, true) => quadratic_less_than(-rhs, -lhs),
+        (true, true) => quadratic_less_than(&-rhs, &-lhs),
     }
 }
 
@@ -675,7 +676,7 @@ impl Ord for RealQuadraticNumber {
             lhs.partial_cmp(rhs).unwrap()
         } else if self == rhs {
             Ordering::Equal
-        } else if quadratic_less_than(self.clone(), rhs.clone()) {
+        } else if quadratic_less_than(self, rhs) {
             Ordering::Less
         } else {
             Ordering::Greater
