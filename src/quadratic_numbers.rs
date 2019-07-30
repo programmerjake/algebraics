@@ -76,6 +76,18 @@ impl<T> QuadraticPolynomial<T> {
         &self.linear_term * &self.linear_term
             - &self.quadratic_term * &self.constant_term * 4.into()
     }
+    pub fn swapped_roots<'a>(&'a self) -> Self
+    where
+        &'a T: Neg<Output = T>,
+    {
+        -self
+    }
+    pub fn into_swapped_roots(self) -> Self
+    where
+        T: Neg<Output = T>,
+    {
+        -self
+    }
 }
 
 pub type BigQuadraticPolynomial = QuadraticPolynomial<BigInt>;
@@ -255,19 +267,22 @@ fn add_sub_sqrts(
     Err(NonQuadraticResult)
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
-enum AddOrSub {
-    Add,
-    Sub,
-}
-
-fn checked_add_sub(
-    lhs: &RealQuadraticNumber,
-    rhs: &RealQuadraticNumber,
-    add_or_sub: AddOrSub,
-) -> Result<RealQuadraticNumber, NonQuadraticResult> {
-    let sqrts_sum = add_sub_sqrts(lhs.poly.discriminant(), lhs.poly.discriminant())?;
-    unimplemented!()
+fn add_rational_with_real_quadratic_number(
+    lhs_numerator: BigInt,
+    lhs_denominator: BigInt,
+    rhs: RealQuadraticNumber,
+) -> RealQuadraticNumber {
+    let mut poly = rhs.into_polynomial();
+    let denominator_squared = &lhs_denominator * &lhs_denominator;
+    let denominator_times_numerator = &lhs_denominator * &lhs_numerator;
+    let numerator_squared = &lhs_numerator * &lhs_numerator;
+    poly.constant_term = poly.constant_term * &denominator_squared
+        - &poly.linear_term * &denominator_times_numerator
+        + &poly.quadratic_term * numerator_squared;
+    poly.linear_term = poly.linear_term * &denominator_squared
+        - BigInt::from(2) * &poly.quadratic_term * denominator_times_numerator;
+    poly.quadratic_term *= denominator_squared;
+    RealQuadraticNumber { poly }.into_reduced()
 }
 
 impl RealQuadraticNumber {
@@ -403,10 +418,27 @@ impl RealQuadraticNumber {
         self
     }
     pub fn checked_add(&self, rhs: &Self) -> Result<Self, NonQuadraticResult> {
-        checked_add_sub(self, rhs, AddOrSub::Add)
+        if let Some((lhs_numerator, lhs_denominator)) = self.to_tuple_ratio() {
+            return Ok(add_rational_with_real_quadratic_number(
+                lhs_numerator,
+                lhs_denominator,
+                rhs.clone(),
+            ));
+        } else if let Some((rhs_numerator, rhs_denominator)) = rhs.to_tuple_ratio() {
+            return Ok(add_rational_with_real_quadratic_number(
+                rhs_numerator,
+                rhs_denominator,
+                self.clone(),
+            ));
+        }
+        let sqrts_sum_diff = add_sub_sqrts(
+            self.poly.discriminant() * rhs.quadratic_term().abs() * 2,
+            rhs.poly.discriminant() * self.quadratic_term().abs() * 2,
+        )?;
+        unimplemented!()
     }
     pub fn checked_sub(&self, rhs: &Self) -> Result<Self, NonQuadraticResult> {
-        checked_add_sub(self, rhs, AddOrSub::Sub)
+        self.checked_add(&-rhs)
     }
     pub fn checked_recip(&self) -> Result<Self, NonQuadraticResult> {
         if self.is_ratio() {
@@ -569,7 +601,7 @@ impl PartialOrd<BigRational> for RealQuadraticNumber {
 
 fn quadratic_less_than(lhs: &RealQuadraticNumber, rhs: &RealQuadraticNumber) -> bool {
     let p_plus_sqrt_r_all_over_q_less_than_zero = |p: &BigInt, r: &BigInt, q: &BigInt| {
-        // returns (p + sqrt(r)) / q < 0
+        // returns (p + sqrt(r)) / q < 0 where sqrt(r) doesn't truncate the result
         debug_assert!(!q.is_zero());
         if q.is_positive() {
             *r < p * p && !r.is_negative() && !p.is_positive()
