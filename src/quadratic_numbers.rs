@@ -521,6 +521,18 @@ impl PartialEq<BigRational> for RealQuadraticNumber {
     }
 }
 
+impl PartialEq<RealQuadraticNumber> for BigRational {
+    fn eq(&self, rhs: &RealQuadraticNumber) -> bool {
+        *rhs == *self
+    }
+}
+
+impl PartialOrd<RealQuadraticNumber> for BigRational {
+    fn partial_cmp(&self, rhs: &RealQuadraticNumber) -> Option<Ordering> {
+        rhs.partial_cmp(self).map(Ordering::reverse)
+    }
+}
+
 impl PartialOrd<BigRational> for RealQuadraticNumber {
     fn partial_cmp(&self, rhs: &BigRational) -> Option<Ordering> {
         if let Some(lhs) = self.to_ratio() {
@@ -555,9 +567,119 @@ impl PartialOrd<BigRational> for RealQuadraticNumber {
     }
 }
 
+fn quadratic_less_than(lhs: RealQuadraticNumber, rhs: RealQuadraticNumber) -> bool {
+    let p_plus_sqrt_r_all_over_q_less_than_zero = |p: f64, r: f64, q: f64| {
+        // returns (p + r.sqrt()) / q < 0
+        debug_assert!(q != 0.0);
+        if q > 0.0 {
+            r < p * p && r >= 0.0 && p <= 0.0
+        } else if p > 0.0 {
+            r >= 0.0
+        } else {
+            r > p * p
+        }
+    };
+    debug_assert!(!lhs.quadratic_term().is_zero());
+    debug_assert!(!rhs.quadratic_term().is_zero());
+    debug_assert!(!lhs.poly.discriminant().is_negative());
+    debug_assert!(!rhs.poly.discriminant().is_negative());
+    // FIXME: convert back to BigInts
+    let a1 = lhs.quadratic_term().to_f64().unwrap();
+    let b1 = lhs.linear_term().to_f64().unwrap();
+    let c1 = lhs.constant_term().to_f64().unwrap();
+    let a2 = rhs.quadratic_term().to_f64().unwrap();
+    let b2 = rhs.linear_term().to_f64().unwrap();
+    let c2 = rhs.constant_term().to_f64().unwrap();
+    match (a1 < 0.0, a2 < 0.0) {
+        (false, false) => {
+            let p = b2 * a1 - b1 * a2;
+            let r = (b1 * b1 - 4.0 * a1 * c1) * (a2 * a2);
+            if p_plus_sqrt_r_all_over_q_less_than_zero(p, r, a1) {
+                true
+            } else if p < 0.0 {
+                let r2n = (b2 * b2 - 4.0 * a2 * c2) * (a1 * a1) - r - p * p;
+                let r2d = 2.0 * p;
+                if r2n > 0.0 {
+                    true
+                } else {
+                    r * (r2d * r2d) > r2n * r2n
+                }
+            } else {
+                let r2n = (b2 * b2 - 4.0 * a2 * c2) * (a1 * a1) - r - p * p;
+                let r2d = 2.0 * p;
+                if r2n < 0.0 {
+                    false
+                } else {
+                    r * (r2d * r2d) < r2n * r2n
+                }
+            }
+        }
+        (false, true) => {
+            let d1 = b1 * b1 - 4.0 * a1 * c1;
+            let p = b1 * a2 - b2 * a1;
+            let r = (b2 * b2 - 4.0 * a2 * c2) * (a1 * a1);
+            if p_plus_sqrt_r_all_over_q_less_than_zero(p, r, a2) {
+                false
+            } else if p > 0.0 {
+                let r2n = d1 * (a2 * a2) - p * p - r;
+                let r2d = 2.0 * p;
+                if r2n / r2d < 0.0 {
+                    true
+                } else {
+                    r * r2d * r2d > r2n * r2n
+                }
+            } else {
+                let r2n = d1 * (a2 * a2) - p * p - r;
+                let r2d = 2.0 * p;
+                if r2n > 0.0 {
+                    false
+                } else {
+                    r * r2d * r2d < r2n * r2n
+                }
+            }
+        }
+        (true, false) => {
+            let d1 = b1 * b1 - 4.0 * a1 * c1;
+            let d2 = b2 * b2 - 4.0 * a2 * c2;
+            let p = b2 * a1 - b1 * a2;
+            let r = d2 * (a1 * a1);
+            if p_plus_sqrt_r_all_over_q_less_than_zero(p, r, -a2) {
+                true
+            } else if p > 0.0 {
+                let r2n = d1 * (a2 * a2) - p * p - r;
+                let r2d = 2.0 * p;
+                if r2n < 0.0 {
+                    false
+                } else {
+                    r * r2d * r2d < r2n * r2n
+                }
+            } else {
+                let r2n = d1 * (a2 * a2) - p * p - r;
+                let r2d = 2.0 * p;
+                if r2n > 0.0 {
+                    true
+                } else {
+                    r * r2d * r2d > r2n * r2n
+                }
+            }
+        }
+        (true, true) => quadratic_less_than(-rhs, -lhs),
+    }
+}
+
 impl Ord for RealQuadraticNumber {
     fn cmp(&self, rhs: &Self) -> Ordering {
-        unimplemented!()
+        if let Some(rhs) = rhs.to_ratio() {
+            self.partial_cmp(&rhs).unwrap()
+        } else if let Some(lhs) = self.to_ratio() {
+            lhs.partial_cmp(rhs).unwrap()
+        } else if self == rhs {
+            Ordering::Equal
+        } else if quadratic_less_than(self.clone(), rhs.clone()) {
+            Ordering::Less
+        } else {
+            Ordering::Greater
+        }
     }
 }
 
@@ -874,6 +996,69 @@ mod tests {
                         rat
                     );
                 }
+            }
+        }
+    }
+
+    fn get_float_test_cases_big() -> impl Iterator<Item = (i32, i32, i32, f64)> {
+        fn range() -> impl Iterator<Item = i32> {
+            -4..=4
+        }
+        range()
+            .flat_map(|a| range().flat_map(move |b| range().map(move |c| (a, b, c))))
+            .filter_map(|(a, b, c)| {
+                if a == 0 && b <= 0 {
+                    // skip cases that divide by zero; also skip cases that
+                    // are rational with a negative denominator to save time
+                    return None;
+                }
+                let af = f64::from(a);
+                let bf = f64::from(b);
+                let cf = f64::from(c);
+                let d = bf * bf - 4.0 * af * cf;
+                if d < 0.0 {
+                    return None;
+                }
+                if a == 0 {
+                    Some((a, b, c, -cf / bf))
+                } else {
+                    Some((a, b, c, (-bf + d.sqrt()) / (2.0 * af)))
+                }
+            })
+    }
+
+    #[test]
+    fn test_real_quadratic_number_cmp() {
+        for (a1, b1, c1, f1) in get_float_test_cases_big() {
+            let poly1 = QuadraticPolynomial {
+                constant_term: c1.into(),
+                linear_term: b1.into(),
+                quadratic_term: a1.into(),
+            };
+            let rqn1 = RealQuadraticNumber::new(poly1.clone()).unwrap();
+            for (a2, b2, c2, f2) in get_float_test_cases_big() {
+                let poly2 = QuadraticPolynomial {
+                    constant_term: c2.into(),
+                    linear_term: b2.into(),
+                    quadratic_term: a2.into(),
+                };
+                let rqn2 = RealQuadraticNumber::new(poly2.clone()).unwrap();
+                println!(
+                    "{}: {}: {} <=> {}",
+                    Polynomial::from(poly1.clone()),
+                    Polynomial::from(poly2.clone()),
+                    f1,
+                    f2
+                );
+                let cmp_results = rqn1.partial_cmp(&rqn2);
+                let expected = f1.partial_cmp(&f2);
+                assert_eq!(
+                    cmp_results,
+                    expected,
+                    "{} <=> {}",
+                    Polynomial::from(rqn1.into_polynomial()),
+                    Polynomial::from(rqn2.into_polynomial())
+                );
             }
         }
     }
