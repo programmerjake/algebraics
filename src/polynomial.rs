@@ -2,6 +2,7 @@
 // See Notices.txt for copyright information
 use crate::prelude::*;
 use crate::traits::MakeCoefficient;
+use crate::traits::PolynomialDivSupported;
 use crate::util::Sign;
 use num_integer::Integer;
 use num_rational::Ratio;
@@ -31,7 +32,7 @@ pub struct Polynomial<T> {
     coefficients: Vec<T>,
 }
 
-impl<T: GCD> GCD for Polynomial<T> {
+impl<T: GCD<Output = T> + PolynomialDivSupported> GCD for Polynomial<T> {
     type Output = Self;
     fn gcd(&self, _rhs: &Self) -> Self {
         // FIXME: finish
@@ -160,6 +161,15 @@ impl<T> Polynomial<T> {
             }
         }
         SturmSequence(sturm_sequence)
+    }
+    /// converts all multiple roots into single roots
+    pub fn reduce_multiple_roots(&mut self)
+    where
+        for<'a> &'a Self: Derivative<Output = Self>,
+        T: PolynomialDivSupported + GCD<Output = T>,
+    {
+        let derivative = self.derivative();
+        *self /= self.gcd(&derivative);
     }
 }
 
