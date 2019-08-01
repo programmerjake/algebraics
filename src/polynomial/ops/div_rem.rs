@@ -2,66 +2,45 @@
 // See Notices.txt for copyright information
 
 use crate::polynomial::Polynomial;
-use crate::traits::{DivRem, PolynomialDivSupported};
+use crate::traits::{DivRemNearest, PolynomialDivSupported};
 use num_traits::Zero;
 use std::mem;
 use std::ops::{Div, DivAssign, Rem, RemAssign};
+use std::borrow::Borrow;
 
 fn checked_div_rem<T: PolynomialDivSupported>(
-    dividend: Polynomial<T>,
+    dividend: &Polynomial<T>,
     divisor: &Polynomial<T>,
 ) -> Option<(Polynomial<T>, Polynomial<T>)> {
-    if dividend.len() < divisor.len() {
-        return Some((Zero::zero(), dividend));
-    }
     let divisor = divisor.coefficients();
-    let divisor_leading_term = if let Some(v) = divisor.last() {
-        v
-    } else {
-        // divisor is empty only when it's zero, so return None in that case
-        return None;
-    };
-    let quotient_powers = (0..=(dividend.len() - divisor.len())).rev();
-    let mut remainder = dividend.into_coefficients();
-    let mut quotient: Vec<T> = quotient_powers.clone().map(|_| Zero::zero()).collect();
-    for quotient_term_power in quotient_powers {
-        let remainder_high_term = remainder.pop().expect("non-zero");
-        if remainder_high_term.is_zero() {
+    // if divisor is empty then divisor is zero, so return None
+    let divisor_last = divisor.last()?;
+    debug_assert!(!divisor_last.is_zero());
+    let divisor_last_index = divisor.len() - 1;
+    let mut remainder = dividend.coefficients().clone();
+    if remainder.len() < divisor.len() {
+        return Some((Zero::zero(), remainder.into()));
+    }
+    let quotient_len = remainder.len() - divisor.len() + 1;
+    let mut quotient: Vec<T> = (0..quotient_len).map(|_| Zero::zero()).collect();
+    for quotient_index in (0..quotient_len).rev() {
+        let quotient_value = remainder[quotient_index+divisor_last_index].div_rem_nearest(divisor_last).0;
+        if quotient_value.is_zero() {
             continue;
         }
-        let term_quotient = remainder_high_term / divisor_leading_term;
-        for i in 0..(divisor.len() - 1) {
-            let product = term_quotient.clone() * &divisor[i];
-            dbg!(remainder.len());
-            dbg!(divisor.len());
-            remainder[dbg!(dbg!(quotient_term_power) + i)] -= product;
+        for divisor_index in 0..divisor.len() {
+            remainder[quotient_index+divisor_index] -= quotient_value.clone() * &divisor[divisor_index];
         }
-        quotient[quotient_term_power] = term_quotient;
+        quotient[quotient_index] = quotient_value;
     }
     Some((quotient.into(), remainder.into()))
 }
 
-impl<T: PolynomialDivSupported> DivRem<&'_ Polynomial<T>> for Polynomial<T> {
-    fn checked_div_rem(self, rhs: &Polynomial<T>) -> Option<(Polynomial<T>, Polynomial<T>)> {
+impl<T: PolynomialDivSupported> DivRemNearest for Polynomial<T> {
+    type DivOutput = Polynomial<T>;
+    type RemOutput = Polynomial<T>;
+    fn checked_div_rem_nearest(&self, rhs: &Polynomial<T>) -> Option<(Polynomial<T>, Polynomial<T>)> {
         checked_div_rem(self, rhs)
-    }
-}
-
-impl<T: PolynomialDivSupported> DivRem for &'_ Polynomial<T> {
-    fn checked_div_rem(self, rhs: &Polynomial<T>) -> Option<(Polynomial<T>, Polynomial<T>)> {
-        checked_div_rem(self.clone(), rhs)
-    }
-}
-
-impl<T: PolynomialDivSupported> DivRem for Polynomial<T> {
-    fn checked_div_rem(self, rhs: Polynomial<T>) -> Option<(Polynomial<T>, Polynomial<T>)> {
-        checked_div_rem(self, &rhs)
-    }
-}
-
-impl<T: PolynomialDivSupported> DivRem<Polynomial<T>> for &'_ Polynomial<T> {
-    fn checked_div_rem(self, rhs: Polynomial<T>) -> Option<(Polynomial<T>, Polynomial<T>)> {
-        checked_div_rem(self.clone(), &rhs)
     }
 }
 
@@ -70,14 +49,14 @@ macro_rules! impl_div_rem {
         impl<T: PolynomialDivSupported> Div<$r> for $l {
             type Output = Polynomial<T>;
             fn div(self, rhs: $r) -> Polynomial<T> {
-                self.div_rem(rhs).0
+                self.div_rem_nearest(rhs.borrow()).0
             }
         }
 
         impl<T: PolynomialDivSupported> Rem<$r> for $l {
             type Output = Polynomial<T>;
             fn rem(self, rhs: $r) -> Polynomial<T> {
-                self.div_rem(rhs).1
+                self.div_rem_nearest(rhs.borrow()).1
             }
         }
     };
@@ -87,17 +66,17 @@ impl_div_rem!(Polynomial<T>, Polynomial<T>);
 impl_div_rem!(Polynomial<T>, &'_ Polynomial<T>);
 impl_div_rem!(&'_ Polynomial<T>, Polynomial<T>);
 
-impl<T: PolynomialDivSupported> Div for &'_ Polynomial<T> {
+impl<'a, 'b, T: PolynomialDivSupported> Div<&'a Polynomial<T>> for &'b Polynomial<T> {
     type Output = Polynomial<T>;
     fn div(self, rhs: &Polynomial<T>) -> Polynomial<T> {
-        self.div_rem(rhs).0
+        self.div_rem_nearest(rhs).0
     }
 }
 
-impl<T: PolynomialDivSupported> Rem for &'_ Polynomial<T> {
+impl<'a, 'b, T: PolynomialDivSupported> Rem<&'a Polynomial<T>> for &'b Polynomial<T> {
     type Output = Polynomial<T>;
     fn rem(self, rhs: &Polynomial<T>) -> Polynomial<T> {
-        self.div_rem(rhs).1
+        self.div_rem_nearest(rhs).1
     }
 }
 

@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // See Notices.txt for copyright information
-use std::fmt::Debug;
-use std::convert::TryInto;
 use crate::polynomial::Polynomial;
 use num_bigint::{BigInt, BigUint};
 use num_integer::Integer;
 use num_rational::Ratio;
-use num_traits::Zero;
+use num_traits::{CheckedDiv, CheckedMul, Signed, Zero};
+use std::convert::TryInto;
+use std::fmt::Debug;
 use std::ops::AddAssign;
 use std::ops::Div;
 use std::ops::Mul;
@@ -34,96 +34,161 @@ pub trait Derivative {
     fn derivative(self) -> Self::Output;
 }
 
-pub trait DivIsRemainderless<Rhs = Self>: Div<Rhs> {}
-
-impl<T: Integer + Clone> DivIsRemainderless for Ratio<T> {}
-impl<T: Integer + Clone> DivIsRemainderless<&'_ Ratio<T>> for Ratio<T> {}
-impl<T: Integer + Clone> DivIsRemainderless<Ratio<T>> for &'_ Ratio<T> {}
-impl<T: Integer + Clone> DivIsRemainderless for &'_ Ratio<T> {}
-impl<T: Integer + Clone> DivIsRemainderless<T> for Ratio<T> {}
-impl<T: Integer + Clone> DivIsRemainderless<&'_ T> for Ratio<T> {}
-impl<T: Integer + Clone> DivIsRemainderless<T> for &'_ Ratio<T> {}
-impl<'a, T: Integer + Clone> DivIsRemainderless<&'a T> for &'a Ratio<T> {}
-
-impl DivIsRemainderless for f32 {}
-impl DivIsRemainderless<&'_ f32> for f32 {}
-impl DivIsRemainderless<f32> for &'_ f32 {}
-impl DivIsRemainderless for &'_ f32 {}
-
-pub trait DivRem<Rhs = Self>: Div<Rhs> + Rem<Rhs> + Sized {
-    fn checked_div_rem(
-        self,
-        rhs: Rhs,
-    ) -> Option<(<Self as Div<Rhs>>::Output, <Self as Rem<Rhs>>::Output)>;
-    fn div_rem(self, rhs: Rhs) -> (<Self as Div<Rhs>>::Output, <Self as Rem<Rhs>>::Output) {
-        self.checked_div_rem(rhs).expect("division by zero")
+/// Division with Remainder where division returns the Nearest representable result.
+///
+/// Unsigned Integer Examples:
+/// ```
+/// # use algebraics::traits::DivRemNearest;
+/// // Division by zero
+/// assert_eq!((0u32).checked_div_rem_nearest(&0), None);
+/// // Quotient is rounded down since remainder can't be negative
+/// assert_eq!((5u32).div_rem_nearest(&8), (0, 5));
+/// assert_eq!((8u32).div_rem_nearest(&5), (1, 3));
+/// ```
+///
+/// Signed Integer Examples:
+/// ```
+/// # use algebraics::traits::DivRemNearest;
+/// // Division by zero
+/// assert_eq!((0i32).checked_div_rem_nearest(&0), None);
+/// // Overflow
+/// assert_eq!((-0x80i8).checked_div_rem_nearest(&-1), None);
+/// // Quotient is rounded to nearest
+/// assert_eq!((4i32).div_rem_nearest(&9), (0, 4));
+/// assert_eq!((5i32).div_rem_nearest(&9), (1, -4));
+/// // Halfway cases are rounded towards zero
+/// assert_eq!((4i32).div_rem_nearest(&8), (0, 4));
+/// assert_eq!((-15i32).div_rem_nearest(&10), (-1, -5));
+/// ```
+///
+/// Rational Examples:
+/// ```
+/// # use algebraics::traits::DivRemNearest;
+/// # use num_rational::{BigRational, ParseRatioError};
+/// # use num_traits::Zero;
+/// let ratio = str::parse::<BigRational>;
+/// // Division by zero
+/// assert_eq!(ratio("0")?.checked_div_rem_nearest(&ratio("0")?), None);
+/// // All divisions produce a zero remainder
+/// assert_eq!(ratio("3/4")?.div_rem_nearest(&ratio("-5/7")?), (ratio("-21/20")?, ratio("0")?));
+/// # Ok::<(), ParseRatioError>(())
+/// ```
+pub trait DivRemNearest<Rhs = Self>: Sized {
+    type DivOutput;
+    type RemOutput;
+    fn checked_div_rem_nearest(&self, rhs: &Rhs) -> Option<(Self::DivOutput, Self::RemOutput)>;
+    fn div_rem_nearest(&self, rhs: &Rhs) -> (Self::DivOutput, Self::RemOutput) {
+        self.checked_div_rem_nearest(rhs).expect("division by zero")
     }
 }
 
-macro_rules! impl_div_rem_int {
-    ($t:ty) => {
-        impl DivRem for $t {
-            fn checked_div_rem(self, rhs: $t) -> Option<($t, $t)> {
-                if rhs.is_zero() {
-                    None
-                } else {
-                    Some(Integer::div_rem(&self, &rhs))
+impl<T: Clone + Integer + CheckedMul> DivRemNearest for Ratio<T> {
+    type DivOutput = Ratio<T>;
+    type RemOutput = Ratio<T>;
+    fn checked_div_rem_nearest(&self, rhs: &Self) -> Option<(Self, Self)> {
+        Some((self.checked_div(rhs)?, Zero::zero()))
+    }
+}
+
+macro_rules! impl_div_rem_signed_int {
+    ($t:ty, $u:ty) => {
+        impl DivRemNearest for $t {
+            type DivOutput = $t;
+            type RemOutput = $t;
+            fn checked_div_rem_nearest(&self, rhs: &$t) -> Option<($t, $t)> {
+                let lhs = *self;
+                let rhs = *rhs;
+                if rhs == 0 {
+                    return None; // division by zero
                 }
-            }
-        }
-        impl DivRem<$t> for &'_ $t {
-            fn checked_div_rem(self, rhs: $t) -> Option<($t, $t)> {
-                if rhs.is_zero() {
-                    None
-                } else {
-                    Some(Integer::div_rem(&self, &rhs))
+                if rhs == -1 && lhs == <$t>::min_value() {
+                    return None; // overflow
                 }
-            }
-        }
-        impl DivRem<&'_ $t> for $t {
-            fn checked_div_rem(self, rhs: &$t) -> Option<($t, $t)> {
-                if rhs.is_zero() {
-                    None
-                } else {
-                    Some(Integer::div_rem(&self, &rhs))
+                let mut quotient = lhs / rhs;
+                let mut remainder = lhs % rhs;
+                let rhs_magnitude = rhs.wrapping_abs() as $u;
+                let remainder_magnitude = remainder.wrapping_abs() as $u;
+                if rhs != <$t>::min_value() && remainder_magnitude > rhs_magnitude / 2 {
+                    let (quotient_offset, remainder_offset) =
+                        if rhs < 0 { (-1, rhs) } else { (1, -rhs) };
+                    quotient = quotient.checked_add(quotient_offset)?;
+                    remainder = remainder.checked_add(remainder_offset)?;
                 }
-            }
-        }
-        impl DivRem for &'_ $t {
-            fn checked_div_rem(self, rhs: &$t) -> Option<($t, $t)> {
-                if rhs.is_zero() {
-                    None
-                } else {
-                    Some(Integer::div_rem(&self, &rhs))
-                }
+                Some((quotient, remainder))
             }
         }
     };
 }
 
-impl_div_rem_int!(u8);
-impl_div_rem_int!(u16);
-impl_div_rem_int!(u32);
-impl_div_rem_int!(u64);
-impl_div_rem_int!(u128);
-impl_div_rem_int!(i8);
-impl_div_rem_int!(i16);
-impl_div_rem_int!(i32);
-impl_div_rem_int!(i64);
-impl_div_rem_int!(i128);
-impl_div_rem_int!(usize);
-impl_div_rem_int!(isize);
-impl_div_rem_int!(BigInt);
-impl_div_rem_int!(BigUint);
+macro_rules! impl_div_rem_unsigned_int {
+    ($t:ty) => {
+        impl DivRemNearest for $t {
+            type DivOutput = $t;
+            type RemOutput = $t;
+            fn checked_div_rem_nearest(&self, rhs: &$t) -> Option<($t, $t)> {
+                if *rhs == 0 {
+                    return None;
+                }
+                Some((self / rhs, self % rhs))
+            }
+        }
+    };
+}
+
+impl_div_rem_unsigned_int!(u8);
+impl_div_rem_unsigned_int!(u16);
+impl_div_rem_unsigned_int!(u32);
+impl_div_rem_unsigned_int!(u64);
+impl_div_rem_unsigned_int!(u128);
+impl_div_rem_unsigned_int!(usize);
+impl_div_rem_signed_int!(i8, u8);
+impl_div_rem_signed_int!(i16, u16);
+impl_div_rem_signed_int!(i32, u32);
+impl_div_rem_signed_int!(i64, u64);
+impl_div_rem_signed_int!(i128, u128);
+impl_div_rem_signed_int!(isize, usize);
+
+impl DivRemNearest for BigInt {
+    type DivOutput = BigInt;
+    type RemOutput = BigInt;
+    fn checked_div_rem_nearest(&self, rhs: &BigInt) -> Option<(BigInt, BigInt)> {
+        if rhs.is_zero() {
+            return None;
+        }
+        let (mut quotient, mut remainder) = self.div_rem(rhs);
+        let rhs_magnitude = rhs.abs();
+        let remainder_magnitude = remainder.abs();
+        if &rhs_magnitude - &remainder_magnitude > remainder_magnitude {
+            if rhs.is_negative() {
+                quotient -= 1;
+                remainder -= rhs_magnitude;
+            } else {
+                quotient += 1;
+                remainder += rhs_magnitude;
+            }
+        }
+        Some((quotient, remainder))
+    }
+}
+
+impl DivRemNearest for BigUint {
+    type DivOutput = BigUint;
+    type RemOutput = BigUint;
+    fn checked_div_rem_nearest(&self, rhs: &BigUint) -> Option<(BigUint, BigUint)> {
+        if rhs.is_zero() {
+            return None;
+        }
+        Some(self.div_rem(rhs))
+    }
+}
 
 pub trait PolynomialDivSupported:
     Clone
     + AddAssign
     + SubAssign
     + Zero
-    + for<'a> Div<&'a Self, Output = Self>
+    + DivRemNearest<DivOutput = Self, RemOutput = Self>
     + for<'a> Mul<&'a Self, Output = Self>
-    + for<'a> DivIsRemainderless<&'a Self>
 {
 }
 
@@ -132,9 +197,8 @@ impl<T> PolynomialDivSupported for T where
         + AddAssign
         + SubAssign
         + Zero
-        + for<'a> Div<&'a Self, Output = Self>
+        + DivRemNearest<DivOutput = Self, RemOutput = Self>
         + for<'a> Mul<&'a Self, Output = Self>
-        + for<'a> DivIsRemainderless<&'a Self>
 {
 }
 
@@ -142,14 +206,17 @@ pub trait IsolatedRealRoot<T: Clone + Integer> {
     fn root_polynomial(&self) -> &Polynomial<T>;
     fn multiplicity(&self) -> usize;
     fn lower_bound(&self) -> &Ratio<T>;
-    fn upper_bound(&self)-> &Ratio<T>;
+    fn upper_bound(&self) -> &Ratio<T>;
 }
 
 pub trait MakeCoefficient<T> {
     fn make_coefficient(v: T) -> Self;
 }
 
-impl<I: TryInto<T> + Integer, T: Clone + Integer> MakeCoefficient<I> for Ratio<T> where I::Error: Debug {
+impl<I: TryInto<T> + Integer, T: Clone + Integer> MakeCoefficient<I> for Ratio<T>
+where
+    I::Error: Debug,
+{
     fn make_coefficient(v: I) -> Self {
         Ratio::from_integer(v.try_into().unwrap())
     }
@@ -157,7 +224,10 @@ impl<I: TryInto<T> + Integer, T: Clone + Integer> MakeCoefficient<I> for Ratio<T
 
 macro_rules! impl_make_coefficient {
     ($t:ty) => {
-        impl<T: TryInto<$t> + Integer> MakeCoefficient<T> for $t where T::Error: Debug {
+        impl<T: TryInto<$t> + Integer> MakeCoefficient<T> for $t
+        where
+            T::Error: Debug,
+        {
             fn make_coefficient(v: T) -> $t {
                 v.try_into().unwrap()
             }
