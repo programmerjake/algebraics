@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // See Notices.txt for copyright information
 use crate::polynomial::Polynomial;
+use crate::polynomial::PolynomialCoefficient;
 use num_bigint::{BigInt, BigUint};
 use num_integer::Integer;
 use num_rational::Ratio;
@@ -13,25 +14,69 @@ use std::ops::Mul;
 use std::ops::Rem;
 use std::ops::SubAssign;
 
-pub trait GCD<Rhs = Self> {
-    type Output;
-    fn gcd(&self, rhs: &Rhs) -> Self::Output;
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+pub struct GCDAndLCM<T> {
+    pub gcd: T,
+    pub lcm: T,
 }
 
-impl<T: Integer> GCD for T {
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+pub struct ExtendedGCDResult<T> {
+    pub gcd: T,
+    pub x: T,
+    pub y: T,
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+pub struct ExtendedGCDAndLCM<T> {
+    pub gcd: T,
+    pub x: T,
+    pub y: T,
+    pub lcm: T,
+}
+
+pub trait GCD<Rhs = Self> {
+    type Output;
+    fn gcd(&self, rhs: &Rhs) -> Self::Output {
+        self.gcd_lcm(rhs).gcd
+    }
+    fn lcm(&self, rhs: &Rhs) -> Self::Output {
+        self.gcd_lcm(rhs).lcm
+    }
+    fn gcd_lcm(&self, rhs: &Rhs) -> GCDAndLCM<Self::Output>;
+}
+
+pub trait ExtendedGCD<Rhs = Self>: GCD<Rhs> {
+    fn extended_gcd(&self, rhs: &Rhs) -> ExtendedGCDResult<Self::Output> {
+        let ExtendedGCDAndLCM { gcd, x, y, .. } = self.extended_gcd_lcm(rhs);
+        ExtendedGCDResult { gcd, x, y }
+    }
+    fn extended_gcd_lcm(&self, rhs: &Rhs) -> ExtendedGCDAndLCM<Self::Output>;
+}
+
+impl<T: Integer + Clone + Signed> GCD for T {
     type Output = T;
     fn gcd(&self, rhs: &T) -> T {
         Integer::gcd(self, rhs)
     }
+    fn lcm(&self, rhs: &T) -> T {
+        Integer::lcm(self, rhs)
+    }
+    fn gcd_lcm(&self, rhs: &T) -> GCDAndLCM<T> {
+        let (gcd, lcm) = Integer::gcd_lcm(self, rhs);
+        GCDAndLCM { gcd, lcm }
+    }
 }
-
-pub trait PolynomialEval<T> {
-    fn eval(self, x: &T) -> T;
-}
-
-pub trait Derivative {
-    type Output;
-    fn derivative(self) -> Self::Output;
+impl<T: Integer + Clone + Signed> ExtendedGCD for T {
+    fn extended_gcd(&self, rhs: &T) -> ExtendedGCDResult<Self::Output> {
+        let num_integer::ExtendedGcd { gcd, x, y, .. } = Integer::extended_gcd(self, rhs);
+        ExtendedGCDResult { gcd, x, y }
+    }
+    fn extended_gcd_lcm(&self, rhs: &T) -> ExtendedGCDAndLCM<Self::Output> {
+        let (num_integer::ExtendedGcd { gcd, x, y, .. }, lcm) =
+            Integer::extended_gcd_lcm(self, rhs);
+        ExtendedGCDAndLCM { gcd, x, y, lcm }
+    }
 }
 
 /// Division with Remainder where division returns the Nearest representable result.
@@ -202,50 +247,9 @@ impl<T> PolynomialDivSupported for T where
 {
 }
 
-pub trait IsolatedRealRoot<T: Clone + Integer> {
+pub trait IsolatedRealRoot<T: PolynomialCoefficient + Integer> {
     fn root_polynomial(&self) -> &Polynomial<T>;
     fn multiplicity(&self) -> usize;
     fn lower_bound(&self) -> &Ratio<T>;
     fn upper_bound(&self) -> &Ratio<T>;
 }
-
-pub trait MakeCoefficient<T> {
-    fn make_coefficient(v: T) -> Self;
-}
-
-impl<I: TryInto<T> + Integer, T: Clone + Integer> MakeCoefficient<I> for Ratio<T>
-where
-    I::Error: Debug,
-{
-    fn make_coefficient(v: I) -> Self {
-        Ratio::from_integer(v.try_into().unwrap())
-    }
-}
-
-macro_rules! impl_make_coefficient {
-    ($t:ty) => {
-        impl<T: TryInto<$t> + Integer> MakeCoefficient<T> for $t
-        where
-            T::Error: Debug,
-        {
-            fn make_coefficient(v: T) -> $t {
-                v.try_into().unwrap()
-            }
-        }
-    };
-}
-
-impl_make_coefficient!(u8);
-impl_make_coefficient!(u16);
-impl_make_coefficient!(u32);
-impl_make_coefficient!(u64);
-impl_make_coefficient!(u128);
-impl_make_coefficient!(i8);
-impl_make_coefficient!(i16);
-impl_make_coefficient!(i32);
-impl_make_coefficient!(i64);
-impl_make_coefficient!(i128);
-impl_make_coefficient!(usize);
-impl_make_coefficient!(isize);
-impl_make_coefficient!(BigInt);
-impl_make_coefficient!(BigUint);

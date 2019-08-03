@@ -2,82 +2,67 @@
 // See Notices.txt for copyright information
 
 use crate::polynomial::Polynomial;
+use crate::polynomial::PolynomialCoefficient;
 use num_traits::Zero;
 use std::ops::{AddAssign, Mul, MulAssign};
 
-impl<'a, T: Zero + AddAssign> Mul for &'a Polynomial<T>
-where
-    &'a T: Mul<Output = T>,
-{
+impl<'a, T: PolynomialCoefficient> Mul for &'a Polynomial<T> {
     type Output = Polynomial<T>;
     #[allow(clippy::suspicious_arithmetic_impl)]
     fn mul(self, rhs: &'a Polynomial<T>) -> Polynomial<T> {
         if self.is_zero() || rhs.is_zero() {
             return Zero::zero();
         }
-        let mut retval_coefficients = Vec::with_capacity(self.len() + rhs.len());
+        let divisor = self.divisor.clone() * &rhs.divisor;
+        let mut elements = Vec::with_capacity(self.len() + rhs.len());
         for l_index in 0..self.len() {
-            if self.coefficients[l_index].is_zero() {
+            if self.elements[l_index].is_zero() {
                 continue;
             }
             for r_index in 0..rhs.len() {
                 let index = l_index + r_index;
-                if index == retval_coefficients.len() {
-                    retval_coefficients
-                        .push(&self.coefficients[l_index] * &rhs.coefficients[r_index]);
+                if index == elements.len() {
+                    elements.push(self.elements[l_index].clone() * &rhs.elements[r_index]);
                 } else {
-                    retval_coefficients[index] +=
-                        &self.coefficients[l_index] * &rhs.coefficients[r_index];
+                    AddAssign::<T::Element>::add_assign(
+                        &mut elements[index],
+                        self.elements[l_index].clone() * &rhs.elements[r_index],
+                    );
                 }
             }
         }
-        retval_coefficients.into()
+        Polynomial { elements, divisor }.into_normalized()
     }
 }
 
-impl<'a, T: Zero + AddAssign> Mul<Polynomial<T>> for &'a Polynomial<T>
-where
-    for<'b> &'b T: Mul<Output = T>,
-{
+impl<'a, T: PolynomialCoefficient> Mul<Polynomial<T>> for &'a Polynomial<T> {
     type Output = Polynomial<T>;
     fn mul(self, rhs: Polynomial<T>) -> Polynomial<T> {
         self * &rhs
     }
 }
 
-impl<'a, T: Zero + AddAssign> Mul<&'a Polynomial<T>> for Polynomial<T>
-where
-    for<'b> &'b T: Mul<Output = T>,
-{
+impl<'a, T: PolynomialCoefficient> Mul<&'a Polynomial<T>> for Polynomial<T> {
     type Output = Polynomial<T>;
     fn mul(self, rhs: &'a Polynomial<T>) -> Polynomial<T> {
         &self * rhs
     }
 }
 
-impl<T: Zero + AddAssign> Mul for Polynomial<T>
-where
-    for<'a> &'a T: Mul<Output = T>,
-{
+impl<T: PolynomialCoefficient> Mul for Polynomial<T> {
     type Output = Polynomial<T>;
     fn mul(self, rhs: Polynomial<T>) -> Polynomial<T> {
         &self * &rhs
     }
 }
 
-impl<T: Zero + AddAssign> MulAssign for Polynomial<T>
-where
-    for<'a> &'a T: Mul<Output = T>,
-{
+impl<T: PolynomialCoefficient> MulAssign for Polynomial<T> {
     fn mul_assign(&mut self, rhs: Polynomial<T>) {
         *self = &*self * rhs;
     }
 }
 
-impl<'a, T: Zero + AddAssign> MulAssign<&'a Polynomial<T>> for Polynomial<T>
-where
-    for<'b> &'b T: Mul<Output = T>,
-{
+impl<'a, T: PolynomialCoefficient> MulAssign<&'a Polynomial<T>> for Polynomial<T> {
     fn mul_assign(&mut self, rhs: &'a Polynomial<T>) {
         *self = &*self * rhs;
     }
