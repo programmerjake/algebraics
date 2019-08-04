@@ -72,6 +72,7 @@ impl<'a, T: PolynomialCoefficient> MulAssign<&'a Polynomial<T>> for Polynomial<T
 mod tests {
     use super::*;
     use crate::polynomial::ops::util::tests::test_op_helper;
+    use num_rational::Ratio;
     #[test]
     fn test_mul() {
         let test = |l: Polynomial<i32>, r: Polynomial<i32>, expected: &Polynomial<i32>| {
@@ -91,6 +92,40 @@ mod tests {
             vec![10, 11, 12].into(),
             vec![10, -11, 3, 2, 1].into(),
             &vec![100, 0, 29, -79, 68, 35, 12].into(),
+        );
+    }
+
+    #[test]
+    fn test_mul_rational() {
+        let test = |l: Polynomial<Ratio<i64>>,
+                    r: Polynomial<Ratio<i64>>,
+                    expected: &Polynomial<Ratio<i64>>| {
+            test_op_helper(
+                l,
+                r,
+                expected,
+                |l, r| *l *= r,
+                |l, r| *l *= r,
+                |l, r| l * r,
+                |l, r| l * r,
+                |l, r| l * r,
+                |l, r| l * r,
+            );
+        };
+        let r = |n: i64, d: i64| Ratio::new(n, d);
+        test(
+            vec![r(10, 7), r(11, 7), r(12, 7)].into(),
+            vec![r(10, 29), r(-11, 29), r(3, 29), r(2, 29), r(1, 29)].into(),
+            &vec![
+                r(100, 203),
+                r(0, 1),
+                r(1, 7),
+                r(-79, 203),
+                r(68, 203),
+                r(5, 29),
+                r(12, 203),
+            ]
+            .into(),
         );
     }
 }
