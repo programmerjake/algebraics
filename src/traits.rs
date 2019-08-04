@@ -6,13 +6,6 @@ use num_bigint::{BigInt, BigUint};
 use num_integer::Integer;
 use num_rational::Ratio;
 use num_traits::{CheckedDiv, CheckedMul, Signed, Zero};
-use std::convert::TryInto;
-use std::fmt::Debug;
-use std::ops::AddAssign;
-use std::ops::Div;
-use std::ops::Mul;
-use std::ops::Rem;
-use std::ops::SubAssign;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct GCDAndLCM<T> {
@@ -225,26 +218,6 @@ impl DivRemNearest for BigUint {
         }
         Some(self.div_rem(rhs))
     }
-}
-
-pub trait PolynomialDivSupported:
-    Clone
-    + AddAssign
-    + SubAssign
-    + Zero
-    + DivRemNearest<DivOutput = Self, RemOutput = Self>
-    + for<'a> Mul<&'a Self, Output = Self>
-{
-}
-
-impl<T> PolynomialDivSupported for T where
-    Self: Clone
-        + AddAssign
-        + SubAssign
-        + Zero
-        + DivRemNearest<DivOutput = Self, RemOutput = Self>
-        + for<'a> Mul<&'a Self, Output = Self>
-{
 }
 
 pub trait IsolatedRealRoot<T: PolynomialCoefficient + Integer> {

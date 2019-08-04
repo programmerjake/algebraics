@@ -3,27 +3,20 @@
 use crate::traits::ExtendedGCD;
 use crate::traits::ExtendedGCDAndLCM;
 use crate::traits::GCDAndLCM;
-use crate::traits::PolynomialDivSupported;
 use crate::traits::GCD;
-use crate::util::Sign;
 use num_bigint::BigInt;
-use num_bigint::BigUint;
 use num_integer::Integer;
 use num_rational::Ratio;
 use num_traits::FromPrimitive;
 use num_traits::One;
 use num_traits::{zero, Zero};
-use std::borrow::Borrow;
 use std::borrow::Cow;
-use std::error::Error;
 use std::fmt;
 use std::hash;
 use std::mem;
-use std::ops::Deref;
 use std::ops::Div;
 use std::ops::DivAssign;
 use std::ops::Neg;
-use std::ops::Rem;
 use std::ops::RemAssign;
 use std::ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign};
 use std::slice;
@@ -133,6 +126,46 @@ pub trait PolynomialCoefficient:
         (elements, divisor)
     }
     fn coefficient_to_element(coefficient: Cow<Self>) -> (Self::Element, Self::Divisor);
+    fn divisor_pow_usize(mut base: Self::Divisor, mut exponent: usize) -> Self::Divisor {
+        if exponent == 0 {
+            return One::one();
+        }
+        let mut retval = None;
+        loop {
+            if exponent % 2 != 0 {
+                match &mut retval {
+                    None => retval = Some(base.clone()),
+                    Some(retval) => *retval *= &base,
+                }
+            }
+            exponent /= 2;
+            if exponent == 0 {
+                break;
+            }
+            base *= base.clone();
+        }
+        retval.unwrap_or_else(|| unreachable!())
+    }
+    fn element_pow_usize(mut base: Self::Element, mut exponent: usize) -> Self::Element {
+        if exponent == 0 {
+            return One::one();
+        }
+        let mut retval = None;
+        loop {
+            if exponent % 2 != 0 {
+                match &mut retval {
+                    None => retval = Some(base.clone()),
+                    Some(retval) => *retval *= &base,
+                }
+            }
+            exponent /= 2;
+            if exponent == 0 {
+                break;
+            }
+            base *= base.clone();
+        }
+        retval.unwrap_or_else(|| unreachable!())
+    }
 }
 
 impl<
@@ -367,6 +400,30 @@ impl_polynomial_coefficient_for_int! {
     BigInt;
 }
 
+pub trait PolynomialDivSupported:
+    PolynomialCoefficient<Divisor = <Self as PolynomialCoefficient>::Element>
+    + for<'a> DivAssign<&'a Self>
+    + DivAssign
+    + for<'a> Div<&'a Self, Output = Self>
+    + Div<Output = Self>
+{
+}
+
+impl<
+        T: PolynomialCoefficientElement + Integer + for<'a> DivAssign<&'a T> + DivAssign + RemAssign,
+    > PolynomialDivSupported for Ratio<T>
+where
+    Ratio<T>: FromPrimitive,
+{
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct PseudoDivRem<T: PolynomialCoefficient> {
+    pub quotient: Polynomial<T>,
+    pub remainder: Polynomial<T>,
+    pub factor: T,
+}
+
 /// A single-variable polynomial.
 ///
 /// the term at index `n` is `self.coefficients()[n] * pow(x, n)`
@@ -440,6 +497,34 @@ impl<T: PolynomialCoefficient> From<Vec<T>> for Polynomial<T> {
 impl<T: PolynomialCoefficient> From<&'_ [T]> for Polynomial<T> {
     fn from(coefficients: &[T]) -> Self {
         Self::from(Cow::Borrowed(coefficients))
+    }
+}
+
+impl<T: PolynomialCoefficient> From<T> for Polynomial<T> {
+    fn from(coefficient: T) -> Self {
+        if coefficient.is_zero() {
+            Zero::zero()
+        } else {
+            let (element, divisor) = T::coefficient_to_element(Cow::Owned(coefficient));
+            Self {
+                elements: vec![element],
+                divisor,
+            }
+        }
+    }
+}
+
+impl<T: PolynomialCoefficient> From<&T> for Polynomial<T> {
+    fn from(coefficient: &T) -> Self {
+        if coefficient.is_zero() {
+            Zero::zero()
+        } else {
+            let (element, divisor) = T::coefficient_to_element(Cow::Borrowed(coefficient));
+            Self {
+                elements: vec![element],
+                divisor,
+            }
+        }
     }
 }
 
