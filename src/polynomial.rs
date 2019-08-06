@@ -7,9 +7,9 @@ use crate::traits::GCD;
 use num_bigint::BigInt;
 use num_integer::Integer;
 use num_rational::Ratio;
-use num_traits::FromPrimitive;
 use num_traits::One;
 use num_traits::{zero, Zero};
+use num_traits::{FromPrimitive, ToPrimitive};
 use std::borrow::Cow;
 use std::error::Error;
 use std::fmt;
@@ -791,6 +791,62 @@ impl<T: fmt::Display + PolynomialCoefficient> fmt::Display for Polynomial<T> {
             Ok(())
         }
     }
+}
+
+macro_rules! impl_from_primitive_fn {
+    ($f:ident, $t:ident) => {
+        fn $f(v: $t) -> Option<Self> {
+            Some(T::$f(v)?.into())
+        }
+    };
+}
+
+impl<T: PolynomialCoefficient> FromPrimitive for Polynomial<T> {
+    impl_from_primitive_fn!(from_i8, i8);
+    impl_from_primitive_fn!(from_u8, u8);
+    impl_from_primitive_fn!(from_i16, i16);
+    impl_from_primitive_fn!(from_u16, u16);
+    impl_from_primitive_fn!(from_i32, i32);
+    impl_from_primitive_fn!(from_u32, u32);
+    impl_from_primitive_fn!(from_i64, i64);
+    impl_from_primitive_fn!(from_u64, u64);
+    impl_from_primitive_fn!(from_i128, i128);
+    impl_from_primitive_fn!(from_u128, u128);
+    impl_from_primitive_fn!(from_isize, isize);
+    impl_from_primitive_fn!(from_usize, usize);
+    impl_from_primitive_fn!(from_f32, f32);
+    impl_from_primitive_fn!(from_f64, f64);
+}
+
+macro_rules! impl_to_primitive_fn {
+    ($f:ident, $t:ident) => {
+        fn $f(&self) -> Option<$t> {
+            if self.is_zero() {
+                Some(Zero::zero())
+            } else if self.len() == 1 {
+                Some(self.coefficient(0).$f()?)
+            } else {
+                None
+            }
+        }
+    };
+}
+
+impl<T: PolynomialCoefficient + ToPrimitive> ToPrimitive for Polynomial<T> {
+    impl_to_primitive_fn!(to_i8, i8);
+    impl_to_primitive_fn!(to_u8, u8);
+    impl_to_primitive_fn!(to_i16, i16);
+    impl_to_primitive_fn!(to_u16, u16);
+    impl_to_primitive_fn!(to_i32, i32);
+    impl_to_primitive_fn!(to_u32, u32);
+    impl_to_primitive_fn!(to_i64, i64);
+    impl_to_primitive_fn!(to_u64, u64);
+    impl_to_primitive_fn!(to_i128, i128);
+    impl_to_primitive_fn!(to_u128, u128);
+    impl_to_primitive_fn!(to_isize, isize);
+    impl_to_primitive_fn!(to_usize, usize);
+    impl_to_primitive_fn!(to_f32, f32);
+    impl_to_primitive_fn!(to_f64, f64);
 }
 
 #[derive(Clone, PartialEq, Eq, Debug, Hash)]
