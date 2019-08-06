@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // See Notices.txt for copyright information
 
+use crate::polynomial::DivisorIsOne;
 use crate::polynomial::Polynomial;
 use crate::polynomial::PolynomialCoefficient;
+use crate::polynomial::PolynomialCoefficientElement;
 use crate::polynomial::PolynomialDivSupported;
 use crate::polynomial::PseudoDivRem;
 use num_traits::CheckedDiv;
@@ -15,53 +17,93 @@ use std::convert::identity;
 use std::mem;
 use std::ops::{Div, DivAssign, Rem, RemAssign};
 
+fn quotient_len(numerator_len: usize, denominator_len: usize) -> Option<usize> {
+    debug_assert_ne!(denominator_len, 0);
+    if numerator_len < denominator_len {
+        None
+    } else {
+        Some(1 + numerator_len - denominator_len)
+    }
+}
+
+fn element_pseudo_div_rem<T: PolynomialCoefficientElement>(
+    numerator: Vec<T>,
+    denominator: &[T],
+    quotient_len: usize,
+) -> PseudoDivRem<T> {
+    let mut remainder = numerator;
+    let rhs_last_element = denominator.last().expect("divide by zero already checked");
+    let factor = T::element_pow_usize(rhs_last_element.clone(), quotient_len);
+    let mut reverse_quotient = Vec::with_capacity(quotient_len);
+    let divisor_last = denominator.last().expect("divisor length already checked");
+    for coefficient in &mut remainder {
+        *coefficient *= &factor;
+    }
+    for quotient_index in (0..quotient_len).rev() {
+        let remainder_last = remainder.pop().expect("remainder length already checked");
+        let quotient_coefficient = remainder_last / divisor_last;
+        for denominator_index in 0..(denominator.len() - 1) {
+            remainder[quotient_index + denominator_index] -=
+                quotient_coefficient.clone() * &denominator[denominator_index];
+        }
+        reverse_quotient.push(quotient_coefficient);
+    }
+    reverse_quotient.reverse();
+    let quotient = reverse_quotient;
+    PseudoDivRem {
+        quotient: Polynomial {
+            elements: quotient,
+            divisor: DivisorIsOne,
+        },
+        remainder: Polynomial {
+            elements: remainder,
+            divisor: DivisorIsOne,
+        },
+        factor,
+    }
+}
+
 impl<T: PolynomialCoefficient> Polynomial<T> {
-    pub fn checked_pseudo_div_rem(self, rhs: &Self) -> Option<PseudoDivRem<T>>
-    where
-        for<'a> T: Div<&'a T, Output = T>, // FIXME: remove extraneous bound
-    {
-        // FIXME: switch to working on elements instead of coefficients
-        if self.len() < rhs.len() {
-            return Some(PseudoDivRem {
-                quotient: Zero::zero(),
-                remainder: self,
-                factor: One::one(),
-            });
+    pub fn checked_pseudo_div_rem(self, rhs: &Self) -> Option<PseudoDivRem<T>> {
+        if rhs.is_zero() {
+            return None;
         }
-        // returns None if rhs is empty, which happens if and only if rhs is zero
-        let rhs_last_element = rhs.elements.last()?;
-        let quotient_len = 1 + self.len() - rhs.len();
-        let factor_numerator = T::element_pow_usize(rhs_last_element.clone(), quotient_len);
-        let factor_divisor = T::divisor_pow_usize(rhs.divisor.clone(), quotient_len);
-        let factor = T::make_coefficient(Cow::Owned(factor_numerator), Cow::Owned(factor_divisor));
-        let mut reverse_quotient = Vec::with_capacity(quotient_len);
-        let mut remainder = self.into_coefficients();
-        let divisor = rhs.clone().into_coefficients();
-        let divisor_last = divisor.last().expect("divisor length already checked");
-        for coefficient in &mut remainder {
-            *coefficient *= &factor;
-        }
-        for quotient_index in (0..quotient_len).rev() {
-            let remainder_last = remainder.pop().expect("remainder length already checked");
-            let quotient_coefficient: T = remainder_last / divisor_last;
-            for divisor_index in 0..(divisor.len() - 1) {
-                remainder[quotient_index + divisor_index] -=
-                    quotient_coefficient.clone() * &divisor[divisor_index];
+        let quotient_len = match quotient_len(self.len(), rhs.len()) {
+            None => {
+                return Some(PseudoDivRem {
+                    quotient: Zero::zero(),
+                    remainder: self,
+                    factor: One::one(),
+                })
             }
-            reverse_quotient.push(quotient_coefficient);
-        }
-        reverse_quotient.reverse();
-        let quotient = reverse_quotient;
+            Some(quotient_len) => quotient_len,
+        };
+        let PseudoDivRem {
+            quotient: quotient_numerator,
+            remainder: remainder_numerator,
+            factor: factor_numerator,
+        } = element_pseudo_div_rem(self.elements, &rhs.elements, quotient_len);
+        let rhs_divisor_pow_quotient_len_minus_one =
+            T::divisor_pow_usize(rhs.divisor.clone(), quotient_len - 1);
+        let rhs_divisor_pow_quotient_len =
+            rhs_divisor_pow_quotient_len_minus_one.clone() * &rhs.divisor;
+        let factor = T::make_coefficient(
+            Cow::Owned(factor_numerator),
+            Cow::Borrowed(&rhs_divisor_pow_quotient_len),
+        );
+        let quotient = Polynomial::<T>::from((
+            quotient_numerator.elements,
+            rhs_divisor_pow_quotient_len_minus_one,
+        ));
+        let remainder =
+            Polynomial::<T>::from((remainder_numerator.elements, rhs_divisor_pow_quotient_len));
         Some(PseudoDivRem {
-            quotient: quotient.into(),
-            remainder: remainder.into(),
+            quotient,
+            remainder,
             factor,
         })
     }
-    pub fn pseudo_div_rem(self, rhs: &Self) -> PseudoDivRem<T>
-    where
-        for<'a> T: Div<&'a T, Output = T>, // FIXME: remove extraneous bound
-    {
+    pub fn pseudo_div_rem(self, rhs: &Self) -> PseudoDivRem<T> {
         self.checked_pseudo_div_rem(rhs)
             .expect("polynomial division by zero")
     }
