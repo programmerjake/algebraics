@@ -358,12 +358,6 @@ impl One for DivisorIsOne {
     }
 }
 
-// FIXME: uncomment
-/*impl<T: PolynomialCoefficient> PolynomialCoefficient for Polynomial<T> {
-    type Element = Polynomial<T::Element>;
-    type Divisor = T::Divisor;
-}*/
-
 macro_rules! impl_polynomial_coefficient_for_int {
     ($t:ty) => {
         impl PolynomialCoefficient for $t {
