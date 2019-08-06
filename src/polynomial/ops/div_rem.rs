@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // See Notices.txt for copyright information
 
-use crate::polynomial::DivisorIsOne;
 use crate::polynomial::Polynomial;
 use crate::polynomial::PolynomialCoefficient;
 use crate::polynomial::PolynomialCoefficientElement;
@@ -15,7 +14,7 @@ use std::borrow::Borrow;
 use std::borrow::Cow;
 use std::convert::identity;
 use std::mem;
-use std::ops::{Div, DivAssign, Rem, RemAssign};
+use std::ops::{Div, DivAssign, Rem, RemAssign, SubAssign};
 
 fn quotient_len(numerator_len: usize, denominator_len: usize) -> Option<usize> {
     debug_assert_ne!(denominator_len, 0);
@@ -26,11 +25,18 @@ fn quotient_len(numerator_len: usize, denominator_len: usize) -> Option<usize> {
     }
 }
 
-fn element_pseudo_div_rem<T: PolynomialCoefficientElement>(
-    numerator: Vec<T>,
-    denominator: &[T],
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct ElementPseudoDivRem<T: PolynomialCoefficientElement> {
+    quotient: Vec<T>,
+    remainder: Vec<T>,
+    factor: T,
+}
+
+fn element_pseudo_div_rem<T: PolynomialCoefficient>(
+    numerator: Vec<T::Element>,
+    denominator: &[T::Element],
     quotient_len: usize,
-) -> PseudoDivRem<T> {
+) -> ElementPseudoDivRem<T::Element> {
     let mut remainder = numerator;
     let rhs_last_element = denominator.last().expect("divide by zero already checked");
     let factor = T::element_pow_usize(rhs_last_element.clone(), quotient_len);
@@ -43,22 +49,18 @@ fn element_pseudo_div_rem<T: PolynomialCoefficientElement>(
         let remainder_last = remainder.pop().expect("remainder length already checked");
         let quotient_coefficient = remainder_last / divisor_last;
         for denominator_index in 0..(denominator.len() - 1) {
-            remainder[quotient_index + denominator_index] -=
-                quotient_coefficient.clone() * &denominator[denominator_index];
+            <T::Element as SubAssign>::sub_assign(
+                &mut remainder[quotient_index + denominator_index],
+                quotient_coefficient.clone() * &denominator[denominator_index],
+            );
         }
         reverse_quotient.push(quotient_coefficient);
     }
     reverse_quotient.reverse();
     let quotient = reverse_quotient;
-    PseudoDivRem {
-        quotient: Polynomial {
-            elements: quotient,
-            divisor: DivisorIsOne,
-        },
-        remainder: Polynomial {
-            elements: remainder,
-            divisor: DivisorIsOne,
-        },
+    ElementPseudoDivRem {
+        quotient,
+        remainder,
         factor,
     }
 }
@@ -78,11 +80,11 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
             }
             Some(quotient_len) => quotient_len,
         };
-        let PseudoDivRem {
+        let ElementPseudoDivRem {
             quotient: quotient_numerator,
             remainder: remainder_numerator,
             factor: factor_numerator,
-        } = element_pseudo_div_rem(self.elements, &rhs.elements, quotient_len);
+        } = element_pseudo_div_rem::<T>(self.elements, &rhs.elements, quotient_len);
         let rhs_divisor_pow_quotient_len_minus_one =
             T::divisor_pow_usize(rhs.divisor.clone(), quotient_len - 1);
         let rhs_divisor_pow_quotient_len =
@@ -91,12 +93,9 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
             Cow::Owned(factor_numerator),
             Cow::Borrowed(&rhs_divisor_pow_quotient_len),
         );
-        let quotient = Polynomial::<T>::from((
-            quotient_numerator.elements,
-            rhs_divisor_pow_quotient_len_minus_one,
-        ));
-        let remainder =
-            Polynomial::<T>::from((remainder_numerator.elements, rhs_divisor_pow_quotient_len));
+        let quotient =
+            Polynomial::<T>::from((quotient_numerator, rhs_divisor_pow_quotient_len_minus_one));
+        let remainder = Polynomial::<T>::from((remainder_numerator, rhs_divisor_pow_quotient_len));
         Some(PseudoDivRem {
             quotient,
             remainder,

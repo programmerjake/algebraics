@@ -25,7 +25,7 @@ use std::vec;
 mod ops;
 
 pub trait PolynomialCoefficientElement:
-    PolynomialCoefficient<Element=Self, Divisor=DivisorIsOne>
+    PolynomialCoefficient<Divisor = DivisorIsOne>
     + Add<Output = Self>
     + Sub<Output = Self>
     + Mul<Output = Self>
@@ -50,7 +50,7 @@ pub trait PolynomialCoefficientElement:
 }
 
 impl<
-        T: PolynomialCoefficient<Element=Self, Divisor=DivisorIsOne>
+        T: PolynomialCoefficient<Divisor = DivisorIsOne>
             + Add<Output = Self>
             + Sub<Output = Self>
             + Mul<Output = Self>
