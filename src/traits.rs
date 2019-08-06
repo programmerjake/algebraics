@@ -266,3 +266,16 @@ pub trait IsolatedRealRoot<T: PolynomialCoefficient + Integer> {
     fn lower_bound(&self) -> &Ratio<T>;
     fn upper_bound(&self) -> &Ratio<T>;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_gcd_lcm() {
+        let a = Ratio::new(12, 621_934i128);
+        let b = Ratio::new(48, 12934);
+        assert_eq!(a.gcd(&b), Ratio::new(6, 69_345_641));
+        assert_eq!(a.lcm(&b), Ratio::new(24, 29));
+    }
+}
