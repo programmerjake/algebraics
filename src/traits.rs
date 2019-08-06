@@ -6,6 +6,7 @@ use num_bigint::{BigInt, BigUint};
 use num_integer::Integer;
 use num_rational::Ratio;
 use num_traits::{CheckedDiv, CheckedMul, Signed, Zero};
+use std::ops::Mul;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct GCDAndLCM<T> {
@@ -47,28 +48,67 @@ pub trait ExtendedGCD<Rhs = Self>: GCD<Rhs> {
     fn extended_gcd_lcm(&self, rhs: &Rhs) -> ExtendedGCDAndLCM<Self::Output>;
 }
 
-impl<T: Integer + Clone + Signed> GCD for T {
-    type Output = T;
-    fn gcd(&self, rhs: &T) -> T {
-        Integer::gcd(self, rhs)
-    }
-    fn lcm(&self, rhs: &T) -> T {
-        Integer::lcm(self, rhs)
-    }
-    fn gcd_lcm(&self, rhs: &T) -> GCDAndLCM<T> {
-        let (gcd, lcm) = Integer::gcd_lcm(self, rhs);
-        GCDAndLCM { gcd, lcm }
-    }
+macro_rules! impl_gcd_for_int {
+    ($t:ty) => {
+        impl GCD for $t {
+            type Output = $t;
+            fn gcd(&self, rhs: &$t) -> $t {
+                Integer::gcd(self, rhs)
+            }
+            fn lcm(&self, rhs: &$t) -> $t {
+                Integer::lcm(self, rhs)
+            }
+            fn gcd_lcm(&self, rhs: &$t) -> GCDAndLCM<$t> {
+                let (gcd, lcm) = Integer::gcd_lcm(self, rhs);
+                GCDAndLCM { gcd, lcm }
+            }
+        }
+    };
 }
-impl<T: Integer + Clone + Signed> ExtendedGCD for T {
-    fn extended_gcd(&self, rhs: &T) -> ExtendedGCDResult<Self::Output> {
-        let num_integer::ExtendedGcd { gcd, x, y, .. } = Integer::extended_gcd(self, rhs);
-        ExtendedGCDResult { gcd, x, y }
-    }
-    fn extended_gcd_lcm(&self, rhs: &T) -> ExtendedGCDAndLCM<Self::Output> {
-        let (num_integer::ExtendedGcd { gcd, x, y, .. }, lcm) =
-            Integer::extended_gcd_lcm(self, rhs);
-        ExtendedGCDAndLCM { gcd, x, y, lcm }
+
+macro_rules! impl_gcd_for_signed_int {
+    ($t:ty) => {
+        impl_gcd_for_int!($t);
+
+        impl ExtendedGCD for $t {
+            fn extended_gcd(&self, rhs: &$t) -> ExtendedGCDResult<$t> {
+                let num_integer::ExtendedGcd { gcd, x, y, .. } = Integer::extended_gcd(self, rhs);
+                ExtendedGCDResult { gcd, x, y }
+            }
+            fn extended_gcd_lcm(&self, rhs: &$t) -> ExtendedGCDAndLCM<$t> {
+                let (num_integer::ExtendedGcd { gcd, x, y, .. }, lcm) =
+                    Integer::extended_gcd_lcm(self, rhs);
+                ExtendedGCDAndLCM { gcd, x, y, lcm }
+            }
+        }
+    };
+}
+
+impl_gcd_for_int!(u8);
+impl_gcd_for_signed_int!(i8);
+impl_gcd_for_int!(u16);
+impl_gcd_for_signed_int!(i16);
+impl_gcd_for_int!(u32);
+impl_gcd_for_signed_int!(i32);
+impl_gcd_for_int!(u64);
+impl_gcd_for_signed_int!(i64);
+impl_gcd_for_int!(u128);
+impl_gcd_for_signed_int!(i128);
+impl_gcd_for_int!(usize);
+impl_gcd_for_signed_int!(isize);
+impl_gcd_for_int!(BigUint);
+impl_gcd_for_signed_int!(BigInt);
+
+impl<T: Integer + Clone + for<'a> Mul<&'a T, Output = T>> GCD for Ratio<T> {
+    type Output = Self;
+    fn gcd_lcm(&self, rhs: &Self) -> GCDAndLCM<Self> {
+        let (gcd_numer, lcm_numer) =
+            (self.numer().clone() * rhs.denom()).gcd_lcm(&(rhs.numer().clone() * self.denom()));
+        let denom: T = self.denom().clone() * rhs.denom();
+        GCDAndLCM {
+            gcd: Ratio::new(gcd_numer, denom.clone()),
+            lcm: Ratio::new(lcm_numer, denom),
+        }
     }
 }
 
