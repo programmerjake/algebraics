@@ -38,10 +38,9 @@ fn element_pseudo_div_rem<T: PolynomialCoefficient>(
     quotient_len: usize,
 ) -> ElementPseudoDivRem<T::Element> {
     let mut remainder = numerator;
-    let rhs_last_element = denominator.last().expect("divide by zero already checked");
-    let factor = T::element_pow_usize(rhs_last_element.clone(), quotient_len);
-    let mut reverse_quotient = Vec::with_capacity(quotient_len);
     let divisor_last = denominator.last().expect("divisor length already checked");
+    let factor = T::element_pow_usize(divisor_last.clone(), quotient_len);
+    let mut reverse_quotient = Vec::with_capacity(quotient_len);
     for coefficient in &mut remainder {
         *coefficient *= &factor;
     }
