@@ -11,9 +11,11 @@ use num_traits::FromPrimitive;
 use num_traits::One;
 use num_traits::{zero, Zero};
 use std::borrow::Cow;
+use std::error::Error;
 use std::fmt;
 use std::hash;
 use std::mem;
+use std::ops::Deref;
 use std::ops::Div;
 use std::ops::DivAssign;
 use std::ops::Neg;
@@ -670,64 +672,47 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
             })
             .unwrap_or_else(zero)
     }
-    // FIXME: uncomment
-    // pub fn sign_at_infinity(&self, input_sign: Sign) -> Option<Sign>
-    // where
-    //     T: PartialOrd + Zero,
-    // {
-    //     let sign_last = Sign::new(self.coefficients.last()?)?;
-    //     if self.len() % 2 != 0 && input_sign == Sign::Negative {
-    //         Some(-sign_last)
-    //     } else {
-    //         Some(sign_last)
-    //     }
-    // }
-    // FIXME: uncomment
-    // pub fn to_sturm_sequence(&self) -> SturmSequence<T>
-    // where
-    //     T: Clone + Zero + AddAssign + Neg<Output = T>,
-    //     for<'a> &'a Polynomial<T>: Rem<Output = Polynomial<T>> + Derivative<Output = Polynomial<T>>,
-    // {
-    //     self.clone().into_sturm_sequence()
-    // }
-    // pub fn into_sturm_sequence(self) -> SturmSequence<T>
-    // where
-    //     T: Clone + Zero + AddAssign + Neg<Output = T>,
-    //     for<'a> &'a Polynomial<T>: Rem<Output = Polynomial<T>> + Derivative<Output = Polynomial<T>>,
-    // {
-    //     let self_len = self.len();
-    //     match self_len {
-    //         0 => return SturmSequence(vec![]),
-    //         1 => return SturmSequence(vec![self.clone()]),
-    //         _ => {}
-    //     }
-    //     let mut sturm_sequence = Vec::with_capacity(self_len);
-    //     sturm_sequence.push(self);
-    //     sturm_sequence.push(sturm_sequence[0].derivative());
-    //     for _ in 2..self_len {
-    //         match sturm_sequence.rchunks_exact(2).next() {
-    //             Some([next_to_last, last]) => {
-    //                 if last.is_zero() {
-    //                     break;
-    //                 } else {
-    //                     let next = -(next_to_last % last);
-    //                     sturm_sequence.push(next);
-    //                 }
-    //             }
-    //             _ => unreachable!(),
-    //         }
-    //     }
-    //     SturmSequence(sturm_sequence)
-    // }
-    // FIXME: uncomment
-    // /// converts all multiple roots into single roots
-    // pub fn reduce_multiple_roots(&mut self)
-    // where
-    //     T: PolynomialDivSupported + GCD<Output = T>,
-    // {
-    //     let derivative = self.derivative();
-    //     *self /= self.gcd(&derivative);
-    // }
+    pub fn to_sturm_sequence(&self) -> SturmSequence<T>
+    where
+        T: PolynomialDivSupported,
+    {
+        self.clone().into_sturm_sequence()
+    }
+    pub fn into_sturm_sequence(self) -> SturmSequence<T>
+    where
+        T: PolynomialDivSupported,
+    {
+        let self_len = self.len();
+        match self_len {
+            0 => return SturmSequence(vec![]),
+            1 => return SturmSequence(vec![self.clone()]),
+            _ => {}
+        }
+        let mut sturm_sequence = Vec::with_capacity(self_len);
+        sturm_sequence.push(self);
+        sturm_sequence.push(sturm_sequence[0].derivative());
+        for _ in 2..self_len {
+            match sturm_sequence.rchunks_exact(2).next() {
+                Some([next_to_last, last]) => {
+                    if last.is_zero() {
+                        break;
+                    } else {
+                        let next = -(next_to_last % last);
+                        sturm_sequence.push(next);
+                    }
+                }
+                _ => unreachable!(),
+            }
+        }
+        SturmSequence(sturm_sequence)
+    }
+    pub fn reduce_multiple_roots(&mut self)
+    where
+        T: PolynomialDivSupported + GCD<Output = T>,
+    {
+        let derivative = self.derivative();
+        *self /= self.gcd(&derivative);
+    }
     fn convert_to_derivative(&mut self) {
         if self.is_empty() {
             return;
@@ -808,58 +793,38 @@ impl<T: fmt::Display + PolynomialCoefficient> fmt::Display for Polynomial<T> {
     }
 }
 
-// FIXME: uncomment
-// #[derive(Clone, PartialEq, Eq, Debug, Hash)]
-// pub struct SturmSequence<T>(Vec<Polynomial<T>>);
-//
-// #[derive(Copy, Clone, Debug)]
-// pub struct PolynomialIsZero;
-//
-// impl fmt::Display for PolynomialIsZero {
-//     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-//         write!(f, "polynomial is zero")
-//     }
-// }
-//
-// impl Error for PolynomialIsZero {}
-//
-// impl From<PolynomialIsZero> for std::io::Error {
-//     fn from(err: PolynomialIsZero) -> Self {
-//         Self::new(std::io::ErrorKind::InvalidInput, err)
-//     }
-// }
-//
-// impl<T> SturmSequence<T> {
-//     pub fn new(polynomial: Polynomial<T>) -> Self
-//     where
-//         T: Clone + Zero + AddAssign + Neg<Output = T> + MakeCoefficient<usize>,
-//         for<'a> &'a T: Mul<T, Output = T>,
-//         for<'a> &'a Polynomial<T>: Rem<Output = Polynomial<T>>,
-//     {
-//         polynomial.into_sturm_sequence()
-//     }
-//     #[allow(dead_code)]
-//     fn count_sign_changes<EvalFn: FnMut(&Polynomial<T>) -> Option<Sign>>(
-//         &self,
-//         eval_fn: EvalFn,
-//     ) -> usize {
-//         let _ = eval_fn;
-//         unimplemented!()
-//     }
-//     pub fn distinct_real_root_count(&self) -> Result<usize, PolynomialIsZero> {
-//         if self.is_empty() {
-//             return Err(PolynomialIsZero);
-//         }
-//         unimplemented!()
-//     }
-// }
-//
-// impl<T> Deref for SturmSequence<T> {
-//     type Target = [Polynomial<T>];
-//     fn deref(&self) -> &[Polynomial<T>] {
-//         &self.0
-//     }
-// }
+#[derive(Clone, PartialEq, Eq, Debug, Hash)]
+pub struct SturmSequence<T: PolynomialCoefficient>(Vec<Polynomial<T>>);
+
+#[derive(Copy, Clone, Debug)]
+pub struct PolynomialIsZero;
+
+impl fmt::Display for PolynomialIsZero {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "polynomial is zero")
+    }
+}
+
+impl Error for PolynomialIsZero {}
+
+impl From<PolynomialIsZero> for std::io::Error {
+    fn from(err: PolynomialIsZero) -> Self {
+        Self::new(std::io::ErrorKind::InvalidInput, err)
+    }
+}
+
+impl<T: PolynomialDivSupported> SturmSequence<T> {
+    pub fn new(polynomial: Polynomial<T>) -> Self {
+        polynomial.into_sturm_sequence()
+    }
+}
+
+impl<T: PolynomialCoefficient> Deref for SturmSequence<T> {
+    type Target = [Polynomial<T>];
+    fn deref(&self) -> &[Polynomial<T>] {
+        &self.0
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -908,36 +873,35 @@ mod tests {
         assert_eq!(poly.split_out_divisor(), (vec![1], 2));
     }
 
-    // FIXME: uncomment
-    // #[test]
-    // fn test_sturm_sequence() {
-    //     let mut poly: Polynomial<Ratio<i64>> = Zero::zero();
-    //     assert_eq!(*Vec::<Polynomial<_>>::new(), *poly.to_sturm_sequence());
-    //     poly = From::<Vec<Ratio<_>>>::from(vec![1.into()]);
-    //     assert_eq!([poly.clone()], *poly.to_sturm_sequence());
-    //     poly = From::<Vec<Ratio<_>>>::from(vec![1.into(), 2.into()]);
-    //     assert_eq!(
-    //         [poly.clone(), From::<Vec<Ratio<_>>>::from(vec![2.into()])],
-    //         *poly.to_sturm_sequence()
-    //     );
-    //     poly = From::<Vec<Ratio<_>>>::from(vec![1.into(), 2.into(), 3.into()]);
-    //     assert_eq!(
-    //         [
-    //             poly.clone(),
-    //             From::<Vec<Ratio<_>>>::from(vec![2.into(), 6.into()]),
-    //             From::<Vec<Ratio<_>>>::from(vec![(-2, 3).into()]),
-    //         ],
-    //         *poly.to_sturm_sequence()
-    //     );
-    //     poly = From::<Vec<Ratio<_>>>::from(vec![1.into(), 2.into(), 3.into(), 4.into()]);
-    //     assert_eq!(
-    //         [
-    //             poly.clone(),
-    //             From::<Vec<Ratio<_>>>::from(vec![2.into(), 6.into(), 12.into()]),
-    //             From::<Vec<Ratio<_>>>::from(vec![(-5, 6).into(), (-5, 6).into()]),
-    //             From::<Vec<Ratio<_>>>::from(vec![(-8).into()]),
-    //         ],
-    //         *poly.to_sturm_sequence()
-    //     );
-    // }
+    #[test]
+    fn test_sturm_sequence() {
+        let mut poly: Polynomial<Ratio<i64>> = Zero::zero();
+        assert_eq!(*Vec::<Polynomial<_>>::new(), *poly.to_sturm_sequence());
+        poly = From::<Vec<Ratio<_>>>::from(vec![1.into()]);
+        assert_eq!([poly.clone()], *poly.to_sturm_sequence());
+        poly = From::<Vec<Ratio<_>>>::from(vec![1.into(), 2.into()]);
+        assert_eq!(
+            [poly.clone(), From::<Vec<Ratio<_>>>::from(vec![2.into()])],
+            *poly.to_sturm_sequence()
+        );
+        poly = From::<Vec<Ratio<_>>>::from(vec![1.into(), 2.into(), 3.into()]);
+        assert_eq!(
+            [
+                poly.clone(),
+                From::<Vec<Ratio<_>>>::from(vec![2.into(), 6.into()]),
+                From::<Vec<Ratio<_>>>::from(vec![(-2, 3).into()]),
+            ],
+            *poly.to_sturm_sequence()
+        );
+        poly = From::<Vec<Ratio<_>>>::from(vec![1.into(), 2.into(), 3.into(), 4.into()]);
+        assert_eq!(
+            [
+                poly.clone(),
+                From::<Vec<Ratio<_>>>::from(vec![2.into(), 6.into(), 12.into()]),
+                From::<Vec<Ratio<_>>>::from(vec![(-5, 6).into(), (-5, 6).into()]),
+                From::<Vec<Ratio<_>>>::from(vec![(-8).into()]),
+            ],
+            *poly.to_sturm_sequence()
+        );
+    }
 }
