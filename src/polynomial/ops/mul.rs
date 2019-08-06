@@ -3,7 +3,7 @@
 
 use crate::polynomial::Polynomial;
 use crate::polynomial::PolynomialCoefficient;
-use num_traits::Zero;
+use num_traits::{One, Zero};
 use std::ops::{AddAssign, Mul, MulAssign};
 
 impl<'a, T: PolynomialCoefficient> Mul for &'a Polynomial<T> {
@@ -65,6 +65,31 @@ impl<T: PolynomialCoefficient> MulAssign for Polynomial<T> {
 impl<'a, T: PolynomialCoefficient> MulAssign<&'a Polynomial<T>> for Polynomial<T> {
     fn mul_assign(&mut self, rhs: &'a Polynomial<T>) {
         *self = &*self * rhs;
+    }
+}
+
+impl<T: PolynomialCoefficient> One for Polynomial<T> {
+    fn one() -> Self {
+        Self {
+            elements: vec![One::one()],
+            divisor: One::one(),
+        }
+    }
+    fn set_one(&mut self) {
+        if self.elements.is_empty() {
+            self.elements.push(One::one());
+        } else {
+            self.elements.drain(1..);
+            self.elements[1].set_one();
+        }
+        self.divisor.set_one();
+    }
+    #[inline]
+    fn is_one(&self) -> bool {
+        match &*self.elements {
+            [element] => element.is_one() && self.divisor.is_one(),
+            _ => false,
+        }
     }
 }
 
