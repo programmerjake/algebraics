@@ -39,14 +39,13 @@ fn element_pseudo_div_rem<T: PolynomialCoefficient>(
 ) -> ElementPseudoDivRem<T::Element> {
     let mut remainder = numerator;
     let divisor_last = denominator.last().expect("divisor length already checked");
-    let factor = T::element_pow_usize(divisor_last.clone(), quotient_len);
     let mut reverse_quotient = Vec::with_capacity(quotient_len);
-    for coefficient in &mut remainder {
-        *coefficient *= &factor;
-    }
     for quotient_index in (0..quotient_len).rev() {
         let remainder_last = remainder.pop().expect("remainder length already checked");
-        let quotient_coefficient = remainder_last / divisor_last;
+        let quotient_coefficient = remainder_last;
+        for element in &mut remainder {
+            *element *= divisor_last;
+        }
         for denominator_index in 0..(denominator.len() - 1) {
             <T::Element as SubAssign>::sub_assign(
                 &mut remainder[quotient_index + denominator_index],
@@ -56,7 +55,12 @@ fn element_pseudo_div_rem<T: PolynomialCoefficient>(
         reverse_quotient.push(quotient_coefficient);
     }
     reverse_quotient.reverse();
-    let quotient = reverse_quotient;
+    let mut quotient = reverse_quotient;
+    let mut factor = divisor_last.clone();
+    for quotient_element in &mut quotient[1..] {
+        *quotient_element *= &factor;
+        factor *= divisor_last;
+    }
     ElementPseudoDivRem {
         quotient,
         remainder,
