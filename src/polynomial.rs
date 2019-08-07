@@ -702,7 +702,7 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
             })
             .unwrap_or_else(zero)
     }
-    pub fn remove_content(&mut self)
+    pub fn primitive_part_assign(&mut self)
     where
         T: GCD<Output = T>,
         for<'a> T::Element: DivAssign<&'a T::Element>,
@@ -715,12 +715,12 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
         }
         self.normalize();
     }
-    pub fn into_contentless(mut self) -> Self
+    pub fn into_primitive_part(mut self) -> Self
     where
         T: GCD<Output = T>,
         for<'a> T::Element: DivAssign<&'a T::Element>,
     {
-        self.remove_content();
+        self.primitive_part_assign();
         self
     }
     pub fn to_sturm_sequence(&self) -> SturmSequence<T>
