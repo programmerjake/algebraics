@@ -2,6 +2,7 @@
 // See Notices.txt for copyright information
 use crate::traits::ExtendedGCD;
 use crate::traits::ExtendedGCDAndLCM;
+use crate::traits::ExtendedGCDResult;
 use crate::traits::GCDAndLCM;
 use crate::traits::GCD;
 use num_bigint::BigInt;
@@ -9,7 +10,7 @@ use num_integer::Integer;
 use num_rational::Ratio;
 use num_traits::One;
 use num_traits::{zero, Zero};
-use num_traits::{FromPrimitive, ToPrimitive};
+use num_traits::{CheckedDiv, FromPrimitive, ToPrimitive};
 use std::borrow::Cow;
 use std::error::Error;
 use std::fmt;
@@ -457,9 +458,31 @@ where
     for<'a> T::Element: DivAssign<&'a T::Element> + Div<&'a T::Element, Output = T::Element>,
     T::Element: DivAssign + Div<Output = T::Element>,
 {
-    fn extended_gcd_lcm(&self, _rhs: &Self) -> ExtendedGCDAndLCM<Self> {
-        // FIXME: finish
-        unimplemented!()
+    fn extended_gcd(&self, rhs: &Self) -> ExtendedGCDResult<Self> {
+        // FIXME: doesn't produce correct results
+        let mut r: (Self, Self) = (self.clone(), rhs.clone());
+        let mut x = (Self::one(), Self::zero());
+        let mut y = (Self::zero(), Self::one());
+        let step = |v: (Self, Self), q: &Self| {
+            let reduced = v.0 - q * &v.1;
+            (v.1, reduced)
+        };
+        while let Some(q) = r.0.checked_div(&r.1) {
+            r = step(r, &q);
+            x = step(x, &q);
+            y = step(y, &q);
+        }
+        let gcd = r.0;
+        ExtendedGCDResult {
+            gcd,
+            x: x.0,
+            y: y.0,
+        }
+    }
+    fn extended_gcd_lcm(&self, rhs: &Self) -> ExtendedGCDAndLCM<Self> {
+        let ExtendedGCDResult { gcd, x, y } = self.extended_gcd(rhs);
+        let lcm = self.checked_div(&gcd).unwrap_or_else(Zero::zero) * rhs;
+        ExtendedGCDAndLCM { gcd, lcm, x, y }
     }
 }
 
@@ -678,6 +701,27 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
                 Some(lhs) => Some(lhs.gcd(&rhs)),
             })
             .unwrap_or_else(zero)
+    }
+    pub fn remove_content(&mut self)
+    where
+        T: GCD<Output = T>,
+        for<'a> T::Element: DivAssign<&'a T::Element>,
+    {
+        let (content_numerator, content_divisor) =
+            T::coefficient_to_element(Cow::Owned(self.content()));
+        DivAssign::<T::Divisor>::div_assign(&mut self.divisor, content_divisor);
+        for element in &mut self.elements {
+            *element /= &content_numerator;
+        }
+        self.normalize();
+    }
+    pub fn into_contentless(mut self) -> Self
+    where
+        T: GCD<Output = T>,
+        for<'a> T::Element: DivAssign<&'a T::Element>,
+    {
+        self.remove_content();
+        self
     }
     pub fn to_sturm_sequence(&self) -> SturmSequence<T>
     where
@@ -975,6 +1019,72 @@ mod tests {
                 From::<Vec<Ratio<_>>>::from(vec![(-8).into()]),
             ],
             *poly.to_sturm_sequence()
+        );
+    }
+
+    #[test]
+    fn test_gcd() {
+        let r = |n: i64, d: i64| Ratio::<BigInt>::new(n.into(), d.into());
+        let ri = |v: i64| Ratio::<BigInt>::from_integer(v.into());
+        fn test_case<
+            A: Into<Polynomial<Ratio<BigInt>>>,
+            B: Into<Polynomial<Ratio<BigInt>>>,
+            X: Into<Polynomial<Ratio<BigInt>>>,
+            Y: Into<Polynomial<Ratio<BigInt>>>,
+            G: Into<Polynomial<Ratio<BigInt>>>,
+            L: Into<Polynomial<Ratio<BigInt>>>,
+        >(
+            a: A,
+            b: B,
+            x: X,
+            y: Y,
+            gcd: G,
+            lcm: L,
+        ) {
+            let a = a.into();
+            let b = b.into();
+            let x = x.into();
+            let y = y.into();
+            let gcd = gcd.into();
+            let lcm = lcm.into();
+            let results = a.extended_gcd_lcm(&b);
+            println!("a=({})  b=({})", a, b);
+            println!("x=({})  y=({})", x, y);
+            println!("gcd=({})  lcm=({})", gcd, lcm);
+            println!("results.x=({})  results.y=({})", results.x, results.y);
+            println!(
+                "results.gcd=({})  results.lcm=({})",
+                results.gcd, results.lcm
+            );
+            // don't use assert_eq because the debug output is awful
+            assert!(gcd == results.gcd);
+            assert!(lcm == results.lcm);
+            assert!(x == results.x);
+            assert!(y == results.y);
+        }
+        test_case(
+            vec![ri(6), ri(2), ri(1)],
+            vec![ri(7), ri(3)],
+            r(9, 61),
+            vec![r(1, 61), r(-3, 61)],
+            ri(1),
+            vec![ri(42), ri(32), ri(13), ri(3)],
+        );
+        test_case(
+            vec![ri(8), ri(2), ri(1)],
+            vec![ri(9), ri(4)],
+            r(16, 137),
+            vec![r(1, 137), r(-4, 137)],
+            ri(1),
+            vec![ri(72), ri(50), ri(17), ri(4)],
+        );
+        test_case(
+            vec![ri(0), ri(3), ri(1)],
+            vec![ri(0), ri(2), ri(2), ri(8)],
+            vec![ri(22), ri(-8)],
+            ri(1),
+            vec![ri(0), ri(68)],
+            vec![ri(0), ri(6), ri(8), ri(26), ri(8)],
         );
     }
 }
