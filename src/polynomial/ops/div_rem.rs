@@ -111,7 +111,11 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
     }
 }
 
-impl<T: PolynomialDivSupported> Polynomial<T> {
+impl<T: PolynomialDivSupported> Polynomial<T>
+where
+    for<'a> T::Element: DivAssign<&'a T::Element> + Div<&'a T::Element, Output = T::Element>,
+    T::Element: DivAssign + Div<Output = T::Element>,
+{
     fn div_by_coefficient(self, divisor: &T) -> Self {
         self.into_iter()
             .map(|coefficient| coefficient / divisor)
@@ -142,7 +146,11 @@ impl<T: PolynomialDivSupported> Polynomial<T> {
     }
 }
 
-impl<T: PolynomialDivSupported> CheckedDiv for Polynomial<T> {
+impl<T: PolynomialDivSupported> CheckedDiv for Polynomial<T>
+where
+    for<'a> T::Element: DivAssign<&'a T::Element> + Div<&'a T::Element, Output = T::Element>,
+    T::Element: DivAssign + Div<Output = T::Element>,
+{
     fn checked_div(&self, rhs: &Self) -> Option<Self> {
         let PseudoDivRem {
             quotient, factor, ..
@@ -151,7 +159,11 @@ impl<T: PolynomialDivSupported> CheckedDiv for Polynomial<T> {
     }
 }
 
-impl<T: PolynomialDivSupported> CheckedRem for Polynomial<T> {
+impl<T: PolynomialDivSupported> CheckedRem for Polynomial<T>
+where
+    for<'a> T::Element: DivAssign<&'a T::Element> + Div<&'a T::Element, Output = T::Element>,
+    T::Element: DivAssign + Div<Output = T::Element>,
+{
     fn checked_rem(&self, rhs: &Self) -> Option<Self> {
         let PseudoDivRem {
             remainder, factor, ..
@@ -162,7 +174,12 @@ impl<T: PolynomialDivSupported> CheckedRem for Polynomial<T> {
 
 macro_rules! impl_div_rem {
     ($l:ty, $l_to_owned:expr, $r:ty) => {
-        impl<T: PolynomialDivSupported> Div<$r> for $l {
+        impl<T: PolynomialDivSupported> Div<$r> for $l
+        where
+            for<'a> T::Element:
+                DivAssign<&'a T::Element> + Div<&'a T::Element, Output = T::Element>,
+            T::Element: DivAssign + Div<Output = T::Element>,
+        {
             type Output = Polynomial<T>;
             fn div(self, rhs: $r) -> Polynomial<T> {
                 let PseudoDivRem {
@@ -172,7 +189,12 @@ macro_rules! impl_div_rem {
             }
         }
 
-        impl<T: PolynomialDivSupported> Rem<$r> for $l {
+        impl<T: PolynomialDivSupported> Rem<$r> for $l
+        where
+            for<'a> T::Element:
+                DivAssign<&'a T::Element> + Div<&'a T::Element, Output = T::Element>,
+            T::Element: DivAssign + Div<Output = T::Element>,
+        {
             type Output = Polynomial<T>;
             fn rem(self, rhs: $r) -> Polynomial<T> {
                 let PseudoDivRem {
@@ -188,7 +210,11 @@ impl_div_rem!(Polynomial<T>, identity, Polynomial<T>);
 impl_div_rem!(Polynomial<T>, identity, &'_ Polynomial<T>);
 impl_div_rem!(&'_ Polynomial<T>, Clone::clone, Polynomial<T>);
 
-impl<'a, 'b, T: PolynomialDivSupported> Div<&'a Polynomial<T>> for &'b Polynomial<T> {
+impl<'a, 'b, T: PolynomialDivSupported> Div<&'a Polynomial<T>> for &'b Polynomial<T>
+where
+    for<'c> T::Element: DivAssign<&'c T::Element> + Div<&'c T::Element, Output = T::Element>,
+    T::Element: DivAssign + Div<Output = T::Element>,
+{
     type Output = Polynomial<T>;
     fn div(self, rhs: &Polynomial<T>) -> Polynomial<T> {
         let PseudoDivRem {
@@ -198,7 +224,11 @@ impl<'a, 'b, T: PolynomialDivSupported> Div<&'a Polynomial<T>> for &'b Polynomia
     }
 }
 
-impl<'a, 'b, T: PolynomialDivSupported> Rem<&'a Polynomial<T>> for &'b Polynomial<T> {
+impl<'a, 'b, T: PolynomialDivSupported> Rem<&'a Polynomial<T>> for &'b Polynomial<T>
+where
+    for<'c> T::Element: DivAssign<&'c T::Element> + Div<&'c T::Element, Output = T::Element>,
+    T::Element: DivAssign + Div<Output = T::Element>,
+{
     type Output = Polynomial<T>;
     fn rem(self, rhs: &Polynomial<T>) -> Polynomial<T> {
         let PseudoDivRem {
@@ -210,14 +240,24 @@ impl<'a, 'b, T: PolynomialDivSupported> Rem<&'a Polynomial<T>> for &'b Polynomia
 
 macro_rules! impl_div_rem_eq {
     ($r:ty) => {
-        impl<T: PolynomialDivSupported> DivAssign<$r> for Polynomial<T> {
+        impl<T: PolynomialDivSupported> DivAssign<$r> for Polynomial<T>
+        where
+            for<'a> T::Element:
+                DivAssign<&'a T::Element> + Div<&'a T::Element, Output = T::Element>,
+            T::Element: DivAssign + Div<Output = T::Element>,
+        {
             fn div_assign(&mut self, rhs: $r) {
                 let lhs = mem::replace(self, Zero::zero());
                 *self = lhs / rhs;
             }
         }
 
-        impl<T: PolynomialDivSupported> RemAssign<$r> for Polynomial<T> {
+        impl<T: PolynomialDivSupported> RemAssign<$r> for Polynomial<T>
+        where
+            for<'a> T::Element:
+                DivAssign<&'a T::Element> + Div<&'a T::Element, Output = T::Element>,
+            T::Element: DivAssign + Div<Output = T::Element>,
+        {
             fn rem_assign(&mut self, rhs: $r) {
                 let lhs = mem::replace(self, Zero::zero());
                 *self = lhs % rhs;

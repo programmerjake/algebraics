@@ -31,20 +31,16 @@ pub trait PolynomialCoefficientElement:
     + Add<Output = Self>
     + Sub<Output = Self>
     + Mul<Output = Self>
-    + Div<Output = Self>
     + for<'a> Add<&'a Self, Output = Self>
     + for<'a> Sub<&'a Self, Output = Self>
     + for<'a> Mul<&'a Self, Output = Self>
-    + for<'a> Div<&'a Self, Output = Self>
     + Neg<Output = Self>
     + AddAssign
     + SubAssign
     + MulAssign
-    + DivAssign
     + for<'a> AddAssign<&'a Self>
     + for<'a> SubAssign<&'a Self>
     + for<'a> MulAssign<&'a Self>
-    + for<'a> DivAssign<&'a Self>
     + One
     + FromPrimitive
     + GCD<Self, Output = Self>
@@ -56,20 +52,16 @@ impl<
             + Add<Output = Self>
             + Sub<Output = Self>
             + Mul<Output = Self>
-            + Div<Output = Self>
             + for<'a> Add<&'a Self, Output = Self>
             + for<'a> Sub<&'a Self, Output = Self>
             + for<'a> Mul<&'a Self, Output = Self>
-            + for<'a> Div<&'a Self, Output = Self>
             + Neg<Output = Self>
             + AddAssign
             + SubAssign
             + MulAssign
-            + DivAssign
             + for<'a> AddAssign<&'a Self>
             + for<'a> SubAssign<&'a Self>
             + for<'a> MulAssign<&'a Self>
-            + for<'a> DivAssign<&'a Self>
             + One
             + FromPrimitive
             + GCD<Self, Output = Self>,
@@ -171,7 +163,12 @@ pub trait PolynomialCoefficient:
 }
 
 impl<
-        T: PolynomialCoefficientElement + Integer + for<'a> DivAssign<&'a T> + DivAssign + RemAssign,
+        T: PolynomialCoefficientElement
+            + Integer
+            + for<'a> DivAssign<&'a T>
+            + for<'a> Div<&'a T, Output = T>
+            + DivAssign
+            + RemAssign,
     > PolynomialCoefficient for Ratio<T>
 where
     Ratio<T>: FromPrimitive,
@@ -402,11 +399,20 @@ pub trait PolynomialDivSupported:
     + DivAssign
     + for<'a> Div<&'a Self, Output = Self>
     + Div<Output = Self>
+where
+    Self::Element: Div<Output = Self::Element> + DivAssign,
+    for<'a> Self::Element:
+        Div<&'a Self::Element, Output = Self::Element> + DivAssign<&'a Self::Element>,
 {
 }
 
 impl<
-        T: PolynomialCoefficientElement + Integer + for<'a> DivAssign<&'a T> + DivAssign + RemAssign,
+        T: PolynomialCoefficientElement
+            + Integer
+            + for<'a> Div<&'a T, Output = T>
+            + for<'a> DivAssign<&'a T>
+            + DivAssign
+            + RemAssign,
     > PolynomialDivSupported for Ratio<T>
 where
     Ratio<T>: FromPrimitive,
@@ -433,7 +439,11 @@ pub struct Polynomial<T: PolynomialCoefficient> {
     divisor: T::Divisor,
 }
 
-impl<T: PolynomialCoefficient + GCD<Output = T> + PolynomialDivSupported> GCD for Polynomial<T> {
+impl<T: PolynomialCoefficient + GCD<Output = T> + PolynomialDivSupported> GCD for Polynomial<T>
+where
+    for<'a> T::Element: DivAssign<&'a T::Element> + Div<&'a T::Element, Output = T::Element>,
+    T::Element: DivAssign + Div<Output = T::Element>,
+{
     type Output = Self;
     fn gcd_lcm(&self, rhs: &Self) -> GCDAndLCM<Self> {
         let ExtendedGCDAndLCM { gcd, lcm, .. } = self.extended_gcd_lcm(rhs);
@@ -443,6 +453,9 @@ impl<T: PolynomialCoefficient + GCD<Output = T> + PolynomialDivSupported> GCD fo
 
 impl<T: PolynomialCoefficient + GCD<Output = T> + PolynomialDivSupported> ExtendedGCD
     for Polynomial<T>
+where
+    for<'a> T::Element: DivAssign<&'a T::Element> + Div<&'a T::Element, Output = T::Element>,
+    T::Element: DivAssign + Div<Output = T::Element>,
 {
     fn extended_gcd_lcm(&self, _rhs: &Self) -> ExtendedGCDAndLCM<Self> {
         // FIXME: finish
@@ -669,12 +682,16 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
     pub fn to_sturm_sequence(&self) -> SturmSequence<T>
     where
         T: PolynomialDivSupported,
+        for<'a> T::Element: DivAssign<&'a T::Element> + Div<&'a T::Element, Output = T::Element>,
+        T::Element: DivAssign + Div<Output = T::Element>,
     {
         self.clone().into_sturm_sequence()
     }
     pub fn into_sturm_sequence(self) -> SturmSequence<T>
     where
         T: PolynomialDivSupported,
+        for<'a> T::Element: DivAssign<&'a T::Element> + Div<&'a T::Element, Output = T::Element>,
+        T::Element: DivAssign + Div<Output = T::Element>,
     {
         let self_len = self.len();
         match self_len {
@@ -703,6 +720,8 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
     pub fn reduce_multiple_roots(&mut self)
     where
         T: PolynomialDivSupported + GCD<Output = T>,
+        for<'a> T::Element: DivAssign<&'a T::Element> + Div<&'a T::Element, Output = T::Element>,
+        T::Element: DivAssign + Div<Output = T::Element>,
     {
         let derivative = self.derivative();
         *self /= self.gcd(&derivative);
@@ -863,7 +882,11 @@ impl From<PolynomialIsZero> for std::io::Error {
     }
 }
 
-impl<T: PolynomialDivSupported> SturmSequence<T> {
+impl<T: PolynomialDivSupported> SturmSequence<T>
+where
+    for<'a> T::Element: DivAssign<&'a T::Element> + Div<&'a T::Element, Output = T::Element>,
+    T::Element: DivAssign + Div<Output = T::Element>,
+{
     pub fn new(polynomial: Polynomial<T>) -> Self {
         polynomial.into_sturm_sequence()
     }
