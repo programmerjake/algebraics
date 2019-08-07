@@ -228,7 +228,7 @@ impl_div_rem_eq!(&'_ Polynomial<T>);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::polynomial::ops::util::tests::test_op_helper;
+    use crate::util::tests::test_op_helper;
     use num_integer::Integer;
     use num_rational::Ratio;
 

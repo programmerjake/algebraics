@@ -96,7 +96,7 @@ impl<T: PolynomialCoefficient> One for Polynomial<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::polynomial::ops::util::tests::test_op_helper;
+    use crate::util::tests::test_op_helper;
     use num_rational::Ratio;
     #[test]
     fn test_mul() {

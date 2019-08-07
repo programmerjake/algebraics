@@ -157,7 +157,7 @@ impl<T: PolynomialCoefficient> Neg for &'_ Polynomial<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::polynomial::ops::util::tests::test_op_helper;
+    use crate::util::tests::test_op_helper;
     #[test]
     fn test_add() {
         let test = |l: Polynomial<i32>, r: Polynomial<i32>, expected: &Polynomial<i32>| {
