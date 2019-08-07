@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // See Notices.txt for copyright information
 
-use crate::polynomial::PolynomialCoefficient;
 use crate::polynomial::Polynomial;
+use crate::polynomial::PolynomialCoefficient;
 use crate::traits::GCD;
 use num_bigint::BigUint;
 use num_bigint::{BigInt, Sign};
@@ -36,7 +36,7 @@ pub struct QuadraticPolynomial<T> {
     pub quadratic_term: T,
 }
 
-impl<T: Zero+PolynomialCoefficient> From<QuadraticPolynomial<T>> for Polynomial<T> {
+impl<T: Zero + PolynomialCoefficient> From<QuadraticPolynomial<T>> for Polynomial<T> {
     fn from(poly: QuadraticPolynomial<T>) -> Self {
         vec![poly.constant_term, poly.linear_term, poly.quadratic_term].into()
     }
