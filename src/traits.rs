@@ -8,12 +8,24 @@ use num_rational::Ratio;
 use num_traits::{CheckedDiv, CheckedMul, Signed, Zero};
 use std::ops::Mul;
 
+/// GCD and LCM
+///
+/// ```no_build
+/// let result = GCD::gcd_lcm(a, b);
+/// assert_eq!(result.gcd * result.lcm, a * b);
+/// ```
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct GCDAndLCM<T> {
     pub gcd: T,
     pub lcm: T,
 }
 
+/// GCD and Bézout coefficients
+///
+/// ```no_build
+/// let result = ExtendedGCD::extended_gcd(a, b);
+/// assert_eq!(result.x * a + result.y * b, result.gcd);
+/// ```
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct ExtendedGCDResult<T> {
     pub gcd: T,
@@ -21,6 +33,13 @@ pub struct ExtendedGCDResult<T> {
     pub y: T,
 }
 
+/// GCD, LCM, and Bézout coefficients
+///
+/// ```no_build
+/// let result = ExtendedGCD::extended_gcd_lcm(a, b);
+/// assert_eq!(result.x * a + result.y * b, result.gcd);
+/// assert_eq!(result.gcd * result.lcm, a * b);
+/// ```
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct ExtendedGCDAndLCM<T> {
     pub gcd: T,
