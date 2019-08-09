@@ -131,6 +131,20 @@ impl<T: Integer + Clone + for<'a> Mul<&'a T, Output = T>> GCD for Ratio<T> {
     }
 }
 
+impl<T: Integer + Clone + Signed + for<'a> Mul<&'a T, Output = T>> ExtendedGCD for Ratio<T> {
+    fn extended_gcd_lcm(&self, rhs: &Self) -> ExtendedGCDAndLCM<Self> {
+        let (gcd_numer, lcm_numer) = (self.numer().clone() * rhs.denom())
+            .extended_gcd_lcm(&(rhs.numer().clone() * self.denom()));
+        let denom: T = self.denom().clone() * rhs.denom();
+        ExtendedGCDAndLCM {
+            gcd: Ratio::new(gcd_numer.gcd, denom.clone()),
+            x: gcd_numer.x.into(),
+            y: gcd_numer.y.into(),
+            lcm: Ratio::new(lcm_numer, denom),
+        }
+    }
+}
+
 /// Division with Remainder where division returns the Nearest representable result.
 ///
 /// Unsigned Integer Examples:
