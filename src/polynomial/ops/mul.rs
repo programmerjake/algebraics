@@ -80,7 +80,7 @@ impl<T: PolynomialCoefficient> One for Polynomial<T> {
             self.elements.push(One::one());
         } else {
             self.elements.drain(1..);
-            self.elements[1].set_one();
+            self.elements[0].set_one();
         }
         self.divisor.set_one();
     }
