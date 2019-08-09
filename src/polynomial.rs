@@ -601,6 +601,13 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
             Cow::Borrowed(&self.divisor),
         )
     }
+    pub fn highest_power_coefficient(&self) -> T {
+        if self.is_empty() {
+            Zero::zero()
+        } else {
+            self.coefficient(self.len() - 1)
+        }
+    }
     pub fn into_coefficients(self) -> Vec<T> {
         let divisor = &self.divisor;
         self.elements
@@ -676,6 +683,19 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
         for<'a> T::Element: DivAssign<&'a T::Element>,
     {
         self.primitive_part_assign();
+        self
+    }
+    pub fn monic_assign(&mut self)
+    where
+        T: for<'a> Div<&'a T, Output = T>,
+    {
+        *self /= self.highest_power_coefficient();
+    }
+    pub fn into_monic(mut self) -> Self
+    where
+        T: for<'a> Div<&'a T, Output = T>,
+    {
+        self.monic_assign();
         self
     }
     pub fn to_sturm_sequence(&self) -> SturmSequence<T>
