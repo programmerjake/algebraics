@@ -36,6 +36,27 @@ fn add_sub_assign<T: PolynomialCoefficient, AddSubAssign: Fn(&mut T::Element, T:
     lhs.normalize();
 }
 
+fn add_sub_assign_single<
+    T: PolynomialCoefficient,
+    AddSubAssign: Fn(&mut T::Element, T::Element),
+>(
+    lhs: &mut Polynomial<T>,
+    rhs: Cow<T>,
+    add_sub_assign: AddSubAssign,
+) {
+    let (rhs_numerator, rhs_divisor) = T::coefficient_to_element(rhs);
+    let GCDAndLCM { gcd, lcm: divisor } = lhs.divisor.gcd_lcm(&rhs_divisor);
+    let lhs_divisor = mem::replace(&mut lhs.divisor, divisor);
+    let lhs_multiplier = T::divisor_to_element(Cow::Owned(lhs_divisor * &gcd));
+    let rhs_multiplier = T::divisor_to_element(Cow::Owned(gcd * &rhs_divisor));
+    if lhs.is_empty() {
+        lhs.elements.push(Zero::zero());
+    }
+    lhs.elements[0] *= &lhs_multiplier;
+    add_sub_assign(&mut lhs.elements[0], rhs_numerator * &rhs_multiplier);
+    lhs.normalize();
+}
+
 impl<T: PolynomialCoefficient> AddAssign for Polynomial<T> {
     fn add_assign(&mut self, rhs: Polynomial<T>) {
         add_sub_assign(self, &rhs, AddAssign::<T::Element>::add_assign);
@@ -43,8 +64,24 @@ impl<T: PolynomialCoefficient> AddAssign for Polynomial<T> {
 }
 
 impl<'a, T: PolynomialCoefficient> AddAssign<&'a Polynomial<T>> for Polynomial<T> {
-    fn add_assign(&mut self, rhs: &'a Polynomial<T>) {
+    fn add_assign(&mut self, rhs: &Polynomial<T>) {
         add_sub_assign(self, rhs, AddAssign::<T::Element>::add_assign);
+    }
+}
+
+impl<T: PolynomialCoefficient> AddAssign<T> for Polynomial<T> {
+    fn add_assign(&mut self, rhs: T) {
+        add_sub_assign_single(self, Cow::Owned(rhs), AddAssign::<T::Element>::add_assign);
+    }
+}
+
+impl<'a, T: PolynomialCoefficient> AddAssign<&'a T> for Polynomial<T> {
+    fn add_assign(&mut self, rhs: &T) {
+        add_sub_assign_single(
+            self,
+            Cow::Borrowed(rhs),
+            AddAssign::<T::Element>::add_assign,
+        );
     }
 }
 
@@ -58,7 +95,7 @@ impl<T: PolynomialCoefficient> Add for Polynomial<T> {
 
 impl<'a, T: PolynomialCoefficient> Add<&'a Polynomial<T>> for Polynomial<T> {
     type Output = Polynomial<T>;
-    fn add(mut self, rhs: &'a Polynomial<T>) -> Self::Output {
+    fn add(mut self, rhs: &Polynomial<T>) -> Self::Output {
         self += rhs;
         self
     }
@@ -75,6 +112,40 @@ impl<'a, T: PolynomialCoefficient> Add<Polynomial<T>> for &'a Polynomial<T> {
 impl<'a, T: PolynomialCoefficient> Add for &'a Polynomial<T> {
     type Output = Polynomial<T>;
     fn add(self, rhs: Self) -> Self::Output {
+        let mut retval = self.clone();
+        retval += rhs;
+        retval
+    }
+}
+
+impl<T: PolynomialCoefficient> Add<T> for Polynomial<T> {
+    type Output = Polynomial<T>;
+    fn add(mut self, rhs: T) -> Self::Output {
+        self += rhs;
+        self
+    }
+}
+
+impl<'a, T: PolynomialCoefficient> Add<&'a T> for Polynomial<T> {
+    type Output = Polynomial<T>;
+    fn add(mut self, rhs: &T) -> Self::Output {
+        self += rhs;
+        self
+    }
+}
+
+impl<'a, T: PolynomialCoefficient> Add<T> for &'a Polynomial<T> {
+    type Output = Polynomial<T>;
+    fn add(self, rhs: T) -> Self::Output {
+        let mut retval = self.clone();
+        retval += rhs;
+        retval
+    }
+}
+
+impl<'a, T: PolynomialCoefficient> Add<&'a T> for &'a Polynomial<T> {
+    type Output = Polynomial<T>;
+    fn add(self, rhs: &T) -> Self::Output {
         let mut retval = self.clone();
         retval += rhs;
         retval
@@ -101,8 +172,24 @@ impl<T: PolynomialCoefficient> SubAssign for Polynomial<T> {
 }
 
 impl<'a, T: PolynomialCoefficient> SubAssign<&'a Polynomial<T>> for Polynomial<T> {
-    fn sub_assign(&mut self, rhs: &'a Polynomial<T>) {
+    fn sub_assign(&mut self, rhs: &Polynomial<T>) {
         add_sub_assign(self, rhs, SubAssign::<T::Element>::sub_assign);
+    }
+}
+
+impl<T: PolynomialCoefficient> SubAssign<T> for Polynomial<T> {
+    fn sub_assign(&mut self, rhs: T) {
+        add_sub_assign_single(self, Cow::Owned(rhs), SubAssign::<T::Element>::sub_assign);
+    }
+}
+
+impl<'a, T: PolynomialCoefficient> SubAssign<&'a T> for Polynomial<T> {
+    fn sub_assign(&mut self, rhs: &T) {
+        add_sub_assign_single(
+            self,
+            Cow::Borrowed(rhs),
+            SubAssign::<T::Element>::sub_assign,
+        );
     }
 }
 
@@ -116,7 +203,7 @@ impl<T: PolynomialCoefficient> Sub for Polynomial<T> {
 
 impl<'a, T: PolynomialCoefficient> Sub<&'a Polynomial<T>> for Polynomial<T> {
     type Output = Polynomial<T>;
-    fn sub(mut self, rhs: &'a Polynomial<T>) -> Self::Output {
+    fn sub(mut self, rhs: &Polynomial<T>) -> Self::Output {
         self -= rhs;
         self
     }
@@ -134,6 +221,40 @@ impl<'a, T: PolynomialCoefficient> Sub<Polynomial<T>> for &'a Polynomial<T> {
 impl<'a, T: PolynomialCoefficient> Sub for &'a Polynomial<T> {
     type Output = Polynomial<T>;
     fn sub(self, rhs: Self) -> Self::Output {
+        let mut lhs = self.clone();
+        lhs -= rhs;
+        lhs
+    }
+}
+
+impl<T: PolynomialCoefficient> Sub<T> for Polynomial<T> {
+    type Output = Polynomial<T>;
+    fn sub(mut self, rhs: T) -> Self::Output {
+        self -= rhs;
+        self
+    }
+}
+
+impl<'a, T: PolynomialCoefficient> Sub<&'a T> for Polynomial<T> {
+    type Output = Polynomial<T>;
+    fn sub(mut self, rhs: &T) -> Self::Output {
+        self -= rhs;
+        self
+    }
+}
+
+impl<'a, T: PolynomialCoefficient> Sub<T> for &'a Polynomial<T> {
+    type Output = Polynomial<T>;
+    fn sub(self, rhs: T) -> Self::Output {
+        let mut lhs = self.clone();
+        lhs -= rhs;
+        lhs
+    }
+}
+
+impl<'a, T: PolynomialCoefficient> Sub<&'a T> for &'a Polynomial<T> {
+    type Output = Polynomial<T>;
+    fn sub(self, rhs: &T) -> Self::Output {
         let mut lhs = self.clone();
         lhs -= rhs;
         lhs

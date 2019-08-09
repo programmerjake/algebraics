@@ -269,6 +269,76 @@ macro_rules! impl_div_rem_eq {
 impl_div_rem_eq!(Polynomial<T>);
 impl_div_rem_eq!(&'_ Polynomial<T>);
 
+fn div_single<T: PolynomialCoefficient + for<'a> Div<&'a T, Output = T>>(
+    lhs: Cow<Polynomial<T>>,
+    rhs: &T,
+) -> Polynomial<T> {
+    fn do_div<T: PolynomialCoefficient + for<'a> Div<&'a T, Output = T>, I: Iterator<Item = T>>(
+        coefficients: I,
+        rhs: &T,
+    ) -> Polynomial<T> {
+        coefficients
+            .map(|coefficient| coefficient / rhs)
+            .collect::<Vec<_>>()
+            .into()
+    }
+    match lhs {
+        Cow::Borrowed(lhs) => do_div(lhs.iter(), rhs),
+        Cow::Owned(lhs) => do_div(lhs.into_iter(), rhs),
+    }
+}
+
+fn div_assign_single<T: PolynomialCoefficient + for<'a> Div<&'a T, Output = T>>(
+    lhs: &mut Polynomial<T>,
+    rhs: &T,
+) {
+    *lhs = div_single(Cow::Owned(mem::replace(lhs, Zero::zero())), rhs);
+}
+
+impl<'a, T: PolynomialCoefficient + for<'b> Div<&'b T, Output = T>> Div<&'a T>
+    for &'a Polynomial<T>
+{
+    type Output = Polynomial<T>;
+    fn div(self, rhs: &T) -> Polynomial<T> {
+        div_single(Cow::Borrowed(self), rhs)
+    }
+}
+
+impl<'a, T: PolynomialCoefficient + for<'b> Div<&'b T, Output = T>> Div<T> for &'a Polynomial<T> {
+    type Output = Polynomial<T>;
+    fn div(self, rhs: T) -> Polynomial<T> {
+        div_single(Cow::Borrowed(self), &rhs)
+    }
+}
+
+impl<'a, T: PolynomialCoefficient + for<'b> Div<&'b T, Output = T>> Div<&'a T> for Polynomial<T> {
+    type Output = Polynomial<T>;
+    fn div(self, rhs: &T) -> Polynomial<T> {
+        div_single(Cow::Owned(self), rhs)
+    }
+}
+
+impl<T: PolynomialCoefficient + for<'a> Div<&'a T, Output = T>> Div<T> for Polynomial<T> {
+    type Output = Polynomial<T>;
+    fn div(self, rhs: T) -> Polynomial<T> {
+        div_single(Cow::Owned(self), &rhs)
+    }
+}
+
+impl<T: PolynomialCoefficient + for<'a> Div<&'a T, Output = T>> DivAssign<T> for Polynomial<T> {
+    fn div_assign(&mut self, rhs: T) {
+        div_assign_single(self, &rhs);
+    }
+}
+
+impl<'a, T: PolynomialCoefficient + for<'b> Div<&'b T, Output = T>> DivAssign<&'a T>
+    for Polynomial<T>
+{
+    fn div_assign(&mut self, rhs: &T) {
+        div_assign_single(self, rhs);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
