@@ -709,6 +709,10 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
     {
         let (content_numerator, content_divisor) =
             T::coefficient_to_element(Cow::Owned(self.content()));
+        if content_numerator.is_zero() {
+            self.set_zero();
+            return;
+        }
         DivAssign::<T::Divisor>::div_assign(&mut self.divisor, content_divisor);
         for element in &mut self.elements {
             *element /= &content_numerator;
@@ -1019,6 +1023,22 @@ mod tests {
                 From::<Vec<Ratio<_>>>::from(vec![(-8).into()]),
             ],
             *poly.to_sturm_sequence()
+        );
+    }
+
+    #[test]
+    fn test_primitive_part() {
+        assert_eq!(
+            Polynomial::from(vec![0, 1, 2, 3, 4]).into_primitive_part(),
+            Polynomial::from(vec![0, 1, 2, 3, 4])
+        );
+        assert_eq!(
+            Polynomial::from(vec![2, 4, 6, 8]).into_primitive_part(),
+            Polynomial::from(vec![1, 2, 3, 4])
+        );
+        assert_eq!(
+            Polynomial::<i32>::zero().into_primitive_part(),
+            Polynomial::zero()
         );
     }
 
