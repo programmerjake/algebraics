@@ -89,7 +89,7 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
             factor: factor_numerator,
         } = element_pseudo_div_rem::<T>(self.elements, &rhs.elements, quotient_len);
         let rhs_divisor_pow_quotient_len_minus_one =
-            T::divisor_pow_usize(rhs.divisor.clone(), quotient_len - 1);
+            T::divisor_pow_usize(rhs.divisor.clone(), quotient_len);
         let rhs_divisor_pow_quotient_len =
             rhs_divisor_pow_quotient_len_minus_one.clone() * &rhs.divisor;
         let factor = T::make_coefficient(
@@ -116,22 +116,13 @@ where
     for<'a> T::Element: DivAssign<&'a T::Element> + Div<&'a T::Element, Output = T::Element>,
     T::Element: DivAssign + Div<Output = T::Element>,
 {
-    fn div_by_coefficient(self, divisor: &T) -> Self {
-        self.into_iter()
-            .map(|coefficient| coefficient / divisor)
-            .collect::<Vec<_>>()
-            .into()
-    }
     pub fn checked_div_rem(self, rhs: &Self) -> Option<(Self, Self)> {
         let PseudoDivRem {
             quotient,
             remainder,
             factor,
         } = self.checked_pseudo_div_rem(rhs)?;
-        Some((
-            quotient.div_by_coefficient(&factor),
-            remainder.div_by_coefficient(&factor),
-        ))
+        Some((quotient / &factor, remainder / factor))
     }
     pub fn div_rem(self, rhs: &Self) -> (Self, Self) {
         let PseudoDivRem {
@@ -139,10 +130,7 @@ where
             remainder,
             factor,
         } = self.pseudo_div_rem(rhs);
-        (
-            quotient.div_by_coefficient(&factor),
-            remainder.div_by_coefficient(&factor),
-        )
+        (quotient / &factor, remainder / factor)
     }
 }
 
@@ -155,7 +143,7 @@ where
         let PseudoDivRem {
             quotient, factor, ..
         } = self.clone().checked_pseudo_div_rem(rhs)?;
-        Some(quotient.div_by_coefficient(&factor))
+        Some(quotient / factor)
     }
 }
 
@@ -168,7 +156,7 @@ where
         let PseudoDivRem {
             remainder, factor, ..
         } = self.clone().checked_pseudo_div_rem(rhs)?;
-        Some(remainder.div_by_coefficient(&factor))
+        Some(remainder / factor)
     }
 }
 
@@ -185,7 +173,7 @@ macro_rules! impl_div_rem {
                 let PseudoDivRem {
                     quotient, factor, ..
                 } = $l_to_owned(self).pseudo_div_rem(rhs.borrow());
-                quotient.div_by_coefficient(&factor)
+                quotient / factor
             }
         }
 
@@ -200,7 +188,7 @@ macro_rules! impl_div_rem {
                 let PseudoDivRem {
                     remainder, factor, ..
                 } = $l_to_owned(self).pseudo_div_rem(rhs.borrow());
-                remainder.div_by_coefficient(&factor)
+                remainder / factor
             }
         }
     };
@@ -220,7 +208,7 @@ where
         let PseudoDivRem {
             quotient, factor, ..
         } = self.clone().pseudo_div_rem(rhs);
-        quotient.div_by_coefficient(&factor)
+        quotient / factor
     }
 }
 
@@ -234,7 +222,7 @@ where
         let PseudoDivRem {
             remainder, factor, ..
         } = self.clone().pseudo_div_rem(rhs);
-        remainder.div_by_coefficient(&factor)
+        remainder / factor
     }
 }
 
@@ -398,6 +386,15 @@ mod tests {
             r(7_495_581_503, 75_418_890_625),
         ]
         .into();
+        if is_rem {
+            test_fn(dividend, divisor, &remainder)
+        } else {
+            test_fn(dividend, divisor, &quotient)
+        }
+        let dividend = vec![r(1, 2), r(5, 2), r(5, 2)].into();
+        let divisor = vec![r(1, 3), r(5, 3)].into();
+        let quotient = vec![r(6, 5), r(3, 2)].into();
+        let remainder = r(1, 10).into();
         if is_rem {
             test_fn(dividend, divisor, &remainder)
         } else {

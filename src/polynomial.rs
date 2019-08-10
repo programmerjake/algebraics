@@ -9,7 +9,7 @@ use num_bigint::BigInt;
 use num_integer::Integer;
 use num_rational::Ratio;
 use num_traits::One;
-use num_traits::{zero, Zero};
+use num_traits::Zero;
 use num_traits::{CheckedDiv, FromPrimitive, ToPrimitive};
 use std::borrow::Cow;
 use std::error::Error;
@@ -440,49 +440,30 @@ pub struct Polynomial<T: PolynomialCoefficient> {
     divisor: T::Divisor,
 }
 
-impl<T: PolynomialCoefficient + GCD<Output = T> + PolynomialDivSupported> GCD for Polynomial<T>
-where
-    for<'a> T::Element: DivAssign<&'a T::Element> + Div<&'a T::Element, Output = T::Element>,
-    T::Element: DivAssign + Div<Output = T::Element>,
-{
-    type Output = Self;
-    fn gcd_lcm(&self, rhs: &Self) -> GCDAndLCM<Self> {
-        let ExtendedGCDAndLCM { gcd, lcm, .. } = self.extended_gcd_lcm(rhs);
-        GCDAndLCM { gcd, lcm }
-    }
-}
-
-impl<T: PolynomialCoefficient + GCD<Output = T> + PolynomialDivSupported> ExtendedGCD
+impl<T: PolynomialCoefficient + GCD<Output = T> + PolynomialDivSupported + PartialOrd> GCD
     for Polynomial<T>
 where
-    for<'a> T::Element: DivAssign<&'a T::Element> + Div<&'a T::Element, Output = T::Element>,
-    T::Element: DivAssign + Div<Output = T::Element>,
+    T::Element: Div<Output = T::Element> + DivAssign,
+    for<'a> T::Element: Div<&'a T::Element, Output = T::Element> + DivAssign<&'a T::Element>,
 {
-    fn extended_gcd(&self, rhs: &Self) -> ExtendedGCDResult<Self> {
-        // FIXME: doesn't produce correct results
-        let mut r: (Self, Self) = (self.clone(), rhs.clone());
-        let mut x = (Self::one(), Self::zero());
-        let mut y = (Self::zero(), Self::one());
-        let step = |v: (Self, Self), q: &Self| {
-            let reduced = v.0 - q * &v.1;
-            (v.1, reduced)
-        };
-        while let Some(q) = r.0.checked_div(&r.1) {
-            r = step(r, &q);
-            x = step(x, &q);
-            y = step(y, &q);
+    type Output = Self;
+    fn gcd(&self, rhs: &Self) -> Self {
+        let mut l = self.clone().into_primitive_part();
+        let mut r = rhs.clone().into_primitive_part();
+        if l.is_zero() {
+            return r;
         }
-        let gcd = r.0;
-        ExtendedGCDResult {
-            gcd,
-            x: x.0,
-            y: y.0,
+        while !r.is_zero() {
+            let PseudoDivRem { remainder, .. } = l.pseudo_div_rem(&r);
+            l = r;
+            r = remainder.into_primitive_part();
         }
+        l
     }
-    fn extended_gcd_lcm(&self, rhs: &Self) -> ExtendedGCDAndLCM<Self> {
-        let ExtendedGCDResult { gcd, x, y } = self.extended_gcd(rhs);
-        let lcm = self.checked_div(&gcd).unwrap_or_else(Zero::zero) * rhs;
-        ExtendedGCDAndLCM { gcd, lcm, x, y }
+    fn gcd_lcm(&self, rhs: &Self) -> GCDAndLCM<Self> {
+        let gcd = self.gcd(rhs);
+        let lcm = self * rhs / &gcd;
+        GCDAndLCM { gcd, lcm }
     }
 }
 
@@ -700,18 +681,24 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
     /// returns greatest common divisor of all coefficients
     pub fn content(&self) -> T
     where
-        T: GCD<Output = T>,
+        T: GCD<Output = T> + PartialOrd,
     {
-        self.iter()
-            .fold(None, |lhs: Option<T>, rhs| match lhs {
-                None => Some(rhs.clone()),
-                Some(lhs) => Some(lhs.gcd(&rhs)),
-            })
-            .unwrap_or_else(zero)
+        let zero = T::zero();
+        if let Some(mut retval) = self.iter().fold(None, |lhs: Option<T>, rhs| match lhs {
+            None => Some(rhs.clone()),
+            Some(lhs) => Some(lhs.gcd(&rhs)),
+        }) {
+            if self.highest_power_coefficient() < zero {
+                retval = zero - retval;
+            }
+            retval
+        } else {
+            zero
+        }
     }
     pub fn primitive_part_assign(&mut self)
     where
-        T: GCD<Output = T>,
+        T: GCD<Output = T> + PartialOrd,
         for<'a> T::Element: DivAssign<&'a T::Element>,
     {
         let (content_numerator, content_divisor) =
@@ -728,7 +715,7 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
     }
     pub fn into_primitive_part(mut self) -> Self
     where
-        T: GCD<Output = T>,
+        T: GCD<Output = T> + PartialOrd,
         for<'a> T::Element: DivAssign<&'a T::Element>,
     {
         self.primitive_part_assign();
@@ -787,7 +774,7 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
     }
     pub fn reduce_multiple_roots(&mut self)
     where
-        T: PolynomialDivSupported + GCD<Output = T>,
+        T: PolynomialDivSupported + GCD<Output = T> + PartialOrd,
         for<'a> T::Element: DivAssign<&'a T::Element> + Div<&'a T::Element, Output = T::Element>,
         T::Element: DivAssign + Div<Output = T::Element>,
     {
@@ -1066,32 +1053,15 @@ mod tests {
     fn test_gcd() {
         let r = |n: i64, d: i64| Ratio::<BigInt>::new(n.into(), d.into());
         let ri = |v: i64| Ratio::<BigInt>::from_integer(v.into());
-        fn test_case<
-            A: Into<Polynomial<Ratio<BigInt>>>,
-            B: Into<Polynomial<Ratio<BigInt>>>,
-            X: Into<Polynomial<Ratio<BigInt>>>,
-            Y: Into<Polynomial<Ratio<BigInt>>>,
-            G: Into<Polynomial<Ratio<BigInt>>>,
-            L: Into<Polynomial<Ratio<BigInt>>>,
-        >(
-            a: A,
-            b: B,
-            x: X,
-            y: Y,
-            gcd: G,
-            lcm: L,
+        fn test_case(
+            a: Polynomial<Ratio<BigInt>>,
+            b: Polynomial<Ratio<BigInt>>,
+            gcd: Polynomial<Ratio<BigInt>>,
+            lcm: Polynomial<Ratio<BigInt>>,
         ) {
-            let a = a.into();
-            let b = b.into();
-            let x = x.into();
-            let y = y.into();
-            let gcd = gcd.into();
-            let lcm = lcm.into();
-            let results = a.extended_gcd_lcm(&b);
+            let results = a.gcd_lcm(&b);
             println!("a=({})  b=({})", a, b);
-            println!("x=({})  y=({})", x, y);
             println!("gcd=({})  lcm=({})", gcd, lcm);
-            println!("results.x=({})  results.y=({})", results.x, results.y);
             println!(
                 "results.gcd=({})  results.lcm=({})",
                 results.gcd, results.lcm
@@ -1099,32 +1069,231 @@ mod tests {
             // don't use assert_eq because the debug output is awful
             assert!(gcd == results.gcd);
             assert!(lcm == results.lcm);
-            assert!(x == results.x);
-            assert!(y == results.y);
         }
+        // test cases generated using generate_gcd_test_cases.mac
         test_case(
-            vec![ri(6), ri(2), ri(1)],
-            vec![ri(7), ri(3)],
-            r(9, 61),
-            vec![r(1, 61), r(-3, 61)],
-            ri(1),
-            vec![ri(42), ri(32), ri(13), ri(3)],
+            vec![ri(0), ri(2), ri(0), ri(1)].into(),
+            vec![r(2, 3), r(2, 3), r(1, 3), r(1, 3)].into(),
+            vec![ri(2), ri(0), ri(1)].into(),
+            vec![ri(0), r(2, 3), r(2, 3), r(1, 3), r(1, 3)].into(),
         );
         test_case(
-            vec![ri(8), ri(2), ri(1)],
-            vec![ri(9), ri(4)],
-            r(16, 137),
-            vec![r(1, 137), r(-4, 137)],
-            ri(1),
-            vec![ri(72), ri(50), ri(17), ri(4)],
+            vec![ri(1), ri(0), r(1, 2)].into(),
+            Zero::zero(),
+            vec![ri(2), ri(0), ri(1)].into(),
+            Zero::zero(),
         );
         test_case(
-            vec![ri(0), ri(3), ri(1)],
-            vec![ri(0), ri(2), ri(2), ri(8)],
-            vec![ri(22), ri(-8)],
-            ri(1),
-            vec![ri(0), ri(68)],
-            vec![ri(0), ri(6), ri(8), ri(26), ri(8)],
+            vec![ri(1), ri(1), r(1, 2), r(1, 2)].into(),
+            vec![ri(1), ri(0), r(1, 2)].into(),
+            vec![ri(2), ri(0), ri(1)].into(),
+            vec![r(1, 2), r(1, 2), r(1, 4), r(1, 4)].into(),
+        );
+        test_case(
+            Zero::zero(),
+            vec![r(2, 3), ri(0), r(1, 3)].into(),
+            vec![ri(2), ri(0), ri(1)].into(),
+            Zero::zero(),
+        );
+        test_case(
+            vec![ri(1), ri(0), r(1, 2)].into(),
+            vec![ri(0), ri(1), ri(0), r(1, 2)].into(),
+            vec![ri(2), ri(0), ri(1)].into(),
+            vec![ri(0), r(1, 2), ri(0), r(1, 4)].into(),
+        );
+        test_case(
+            vec![ri(0), r(2, 3), ri(0), r(1, 3)].into(),
+            vec![r(2, 3), ri(0), r(1, 3)].into(),
+            vec![ri(2), ri(0), ri(1)].into(),
+            vec![ri(0), r(2, 9), ri(0), r(1, 9)].into(),
+        );
+        test_case(
+            vec![ri(0), ri(1), ri(0), r(1, 2)].into(),
+            vec![ri(2), ri(2), ri(1), ri(1)].into(),
+            vec![ri(2), ri(0), ri(1)].into(),
+            vec![ri(0), ri(1), ri(1), r(1, 2), r(1, 2)].into(),
+        );
+        test_case(
+            vec![ri(2), ri(0), ri(1)].into(),
+            Zero::zero(),
+            vec![ri(2), ri(0), ri(1)].into(),
+            Zero::zero(),
+        );
+        test_case(
+            vec![ri(0), r(2, 3), ri(0), r(1, 3)].into(),
+            vec![ri(1), ri(1), r(1, 2), r(1, 2)].into(),
+            vec![ri(2), ri(0), ri(1)].into(),
+            vec![ri(0), r(1, 3), r(1, 3), r(1, 6), r(1, 6)].into(),
+        );
+        test_case(
+            vec![ri(1), ri(1), ri(0), ri(1)].into(),
+            vec![ri(2), ri(2)].into(),
+            ri(1).into(),
+            vec![ri(2), ri(4), ri(2), ri(2), ri(2)].into(),
+        );
+        test_case(
+            vec![r(2, 3), r(2, 3)].into(),
+            vec![ri(1), ri(0), r(1, 2), r(1, 2)].into(),
+            ri(1).into(),
+            vec![r(2, 3), r(2, 3), r(1, 3), r(2, 3), r(1, 3)].into(),
+        );
+        test_case(
+            vec![ri(1), ri(0), r(1, 2)].into(),
+            Zero::zero(),
+            vec![ri(2), ri(0), ri(1)].into(),
+            Zero::zero(),
+        );
+        test_case(
+            vec![ri(1), ri(2), ri(0), ri(2)].into(),
+            vec![ri(1), r(1, 2), ri(1), ri(1)].into(),
+            ri(1).into(),
+            vec![ri(1), r(5, 2), ri(2), ri(5), ri(3), ri(2), ri(2)].into(),
+        );
+        test_case(
+            vec![r(1, 3), ri(0), r(2, 3)].into(),
+            vec![r(2, 3), r(1, 3), r(2, 3), r(2, 3)].into(),
+            ri(1).into(),
+            vec![r(2, 9), r(1, 9), r(2, 3), r(4, 9), r(4, 9), r(4, 9)].into(),
+        );
+        test_case(
+            vec![ri(2), ri(0), ri(1)].into(),
+            vec![r(2, 3), r(2, 3), r(1, 3), r(1, 3)].into(),
+            vec![ri(2), ri(0), ri(1)].into(),
+            vec![r(2, 3), r(2, 3), r(1, 3), r(1, 3)].into(),
+        );
+        test_case(
+            vec![ri(0), ri(2), ri(0), ri(1)].into(),
+            vec![ri(2), ri(2), ri(1), ri(1)].into(),
+            vec![ri(2), ri(0), ri(1)].into(),
+            vec![ri(0), ri(2), ri(2), ri(1), ri(1)].into(),
+        );
+        test_case(
+            vec![ri(1), ri(0), r(1, 2)].into(),
+            vec![r(2, 3), ri(0), r(1, 3)].into(),
+            vec![ri(2), ri(0), ri(1)].into(),
+            vec![r(1, 3), ri(0), r(1, 6)].into(),
+        );
+        test_case(
+            vec![r(2, 3), r(2, 3), r(1, 3), r(1, 3)].into(),
+            vec![r(2, 3), ri(0), r(1, 3)].into(),
+            vec![ri(2), ri(0), ri(1)].into(),
+            vec![r(2, 9), r(2, 9), r(1, 9), r(1, 9)].into(),
+        );
+        test_case(
+            vec![r(1, 2), ri(1), ri(0), ri(1)].into(),
+            vec![ri(1), ri(0), r(1, 2)].into(),
+            ri(1).into(),
+            vec![r(1, 2), ri(1), r(1, 4), r(3, 2), ri(0), r(1, 2)].into(),
+        );
+        test_case(
+            vec![r(2, 3), ri(0), r(1, 3)].into(),
+            vec![r(2, 3), ri(0), r(1, 3)].into(),
+            vec![ri(2), ri(0), ri(1)].into(),
+            vec![r(2, 9), ri(0), r(1, 9)].into(),
+        );
+        test_case(Zero::zero(), Zero::zero(), Zero::zero(), Zero::zero());
+        test_case(
+            vec![ri(0), r(2, 3), ri(0), r(1, 3)].into(),
+            vec![r(2, 3), ri(0), r(1, 3)].into(),
+            vec![ri(2), ri(0), ri(1)].into(),
+            vec![ri(0), r(2, 9), ri(0), r(1, 9)].into(),
+        );
+        test_case(
+            vec![ri(1), ri(1), r(1, 2), r(1, 2)].into(),
+            vec![ri(0), r(2, 3), ri(0), r(1, 3)].into(),
+            vec![ri(2), ri(0), ri(1)].into(),
+            vec![ri(0), r(1, 3), r(1, 3), r(1, 6), r(1, 6)].into(),
+        );
+        test_case(
+            vec![ri(2), ri(0), ri(1)].into(),
+            vec![ri(1), ri(0), r(1, 2)].into(),
+            vec![ri(2), ri(0), ri(1)].into(),
+            vec![ri(1), ri(0), r(1, 2)].into(),
+        );
+        test_case(
+            vec![ri(0), r(2, 3), ri(0), r(1, 3)].into(),
+            vec![ri(2), ri(0), ri(1)].into(),
+            vec![ri(2), ri(0), ri(1)].into(),
+            vec![ri(0), r(2, 3), ri(0), r(1, 3)].into(),
+        );
+        test_case(
+            vec![ri(0), r(2, 3), ri(0), r(1, 3)].into(),
+            vec![ri(2), ri(0), ri(1)].into(),
+            vec![ri(2), ri(0), ri(1)].into(),
+            vec![ri(0), r(2, 3), ri(0), r(1, 3)].into(),
+        );
+        test_case(
+            vec![ri(2), ri(0), ri(1)].into(),
+            vec![ri(1), ri(0), r(1, 2)].into(),
+            vec![ri(2), ri(0), ri(1)].into(),
+            vec![ri(1), ri(0), r(1, 2)].into(),
+        );
+        test_case(
+            vec![ri(1), ri(0), r(1, 2)].into(),
+            vec![r(2, 3), ri(0), r(1, 3)].into(),
+            vec![ri(2), ri(0), ri(1)].into(),
+            vec![r(1, 3), ri(0), r(1, 6)].into(),
+        );
+        test_case(
+            vec![ri(2), ri(0), ri(1)].into(),
+            vec![ri(0), ri(1), ri(0), r(1, 2)].into(),
+            vec![ri(2), ri(0), ri(1)].into(),
+            vec![ri(0), ri(1), ri(0), r(1, 2)].into(),
+        );
+        test_case(
+            vec![ri(2), ri(0), ri(1)].into(),
+            vec![ri(2), ri(2), ri(1), ri(1)].into(),
+            vec![ri(2), ri(0), ri(1)].into(),
+            vec![ri(2), ri(2), ri(1), ri(1)].into(),
+        );
+        test_case(
+            vec![ri(0), r(2, 3), ri(0), r(2, 3)].into(),
+            vec![ri(0), ri(0), r(1, 3), r(1, 3)].into(),
+            vec![ri(0), ri(1)].into(),
+            vec![ri(0), ri(0), ri(0), r(2, 9), r(2, 9), r(2, 9), r(2, 9)].into(),
+        );
+        test_case(Zero::zero(), Zero::zero(), Zero::zero(), Zero::zero());
+        test_case(
+            vec![ri(0), ri(1), ri(0), r(1, 2)].into(),
+            vec![ri(1), ri(0), r(1, 2)].into(),
+            vec![ri(2), ri(0), ri(1)].into(),
+            vec![ri(0), r(1, 2), ri(0), r(1, 4)].into(),
+        );
+        test_case(
+            vec![ri(1), ri(0), r(1, 2), r(1, 2)].into(),
+            vec![r(2, 3), r(2, 3), r(2, 3), r(1, 3)].into(),
+            ri(1).into(),
+            vec![r(2, 3), r(2, 3), ri(1), ri(1), r(2, 3), r(1, 2), r(1, 6)].into(),
+        );
+        test_case(
+            vec![ri(2), ri(1), ri(2), ri(1)].into(),
+            vec![ri(2), ri(0), ri(1)].into(),
+            ri(1).into(),
+            vec![ri(4), ri(2), ri(6), ri(3), ri(2), ri(1)].into(),
+        );
+        test_case(
+            vec![ri(2), ri(2), ri(1), ri(1)].into(),
+            vec![ri(2), ri(0), ri(1)].into(),
+            vec![ri(2), ri(0), ri(1)].into(),
+            vec![ri(2), ri(2), ri(1), ri(1)].into(),
+        );
+        test_case(
+            vec![ri(1), ri(1), r(1, 2), r(1, 2)].into(),
+            vec![r(2, 3), ri(0), r(1, 3)].into(),
+            vec![ri(2), ri(0), ri(1)].into(),
+            vec![r(1, 3), r(1, 3), r(1, 6), r(1, 6)].into(),
+        );
+        test_case(
+            vec![r(2, 3), r(2, 3), r(1, 3), r(1, 3)].into(),
+            vec![r(2, 3), ri(0), r(1, 3)].into(),
+            vec![ri(2), ri(0), ri(1)].into(),
+            vec![r(2, 9), r(2, 9), r(1, 9), r(1, 9)].into(),
+        );
+        test_case(
+            vec![r(1, 2), r(1, 2), r(1, 2), r(1, 2)].into(),
+            vec![ri(1), ri(0), ri(2), ri(1)].into(),
+            ri(1).into(),
+            vec![r(1, 2), r(1, 2), r(3, 2), ri(2), r(3, 2), r(3, 2), r(1, 2)].into(),
         );
     }
 }

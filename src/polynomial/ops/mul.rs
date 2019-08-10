@@ -17,9 +17,6 @@ impl<'a, T: PolynomialCoefficient> Mul for &'a Polynomial<T> {
         let divisor = self.divisor.clone() * &rhs.divisor;
         let mut elements = Vec::with_capacity(self.len() + rhs.len());
         for l_index in 0..self.len() {
-            if self.elements[l_index].is_zero() {
-                continue;
-            }
             for r_index in 0..rhs.len() {
                 let index = l_index + r_index;
                 if index == elements.len() {
