@@ -462,7 +462,11 @@ where
     }
     fn gcd_lcm(&self, rhs: &Self) -> GCDAndLCM<Self> {
         let gcd = self.gcd(rhs);
-        let lcm = self * rhs / &gcd;
+        let lcm = if gcd.is_zero() {
+            Zero::zero()
+        } else {
+            self * rhs / &gcd
+        };
         GCDAndLCM { gcd, lcm }
     }
 }
@@ -688,7 +692,7 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
             None => Some(rhs.clone()),
             Some(lhs) => Some(lhs.gcd(&rhs)),
         }) {
-            if self.highest_power_coefficient() < zero {
+            if (self.highest_power_coefficient() < zero) != (retval < zero) {
                 retval = zero - retval;
             }
             retval
@@ -702,7 +706,7 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
         for<'a> T::Element: DivAssign<&'a T::Element>,
     {
         let (content_numerator, content_divisor) =
-            T::coefficient_to_element(Cow::Owned(self.content()));
+            T::coefficient_to_element(Cow::Owned(dbg!(dbg!(&self).content())));
         if content_numerator.is_zero() {
             self.set_zero();
             return;
@@ -712,6 +716,7 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
             *element /= &content_numerator;
         }
         self.normalize();
+        debug_assert!(self.highest_power_coefficient() >= Zero::zero());
     }
     pub fn into_primitive_part(mut self) -> Self
     where
@@ -1072,228 +1077,311 @@ mod tests {
         }
         // test cases generated using generate_gcd_test_cases.mac
         test_case(
+            vec![ri(2), ri(0), ri(0), ri(2)].into(),
+            vec![ri(0), r(1, 3), r(1, 3), r(1, 3)].into(),
+            ri(1).into(),
+            vec![ri(0), r(2, 3), r(2, 3), r(2, 3), r(2, 3), r(2, 3), r(2, 3)].into(),
+        );
+        test_case(
+            r(1, 3).into(),
+            vec![r(1, 3), ri(0), r(1, 3)].into(),
+            ri(1).into(),
+            vec![r(1, 9), ri(0), r(1, 9)].into(),
+        );
+        test_case(
+            vec![ri(0), ri(0), ri(1), ri(1)].into(),
+            vec![ri(0), ri(0), r(1, 3), r(1, 3)].into(),
+            vec![ri(0), ri(0), ri(1), ri(1)].into(),
+            vec![ri(0), ri(0), r(1, 3), r(1, 3)].into(),
+        );
+        test_case(
+            vec![ri(0), ri(1), ri(2)].into(),
+            vec![ri(0), r(1, 2), ri(0), ri(1)].into(),
+            vec![ri(0), ri(1)].into(),
+            vec![ri(0), r(1, 2), ri(1), ri(1), ri(2)].into(),
+        );
+        test_case(
+            Zero::zero(),
+            vec![ri(0), ri(0), ri(2), ri(2)].into(),
+            vec![ri(0), ri(0), ri(1), ri(1)].into(),
+            Zero::zero(),
+        );
+        test_case(
+            vec![r(1, 2), ri(1), ri(1)].into(),
+            vec![ri(1), ri(0), ri(1), ri(1)].into(),
+            ri(1).into(),
+            vec![r(1, 2), ri(1), r(3, 2), r(3, 2), ri(2), ri(1)].into(),
+        );
+        test_case(
+            vec![ri(1), ri(0), ri(1), ri(1)].into(),
+            vec![ri(0), ri(0), ri(1)].into(),
+            ri(1).into(),
+            vec![ri(0), ri(0), ri(1), ri(0), ri(1), ri(1)].into(),
+        );
+        test_case(
+            vec![ri(0), r(1, 3), r(2, 3)].into(),
+            vec![ri(0), ri(1), ri(1)].into(),
+            vec![ri(0), ri(1)].into(),
+            vec![ri(0), r(1, 3), ri(1), r(2, 3)].into(),
+        );
+        test_case(
+            vec![r(2, 3), ri(0), r(2, 3), r(2, 3)].into(),
+            vec![r(1, 2), ri(0), r(1, 2), r(1, 2)].into(),
+            vec![ri(1), ri(0), ri(1), ri(1)].into(),
+            vec![r(1, 3), ri(0), r(1, 3), r(1, 3)].into(),
+        );
+        test_case(
+            vec![r(2, 3), r(2, 3), r(2, 3)].into(),
+            vec![r(2, 3), r(2, 3), r(2, 3)].into(),
+            vec![ri(1), ri(1), ri(1)].into(),
+            vec![r(4, 9), r(4, 9), r(4, 9)].into(),
+        );
+        test_case(
+            vec![ri(1), ri(1), r(1, 2), ri(1)].into(),
+            r(1, 3).into(),
+            ri(1).into(),
+            vec![r(1, 3), r(1, 3), r(1, 6), r(1, 3)].into(),
+        );
+        test_case(
+            vec![ri(0), ri(1), ri(1)].into(),
             vec![ri(0), ri(2), ri(0), ri(1)].into(),
-            vec![r(2, 3), r(2, 3), r(1, 3), r(1, 3)].into(),
-            vec![ri(2), ri(0), ri(1)].into(),
-            vec![ri(0), r(2, 3), r(2, 3), r(1, 3), r(1, 3)].into(),
-        );
-        test_case(
-            vec![ri(1), ri(0), r(1, 2)].into(),
-            Zero::zero(),
-            vec![ri(2), ri(0), ri(1)].into(),
-            Zero::zero(),
-        );
-        test_case(
-            vec![ri(1), ri(1), r(1, 2), r(1, 2)].into(),
-            vec![ri(1), ri(0), r(1, 2)].into(),
-            vec![ri(2), ri(0), ri(1)].into(),
-            vec![r(1, 2), r(1, 2), r(1, 4), r(1, 4)].into(),
-        );
-        test_case(
-            Zero::zero(),
-            vec![r(2, 3), ri(0), r(1, 3)].into(),
-            vec![ri(2), ri(0), ri(1)].into(),
-            Zero::zero(),
-        );
-        test_case(
-            vec![ri(1), ri(0), r(1, 2)].into(),
-            vec![ri(0), ri(1), ri(0), r(1, 2)].into(),
-            vec![ri(2), ri(0), ri(1)].into(),
-            vec![ri(0), r(1, 2), ri(0), r(1, 4)].into(),
-        );
-        test_case(
-            vec![ri(0), r(2, 3), ri(0), r(1, 3)].into(),
-            vec![r(2, 3), ri(0), r(1, 3)].into(),
-            vec![ri(2), ri(0), ri(1)].into(),
-            vec![ri(0), r(2, 9), ri(0), r(1, 9)].into(),
-        );
-        test_case(
-            vec![ri(0), ri(1), ri(0), r(1, 2)].into(),
-            vec![ri(2), ri(2), ri(1), ri(1)].into(),
-            vec![ri(2), ri(0), ri(1)].into(),
-            vec![ri(0), ri(1), ri(1), r(1, 2), r(1, 2)].into(),
-        );
-        test_case(
-            vec![ri(2), ri(0), ri(1)].into(),
-            Zero::zero(),
-            vec![ri(2), ri(0), ri(1)].into(),
-            Zero::zero(),
-        );
-        test_case(
-            vec![ri(0), r(2, 3), ri(0), r(1, 3)].into(),
-            vec![ri(1), ri(1), r(1, 2), r(1, 2)].into(),
-            vec![ri(2), ri(0), ri(1)].into(),
-            vec![ri(0), r(1, 3), r(1, 3), r(1, 6), r(1, 6)].into(),
-        );
-        test_case(
-            vec![ri(1), ri(1), ri(0), ri(1)].into(),
-            vec![ri(2), ri(2)].into(),
-            ri(1).into(),
-            vec![ri(2), ri(4), ri(2), ri(2), ri(2)].into(),
-        );
-        test_case(
-            vec![r(2, 3), r(2, 3)].into(),
-            vec![ri(1), ri(0), r(1, 2), r(1, 2)].into(),
-            ri(1).into(),
-            vec![r(2, 3), r(2, 3), r(1, 3), r(2, 3), r(1, 3)].into(),
-        );
-        test_case(
-            vec![ri(1), ri(0), r(1, 2)].into(),
-            Zero::zero(),
-            vec![ri(2), ri(0), ri(1)].into(),
-            Zero::zero(),
-        );
-        test_case(
-            vec![ri(1), ri(2), ri(0), ri(2)].into(),
-            vec![ri(1), r(1, 2), ri(1), ri(1)].into(),
-            ri(1).into(),
-            vec![ri(1), r(5, 2), ri(2), ri(5), ri(3), ri(2), ri(2)].into(),
-        );
-        test_case(
-            vec![r(1, 3), ri(0), r(2, 3)].into(),
-            vec![r(2, 3), r(1, 3), r(2, 3), r(2, 3)].into(),
-            ri(1).into(),
-            vec![r(2, 9), r(1, 9), r(2, 3), r(4, 9), r(4, 9), r(4, 9)].into(),
-        );
-        test_case(
-            vec![ri(2), ri(0), ri(1)].into(),
-            vec![r(2, 3), r(2, 3), r(1, 3), r(1, 3)].into(),
-            vec![ri(2), ri(0), ri(1)].into(),
-            vec![r(2, 3), r(2, 3), r(1, 3), r(1, 3)].into(),
-        );
-        test_case(
-            vec![ri(0), ri(2), ri(0), ri(1)].into(),
-            vec![ri(2), ri(2), ri(1), ri(1)].into(),
-            vec![ri(2), ri(0), ri(1)].into(),
+            vec![ri(0), ri(1)].into(),
             vec![ri(0), ri(2), ri(2), ri(1), ri(1)].into(),
         );
         test_case(
-            vec![ri(1), ri(0), r(1, 2)].into(),
-            vec![r(2, 3), ri(0), r(1, 3)].into(),
-            vec![ri(2), ri(0), ri(1)].into(),
-            vec![r(1, 3), ri(0), r(1, 6)].into(),
-        );
-        test_case(
-            vec![r(2, 3), r(2, 3), r(1, 3), r(1, 3)].into(),
-            vec![r(2, 3), ri(0), r(1, 3)].into(),
-            vec![ri(2), ri(0), ri(1)].into(),
-            vec![r(2, 9), r(2, 9), r(1, 9), r(1, 9)].into(),
-        );
-        test_case(
-            vec![r(1, 2), ri(1), ri(0), ri(1)].into(),
-            vec![ri(1), ri(0), r(1, 2)].into(),
-            ri(1).into(),
-            vec![r(1, 2), ri(1), r(1, 4), r(3, 2), ri(0), r(1, 2)].into(),
-        );
-        test_case(
-            vec![r(2, 3), ri(0), r(1, 3)].into(),
-            vec![r(2, 3), ri(0), r(1, 3)].into(),
-            vec![ri(2), ri(0), ri(1)].into(),
-            vec![r(2, 9), ri(0), r(1, 9)].into(),
-        );
-        test_case(Zero::zero(), Zero::zero(), Zero::zero(), Zero::zero());
-        test_case(
-            vec![ri(0), r(2, 3), ri(0), r(1, 3)].into(),
-            vec![r(2, 3), ri(0), r(1, 3)].into(),
-            vec![ri(2), ri(0), ri(1)].into(),
-            vec![ri(0), r(2, 9), ri(0), r(1, 9)].into(),
-        );
-        test_case(
-            vec![ri(1), ri(1), r(1, 2), r(1, 2)].into(),
-            vec![ri(0), r(2, 3), ri(0), r(1, 3)].into(),
-            vec![ri(2), ri(0), ri(1)].into(),
-            vec![ri(0), r(1, 3), r(1, 3), r(1, 6), r(1, 6)].into(),
-        );
-        test_case(
-            vec![ri(2), ri(0), ri(1)].into(),
-            vec![ri(1), ri(0), r(1, 2)].into(),
-            vec![ri(2), ri(0), ri(1)].into(),
-            vec![ri(1), ri(0), r(1, 2)].into(),
-        );
-        test_case(
-            vec![ri(0), r(2, 3), ri(0), r(1, 3)].into(),
-            vec![ri(2), ri(0), ri(1)].into(),
-            vec![ri(2), ri(0), ri(1)].into(),
-            vec![ri(0), r(2, 3), ri(0), r(1, 3)].into(),
-        );
-        test_case(
-            vec![ri(0), r(2, 3), ri(0), r(1, 3)].into(),
-            vec![ri(2), ri(0), ri(1)].into(),
-            vec![ri(2), ri(0), ri(1)].into(),
-            vec![ri(0), r(2, 3), ri(0), r(1, 3)].into(),
-        );
-        test_case(
-            vec![ri(2), ri(0), ri(1)].into(),
-            vec![ri(1), ri(0), r(1, 2)].into(),
-            vec![ri(2), ri(0), ri(1)].into(),
-            vec![ri(1), ri(0), r(1, 2)].into(),
-        );
-        test_case(
-            vec![ri(1), ri(0), r(1, 2)].into(),
-            vec![r(2, 3), ri(0), r(1, 3)].into(),
-            vec![ri(2), ri(0), ri(1)].into(),
-            vec![r(1, 3), ri(0), r(1, 6)].into(),
-        );
-        test_case(
-            vec![ri(2), ri(0), ri(1)].into(),
-            vec![ri(0), ri(1), ri(0), r(1, 2)].into(),
-            vec![ri(2), ri(0), ri(1)].into(),
-            vec![ri(0), ri(1), ri(0), r(1, 2)].into(),
-        );
-        test_case(
-            vec![ri(2), ri(0), ri(1)].into(),
-            vec![ri(2), ri(2), ri(1), ri(1)].into(),
-            vec![ri(2), ri(0), ri(1)].into(),
-            vec![ri(2), ri(2), ri(1), ri(1)].into(),
-        );
-        test_case(
-            vec![ri(0), r(2, 3), ri(0), r(2, 3)].into(),
-            vec![ri(0), ri(0), r(1, 3), r(1, 3)].into(),
+            vec![ri(0), ri(1), ri(1), ri(2)].into(),
+            vec![ri(0), r(2, 3)].into(),
             vec![ri(0), ri(1)].into(),
-            vec![ri(0), ri(0), ri(0), r(2, 9), r(2, 9), r(2, 9), r(2, 9)].into(),
-        );
-        test_case(Zero::zero(), Zero::zero(), Zero::zero(), Zero::zero());
-        test_case(
-            vec![ri(0), ri(1), ri(0), r(1, 2)].into(),
-            vec![ri(1), ri(0), r(1, 2)].into(),
-            vec![ri(2), ri(0), ri(1)].into(),
-            vec![ri(0), r(1, 2), ri(0), r(1, 4)].into(),
+            vec![ri(0), r(2, 3), r(2, 3), r(4, 3)].into(),
         );
         test_case(
-            vec![ri(1), ri(0), r(1, 2), r(1, 2)].into(),
-            vec![r(2, 3), r(2, 3), r(2, 3), r(1, 3)].into(),
+            vec![ri(0), ri(0), ri(2)].into(),
+            vec![ri(0), ri(2)].into(),
+            vec![ri(0), ri(1)].into(),
+            vec![ri(0), ri(0), ri(4)].into(),
+        );
+        test_case(
+            vec![ri(0), r(1, 3), r(1, 3)].into(),
+            vec![ri(1), ri(1), ri(1), ri(1)].into(),
+            vec![ri(1), ri(1)].into(),
+            vec![ri(0), r(1, 3), r(1, 3), r(1, 3), r(1, 3)].into(),
+        );
+        test_case(
+            vec![ri(0), ri(0), ri(0), ri(1)].into(),
+            vec![ri(0), ri(2), ri(2), ri(1)].into(),
+            vec![ri(0), ri(1)].into(),
+            vec![ri(0), ri(0), ri(0), ri(2), ri(2), ri(1)].into(),
+        );
+        test_case(
+            vec![ri(0), ri(0), ri(2), ri(1)].into(),
+            vec![ri(1), ri(2)].into(),
             ri(1).into(),
-            vec![r(2, 3), r(2, 3), ri(1), ri(1), r(2, 3), r(1, 2), r(1, 6)].into(),
+            vec![ri(0), ri(0), ri(2), ri(5), ri(2)].into(),
         );
         test_case(
-            vec![ri(2), ri(1), ri(2), ri(1)].into(),
-            vec![ri(2), ri(0), ri(1)].into(),
+            vec![ri(0), ri(1), ri(0), ri(2)].into(),
+            vec![ri(1), ri(0), ri(0), ri(2)].into(),
             ri(1).into(),
-            vec![ri(4), ri(2), ri(6), ri(3), ri(2), ri(1)].into(),
+            vec![ri(0), ri(1), ri(0), ri(2), ri(2), ri(0), ri(4)].into(),
         );
         test_case(
-            vec![ri(2), ri(2), ri(1), ri(1)].into(),
-            vec![ri(2), ri(0), ri(1)].into(),
-            vec![ri(2), ri(0), ri(1)].into(),
-            vec![ri(2), ri(2), ri(1), ri(1)].into(),
+            Zero::zero(),
+            vec![ri(1), ri(0), ri(1), r(1, 2)].into(),
+            vec![ri(2), ri(0), ri(2), ri(1)].into(),
+            Zero::zero(),
         );
         test_case(
-            vec![ri(1), ri(1), r(1, 2), r(1, 2)].into(),
-            vec![r(2, 3), ri(0), r(1, 3)].into(),
-            vec![ri(2), ri(0), ri(1)].into(),
-            vec![r(1, 3), r(1, 3), r(1, 6), r(1, 6)].into(),
+            vec![ri(1), ri(0), ri(0), ri(1)].into(),
+            vec![ri(1), ri(0), ri(1)].into(),
+            ri(1).into(),
+            vec![ri(1), ri(0), ri(1), ri(1), ri(0), ri(1)].into(),
+        );
+        test_case(
+            vec![r(1, 2), ri(0), ri(0), ri(1)].into(),
+            vec![ri(0), r(1, 3), r(2, 3), r(2, 3)].into(),
+            ri(1).into(),
+            vec![ri(0), r(1, 6), r(1, 3), r(1, 3), r(1, 3), r(2, 3), r(2, 3)].into(),
+        );
+        test_case(
+            Zero::zero(),
+            vec![ri(0), ri(0), ri(2)].into(),
+            vec![ri(0), ri(0), ri(1)].into(),
+            Zero::zero(),
+        );
+        test_case(
+            vec![r(1, 2), ri(1), ri(1), ri(1)].into(),
+            vec![ri(2), ri(1), ri(1), ri(2)].into(),
+            ri(1).into(),
+            vec![ri(1), r(5, 2), r(7, 2), ri(5), ri(4), ri(3), ri(2)].into(),
+        );
+        test_case(
+            vec![ri(2), ri(1), ri(1), ri(1)].into(),
+            vec![ri(0), r(1, 2), ri(0), ri(1)].into(),
+            ri(1).into(),
+            vec![ri(0), ri(1), r(1, 2), r(5, 2), r(3, 2), ri(1), ri(1)].into(),
+        );
+        test_case(
+            vec![r(2, 3), ri(0), ri(0), r(2, 3)].into(),
+            vec![r(1, 3), ri(0), r(1, 3), r(2, 3)].into(),
+            vec![ri(1), ri(1)].into(),
+            vec![r(2, 9), r(-2, 9), r(4, 9), r(2, 9), r(-2, 9), r(4, 9)].into(),
+        );
+        test_case(
+            vec![ri(1), ri(1), ri(1), ri(1)].into(),
+            vec![ri(0), r(1, 2), ri(1), r(1, 2)].into(),
+            vec![ri(1), ri(1)].into(),
+            vec![ri(0), r(1, 2), ri(1), ri(1), ri(1), r(1, 2)].into(),
+        );
+        test_case(
+            vec![ri(0), r(1, 2), r(1, 2), ri(1)].into(),
+            vec![ri(0), ri(2)].into(),
+            vec![ri(0), ri(1)].into(),
+            vec![ri(0), ri(1), ri(1), ri(2)].into(),
+        );
+        test_case(
+            vec![ri(0), ri(1), ri(0), ri(1)].into(),
+            vec![ri(0), ri(2), ri(0), ri(2)].into(),
+            vec![ri(0), ri(1), ri(0), ri(1)].into(),
+            vec![ri(0), ri(2), ri(0), ri(2)].into(),
+        );
+        test_case(
+            vec![ri(0), ri(1), ri(1), ri(2)].into(),
+            vec![ri(1), r(1, 2), r(1, 2), r(1, 2)].into(),
+            ri(1).into(),
+            vec![ri(0), ri(1), r(3, 2), ri(3), ri(2), r(3, 2), ri(1)].into(),
+        );
+        test_case(
+            Zero::zero(),
+            vec![ri(0), ri(0), r(2, 3), r(2, 3)].into(),
+            vec![ri(0), ri(0), ri(1), ri(1)].into(),
+            Zero::zero(),
+        );
+        test_case(
+            Zero::zero(),
+            vec![ri(2), ri(1), ri(0), ri(1)].into(),
+            vec![ri(2), ri(1), ri(0), ri(1)].into(),
+            Zero::zero(),
+        );
+        test_case(
+            vec![ri(0), ri(0), ri(2)].into(),
+            vec![ri(0), ri(1), ri(1), ri(2)].into(),
+            vec![ri(0), ri(1)].into(),
+            vec![ri(0), ri(0), ri(2), ri(2), ri(4)].into(),
+        );
+        test_case(
+            vec![r(2, 3), ri(0), ri(0), r(2, 3)].into(),
+            vec![r(1, 3), ri(0), r(1, 3), r(2, 3)].into(),
+            vec![ri(1), ri(1)].into(),
+            vec![r(2, 9), r(-2, 9), r(4, 9), r(2, 9), r(-2, 9), r(4, 9)].into(),
+        );
+        test_case(
+            vec![r(1, 3), r(1, 3), r(1, 3)].into(),
+            Zero::zero(),
+            vec![ri(1), ri(1), ri(1)].into(),
+            Zero::zero(),
+        );
+        test_case(
+            vec![ri(0), r(2, 3), r(2, 3), r(1, 3)].into(),
+            vec![ri(0), r(1, 3), r(1, 3), r(1, 3)].into(),
+            vec![ri(0), ri(1)].into(),
+            vec![ri(0), r(2, 9), r(4, 9), r(5, 9), r(1, 3), r(1, 9)].into(),
+        );
+        test_case(
+            vec![r(1, 3), r(2, 3), r(1, 3), r(2, 3)].into(),
+            vec![ri(1), ri(1), ri(1), ri(1)].into(),
+            vec![ri(1), ri(0), ri(1)].into(),
+            vec![r(1, 3), ri(1), ri(1), ri(1), r(2, 3)].into(),
+        );
+        test_case(
+            vec![ri(1), ri(2), ri(2), ri(1)].into(),
+            vec![r(1, 3), r(1, 3), r(1, 3)].into(),
+            vec![ri(1), ri(1), ri(1)].into(),
+            vec![r(1, 3), r(2, 3), r(2, 3), r(1, 3)].into(),
+        );
+        test_case(
+            vec![ri(0), ri(1), ri(1), ri(1)].into(),
+            vec![ri(0), ri(2), ri(1)].into(),
+            vec![ri(0), ri(1)].into(),
+            vec![ri(0), ri(2), ri(3), ri(3), ri(1)].into(),
+        );
+        test_case(
+            vec![ri(1), r(1, 2), ri(0), r(1, 2)].into(),
+            vec![ri(0), ri(1), ri(1)].into(),
+            vec![ri(1), ri(1)].into(),
+            vec![ri(0), ri(1), r(1, 2), ri(0), r(1, 2)].into(),
         );
         test_case(
             vec![r(2, 3), r(2, 3), r(1, 3), r(1, 3)].into(),
-            vec![r(2, 3), ri(0), r(1, 3)].into(),
-            vec![ri(2), ri(0), ri(1)].into(),
+            r(1, 3).into(),
+            ri(1).into(),
             vec![r(2, 9), r(2, 9), r(1, 9), r(1, 9)].into(),
         );
         test_case(
-            vec![r(1, 2), r(1, 2), r(1, 2), r(1, 2)].into(),
-            vec![ri(1), ri(0), ri(2), ri(1)].into(),
-            ri(1).into(),
-            vec![r(1, 2), r(1, 2), r(3, 2), ri(2), r(3, 2), r(3, 2), r(1, 2)].into(),
+            vec![ri(0), ri(0), ri(2)].into(),
+            vec![ri(0), ri(1), r(1, 2), ri(1)].into(),
+            vec![ri(0), ri(1)].into(),
+            vec![ri(0), ri(0), ri(2), ri(1), ri(2)].into(),
         );
+        test_case(
+            vec![ri(0), r(1, 3), r(1, 3), r(1, 3)].into(),
+            Zero::zero(),
+            vec![ri(0), ri(1), ri(1), ri(1)].into(),
+            Zero::zero(),
+        );
+        test_case(
+            vec![ri(0), ri(0), r(1, 2)].into(),
+            vec![ri(0), r(1, 3), r(2, 3), r(2, 3)].into(),
+            vec![ri(0), ri(1)].into(),
+            vec![ri(0), ri(0), r(1, 6), r(1, 3), r(1, 3)].into(),
+        );
+        test_case(
+            vec![ri(0), ri(0), ri(1)].into(),
+            vec![ri(0), ri(1), ri(1), ri(1)].into(),
+            vec![ri(0), ri(1)].into(),
+            vec![ri(0), ri(0), ri(1), ri(1), ri(1)].into(),
+        );
+        test_case(
+            vec![ri(1), ri(1), ri(2), ri(1)].into(),
+            vec![ri(1), ri(1), ri(2), ri(1)].into(),
+            vec![ri(1), ri(1), ri(2), ri(1)].into(),
+            vec![ri(1), ri(1), ri(2), ri(1)].into(),
+        );
+        test_case(
+            vec![ri(0), ri(0), ri(0), r(1, 2)].into(),
+            vec![r(2, 3), r(1, 3), r(2, 3), r(2, 3)].into(),
+            ri(1).into(),
+            vec![ri(0), ri(0), ri(0), r(1, 3), r(1, 6), r(1, 3), r(1, 3)].into(),
+        );
+        test_case(
+            vec![ri(2), ri(2)].into(),
+            vec![r(2, 3), ri(0), ri(0), r(2, 3)].into(),
+            vec![ri(1), ri(1)].into(),
+            vec![r(4, 3), ri(0), ri(0), r(4, 3)].into(),
+        );
+        test_case(
+            Zero::zero(),
+            vec![ri(2), ri(0), ri(0), ri(1)].into(),
+            vec![ri(2), ri(0), ri(0), ri(1)].into(),
+            Zero::zero(),
+        );
+        test_case(
+            vec![ri(0), ri(1), ri(2), ri(2)].into(),
+            vec![ri(0), r(1, 2), ri(0), ri(1)].into(),
+            vec![ri(0), ri(1)].into(),
+            vec![ri(0), r(1, 2), ri(1), ri(2), ri(2), ri(2)].into(),
+        );
+        test_case(
+            vec![ri(0), ri(1), ri(2), ri(2)].into(),
+            vec![ri(0), r(1, 3), r(2, 3), r(2, 3)].into(),
+            vec![ri(0), ri(1), ri(2), ri(2)].into(),
+            vec![ri(0), r(1, 3), r(2, 3), r(2, 3)].into(),
+        );
+        test_case(
+            vec![ri(0), r(1, 2), r(1, 2), ri(1)].into(),
+            vec![ri(0), r(1, 3), r(1, 3), r(2, 3)].into(),
+            vec![ri(0), ri(1), ri(1), ri(2)].into(),
+            vec![ri(0), r(1, 6), r(1, 6), r(1, 3)].into(),
+        );
+        test_case(Zero::zero(), Zero::zero(), Zero::zero(), Zero::zero());
     }
 }

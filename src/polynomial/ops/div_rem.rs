@@ -14,7 +14,7 @@ use std::borrow::Borrow;
 use std::borrow::Cow;
 use std::convert::identity;
 use std::mem;
-use std::ops::{Div, DivAssign, Rem, RemAssign, SubAssign};
+use std::ops::{Div, DivAssign, Mul, Rem, RemAssign, SubAssign};
 
 fn quotient_len(numerator_len: usize, denominator_len: usize) -> Option<usize> {
     debug_assert_ne!(denominator_len, 0);
@@ -89,16 +89,21 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
             factor: factor_numerator,
         } = element_pseudo_div_rem::<T>(self.elements, &rhs.elements, quotient_len);
         let rhs_divisor_pow_quotient_len_minus_one =
-            T::divisor_pow_usize(rhs.divisor.clone(), quotient_len);
+            T::divisor_pow_usize(rhs.divisor.clone(), quotient_len - 1);
         let rhs_divisor_pow_quotient_len =
             rhs_divisor_pow_quotient_len_minus_one.clone() * &rhs.divisor;
         let factor = T::make_coefficient(
             Cow::Owned(factor_numerator),
             Cow::Borrowed(&rhs_divisor_pow_quotient_len),
         );
-        let quotient =
-            Polynomial::<T>::from((quotient_numerator, rhs_divisor_pow_quotient_len_minus_one));
-        let remainder = Polynomial::<T>::from((remainder_numerator, rhs_divisor_pow_quotient_len));
+        let quotient = Polynomial::<T>::from((
+            quotient_numerator,
+            rhs_divisor_pow_quotient_len_minus_one * &self.divisor,
+        ));
+        let remainder = Polynomial::<T>::from((
+            remainder_numerator,
+            Mul::<T::Divisor>::mul(rhs_divisor_pow_quotient_len, self.divisor),
+        ));
         Some(PseudoDivRem {
             quotient,
             remainder,
@@ -346,6 +351,39 @@ mod tests {
     #[should_panic(expected = "polynomial division by zero")]
     fn test_div_by_zero() {
         let _ = Polynomial::from(ri(1)) / Polynomial::zero();
+    }
+
+    #[test]
+    fn test_pseudo_div_rem() {
+        let test = |dividend: Polynomial<Ratio<i128>>,
+                    divisor: Polynomial<Ratio<i128>>,
+                    expected_quotient: Polynomial<Ratio<i128>>,
+                    expected_remainder: Polynomial<Ratio<i128>>,
+                    expected_factor: Ratio<i128>| {
+            println!("dividend=({})", dividend);
+            println!("divisor=({})", divisor);
+            println!("expected_quotient=({})", expected_quotient);
+            println!("expected_remainder=({})", expected_remainder);
+            println!("expected_factor=({})", expected_factor);
+            let PseudoDivRem {
+                quotient,
+                remainder,
+                factor,
+            } = dividend.pseudo_div_rem(&divisor);
+            println!("quotient=({})", quotient);
+            println!("remainder=({})", remainder);
+            println!("factor=({})", factor);
+            assert_eq!(factor, expected_factor);
+            assert_eq!(quotient, expected_quotient);
+            assert_eq!(remainder, expected_remainder);
+        };
+        test(
+            vec![r(1, 2), r(5, 2), r(5, 2)].into(),
+            vec![r(1, 3), r(5, 3)].into(),
+            vec![r(20, 6), r(25, 6)].into(),
+            r(5, 18).into(),
+            r(25, 9),
+        );
     }
 
     fn test_div_rem<

@@ -17,7 +17,7 @@ number_to_text(v):=block(
 
 poly_to_text(p):=block(
     [p:ratexpand(p),l],
-    if equal(p, 0) then return("Zero::zero()"),
+    if p=0 then return("Zero::zero()"),
     if hipow(p, x)=0 then (
         return(concat(number_to_text(p), ".into()"))
     ),
@@ -30,23 +30,28 @@ poly_to_text(p):=block(
     apply(concat, append(["vec!["], l, ["].into()"]))
 )$
 
-n:20000$
-thru n do block(
-    [a, b, g, l],
-    a:sum(random(3)*x^i, i, 0, 3)/(random(3)+1),
-    b:sum(random(3)*x^i, i, 0, 3)/(random(3)+1),
-    g:content(gcd(a, b), x)[2],
-    l:a*b,
-    if notequal(g, 0) then l:l/g,
-    l:ratsimp(l),
-    if notequal(g, 1) or random(n) < 10 then (
-        printf(
-            true,
-            "test_case(~%    ~a,~%    ~a,~%    ~a,~%    ~a,~%);~%",
-            poly_to_text(a),
-            poly_to_text(b),
-            poly_to_text(g),
-            poly_to_text(l)
-        )
+print_test_case(a, b, g, l):=(
+    printf(
+        true,
+        "test_case(~%    ~a,~%    ~a,~%    ~a,~%    ~a,~%);~%",
+        poly_to_text(a),
+        poly_to_text(b),
+        poly_to_text(g),
+        poly_to_text(l)
     )
+)$
+
+n:200$
+(
+    thru n do block(
+        [a, b, g, l],
+        a:sum(random(3)*x^i, i, 0, 3)/(random(3)+1),
+        b:sum(random(3)*x^i, i, 0, 3)/(random(3)+1),
+        g:ratsimp(content(gcd(a, b), x)[2]),
+        l:a*b,
+        if g#0 then l:l/g,
+        l:ratsimp(l),
+        if g#1 or random(n) < 10 then print_test_case(a, b, g, l)
+    ),
+    print_test_case(0, 0, 0, 0)
 )$

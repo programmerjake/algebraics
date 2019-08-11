@@ -121,6 +121,18 @@ impl_gcd_for_signed_int!(BigInt);
 impl<T: Integer + Clone + for<'a> Mul<&'a T, Output = T>> GCD for Ratio<T> {
     type Output = Self;
     fn gcd_lcm(&self, rhs: &Self) -> GCDAndLCM<Self> {
+        if self.is_zero() {
+            return GCDAndLCM {
+                gcd: rhs.clone(),
+                lcm: Zero::zero(),
+            };
+        }
+        if rhs.is_zero() {
+            return GCDAndLCM {
+                gcd: self.clone(),
+                lcm: Zero::zero(),
+            };
+        }
         let (gcd_numer, lcm_numer) =
             (self.numer().clone() * rhs.denom()).gcd_lcm(&(rhs.numer().clone() * self.denom()));
         let denom: T = self.denom().clone() * rhs.denom();
