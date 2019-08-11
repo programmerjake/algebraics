@@ -692,6 +692,13 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
         self.primitive_part_assign();
         self
     }
+    pub fn primitive_part(&self) -> Self
+    where
+        T: GCD<Output = T> + PartialOrd,
+        for<'a> T::Element: DivAssign<&'a T::Element>,
+    {
+        self.clone().into_primitive_part()
+    }
     pub fn monic_assign(&mut self)
     where
         T: for<'a> Div<&'a T, Output = T>,
@@ -804,6 +811,45 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
     }
     pub fn into_eval(self, at: &T) -> T {
         Self::eval_helper(self.into_iter(), at)
+    }
+    /// splits `self` into square-free factors using Yun's algorithm
+    ///
+    /// Note that the returned factors are not necessarily irreducible.
+    pub fn square_free_factorization(&self) -> Vec<Self>
+    where
+        T: GCD<Output = T> + PartialOrd + PolynomialDivSupported,
+        T::Element: Div<Output = T::Element> + DivAssign,
+        for<'a> T::Element: Div<&'a T::Element, Output = T::Element> + DivAssign<&'a T::Element>,
+    {
+        #![allow(clippy::many_single_char_names)]
+        if self.is_zero() {
+            return vec![self.clone()];
+        }
+        // algorithm derived from https://en.wikipedia.org/wiki/Square-free_polynomial#Yun's_algorithm
+        let content = self.content();
+        let f = self / &content;
+        let f_prime = f.derivative();
+        let a0 = f.gcd(&f_prime);
+        let mut b = f / &a0;
+        let mut c = f_prime / &a0;
+        let mut d = c - b.derivative();
+        let mut a = Vec::new();
+        loop {
+            let a_i = b.gcd(&d);
+            b /= &a_i;
+            c = d / &a_i;
+            d = c - b.derivative();
+            a.push(a_i);
+            debug_assert!(!b.is_zero());
+            if b.len() == 1 {
+                // b is just a constant; equivalent to 1
+                break;
+            }
+        }
+        if !content.is_one() {
+            a[0] *= content;
+        }
+        a
     }
 }
 
@@ -928,6 +974,7 @@ impl<T: PolynomialCoefficient> Deref for SturmSequence<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::util::tests::DebugAsDisplay;
 
     #[test]
     fn test_eval() {
@@ -1017,6 +1064,145 @@ mod tests {
         assert_eq!(
             Polynomial::<i32>::zero().into_primitive_part(),
             Polynomial::zero()
+        );
+    }
+
+    #[test]
+    fn test_square_free_factorization() {
+        fn test(
+            poly: Polynomial<Ratio<BigInt>>,
+            expected_factorization: Vec<Polynomial<Ratio<BigInt>>>,
+        ) {
+            println!("poly=({})", poly);
+            let square_free_factorization = poly.square_free_factorization();
+            println!("square_free_factorization:");
+            for i in &square_free_factorization {
+                println!("    {}", i);
+            }
+            println!("expected_factorization:");
+            for i in &expected_factorization {
+                println!("    {}", i);
+            }
+            assert!(expected_factorization == square_free_factorization);
+        }
+        fn ri(v: i128) -> Ratio<BigInt> {
+            BigInt::from(v).into()
+        }
+        fn r(n: i128, d: i128) -> Ratio<BigInt> {
+            Ratio::new(n.into(), d.into())
+        }
+        test(
+            vec![
+                ri(34560),
+                ri(300_672),
+                ri(1_195_632),
+                ri(2_881_136),
+                ri(4_703_032),
+                ri(5_506_936),
+                ri(4_777_591),
+                ri(3_126_949),
+                ri(1_556_776),
+                ri(589_632),
+                ri(168_542),
+                ri(35714),
+                ri(5432),
+                ri(560),
+                ri(35),
+                ri(1),
+            ]
+            .into(),
+            vec![
+                vec![ri(5), ri(1)].into(),
+                vec![ri(4), ri(1)].into(),
+                vec![ri(3), ri(1)].into(),
+                vec![ri(2), ri(1)].into(),
+                vec![ri(1), ri(1)].into(),
+            ],
+        );
+        test(Zero::zero(), vec![Zero::zero()]);
+        test(ri(123).into(), vec![ri(123).into()]);
+        test(
+            vec![ri(64), ri(16), ri(1)].into(),
+            vec![One::one(), vec![ri(8), ri(1)].into()],
+        );
+        test(
+            vec![ri(18), ri(9), ri(1)].into(),
+            vec![vec![ri(18), ri(9), ri(1)].into()],
+        );
+        test(
+            vec![
+                ri(944_784),
+                ri(2_519_424),
+                ri(2_991_816),
+                ri(2_082_024),
+                ri(939_681),
+                ri(287_226),
+                ri(60183),
+                ri(8532),
+                ri(783),
+                ri(42),
+                ri(1),
+            ]
+            .into(),
+            vec![
+                One::one(),
+                One::one(),
+                One::one(),
+                vec![ri(6), ri(1)].into(),
+                One::one(),
+                vec![ri(3), ri(1)].into(),
+            ],
+        );
+        test(
+            vec![
+                ri(10_850_253_750),
+                ri(124_622_914_500),
+                ri(629_487_927_900),
+                ri(1_843_199_313_480),
+                ri(3_475_162_941_066),
+                ri(4_436_852_440_860),
+                ri(3_932_734_882_824),
+                ri(2_444_066_523_504),
+                ri(1_063_358_633_322),
+                ri(319_712_686_524),
+                ri(64_563_363_036),
+                ri(8_291_896_776),
+                ri(606_905_622),
+                ri(19_131_876),
+            ]
+            .into(),
+            vec![
+                vec![ri(4374), ri(2916)].into(),
+                vec![ri(7), ri(8), ri(1)].into(),
+                One::one(),
+                vec![ri(15), ri(32), ri(9)].into(),
+            ],
+        );
+        test(
+            vec![r(16, 5), r(16, 5), r(4, 5)].into(),
+            vec![r(4, 5).into(), vec![ri(2), ri(1)].into()],
+        );
+        test(
+            vec![
+                ri(-81920),
+                ri(-1_363_968),
+                ri(-9_546_752),
+                ri(-36_935_424),
+                ri(-87_467_264),
+                ri(-132_423_552),
+                ri(-129_747_904),
+                ri(-81_302_256),
+                ri(-31_291_792),
+                ri(-6_717_312),
+                ri(-614_656),
+            ]
+            .into(),
+            vec![
+                vec![ri(-80), ri(-112)].into(),
+                vec![ri(1), ri(4)].into(),
+                vec![ri(4), ri(7)].into(),
+                vec![ri(2), ri(1)].into(),
+            ],
         );
     }
 }

@@ -154,11 +154,19 @@ impl Ord for Sign {
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use std::fmt::Debug;
+    use std::fmt;
+
+    pub(crate) struct DebugAsDisplay<T>(pub T);
+
+    impl<T: fmt::Display> fmt::Debug for DebugAsDisplay<T> {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            self.0.fmt(f)
+        }
+    }
 
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn test_op_helper<
-        T: Clone + PartialEq + Debug,
+        T: Clone + PartialEq + fmt::Debug,
         OpEqMove: Fn(&mut T, T),
         OpEqRef: Fn(&mut T, &T),
         OpRefRef: Fn(&T, &T) -> T,
