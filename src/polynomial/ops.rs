@@ -2,4 +2,5 @@
 // See Notices.txt for copyright information
 pub(crate) mod add_sub;
 pub(crate) mod div_rem;
+pub(crate) mod gcd;
 pub(crate) mod mul;
