@@ -1,8 +1,5 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // See Notices.txt for copyright information
-use crate::traits::ExtendedGCD;
-use crate::traits::ExtendedGCDAndLCM;
-use crate::traits::ExtendedGCDResult;
 use crate::traits::GCDAndLCM;
 use crate::traits::GCD;
 use num_bigint::BigInt;
@@ -10,7 +7,7 @@ use num_integer::Integer;
 use num_rational::Ratio;
 use num_traits::One;
 use num_traits::Zero;
-use num_traits::{CheckedDiv, FromPrimitive, ToPrimitive};
+use num_traits::{FromPrimitive, ToPrimitive};
 use std::borrow::Cow;
 use std::error::Error;
 use std::fmt;
