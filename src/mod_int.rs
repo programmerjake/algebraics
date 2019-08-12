@@ -1,10 +1,14 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // See Notices.txt for copyright information
 
+use crate::traits::ExtendedGCD;
+use crate::traits::ExtendedGCDResult;
+use crate::traits::GCD;
 use num_bigint::BigInt;
 use num_bigint::BigUint;
 use num_integer::Integer;
 use num_traits::CheckedAdd;
+use num_traits::CheckedDiv;
 use num_traits::CheckedMul;
 use num_traits::CheckedSub;
 use num_traits::FromPrimitive;
@@ -12,6 +16,8 @@ use num_traits::One;
 use num_traits::Zero;
 use std::ops::Add;
 use std::ops::AddAssign;
+use std::ops::Div;
+use std::ops::DivAssign;
 use std::ops::Mul;
 use std::ops::MulAssign;
 use std::ops::Neg;
@@ -463,6 +469,104 @@ where
     }
 }
 
+impl<V: ModularReduce + Eq + One + Zero + GCD<Output = V> + ExtendedGCD, M: Modulus<Value = V>>
+    ModularInteger<V, M>
+{
+    pub fn checked_inverse(&self) -> Option<Self> {
+        if self.value.is_zero() {
+            return None;
+        }
+        let ExtendedGCDResult { gcd, x, .. } = self.value.extended_gcd(self.modulus.to_modulus());
+        if gcd.is_one() {
+            Some(ModularInteger::new(x, self.modulus.clone()))
+        } else {
+            None
+        }
+    }
+    pub fn inverse(&self) -> Self {
+        self.checked_inverse()
+            .expect("value has no modular inverse")
+    }
+}
+
+impl<
+        V: ModularReduce + Eq + One + Zero + GCD<Output = V> + ExtendedGCD + MulAssign,
+        M: Modulus<Value = V>,
+    > DivAssign for ModularInteger<V, M>
+{
+    fn div_assign(&mut self, rhs: ModularInteger<V, M>) {
+        self.mul_assign(rhs.inverse())
+    }
+}
+
+impl<
+        V: ModularReduce + Eq + One + Zero + GCD<Output = V> + ExtendedGCD + MulAssign,
+        M: Modulus<Value = V>,
+    > DivAssign<&'_ ModularInteger<V, M>> for ModularInteger<V, M>
+{
+    fn div_assign(&mut self, rhs: &ModularInteger<V, M>) {
+        self.mul_assign(rhs.inverse())
+    }
+}
+
+impl<V: ModularReduce + Eq + One + Zero + GCD<Output = V> + ExtendedGCD, M: Modulus<Value = V>> Div
+    for ModularInteger<V, M>
+where
+    for<'a, 'b> &'a V: Mul<&'b V, Output = V>,
+{
+    type Output = ModularInteger<V, M>;
+    fn div(self, rhs: ModularInteger<V, M>) -> ModularInteger<V, M> {
+        self.mul(rhs.inverse())
+    }
+}
+
+impl<V: ModularReduce + Eq + One + Zero + GCD<Output = V> + ExtendedGCD, M: Modulus<Value = V>>
+    Div<ModularInteger<V, M>> for &'_ ModularInteger<V, M>
+where
+    for<'a, 'b> &'a V: Mul<&'b V, Output = V>,
+{
+    type Output = ModularInteger<V, M>;
+    fn div(self, rhs: ModularInteger<V, M>) -> ModularInteger<V, M> {
+        self.mul(&rhs.inverse())
+    }
+}
+
+impl<V: ModularReduce + Eq + One + Zero + GCD<Output = V> + ExtendedGCD, M: Modulus<Value = V>>
+    Div<&'_ ModularInteger<V, M>> for ModularInteger<V, M>
+where
+    for<'a, 'b> &'a V: Mul<&'b V, Output = V>,
+{
+    type Output = ModularInteger<V, M>;
+    fn div(self, rhs: &ModularInteger<V, M>) -> ModularInteger<V, M> {
+        self.mul(rhs.inverse())
+    }
+}
+
+impl<
+        'a,
+        'b,
+        V: ModularReduce + Eq + One + Zero + GCD<Output = V> + ExtendedGCD,
+        M: Modulus<Value = V>,
+    > Div<&'a ModularInteger<V, M>> for &'b ModularInteger<V, M>
+where
+    for<'c, 'd> &'c V: Mul<&'d V, Output = V>,
+{
+    type Output = ModularInteger<V, M>;
+    fn div(self, rhs: &ModularInteger<V, M>) -> ModularInteger<V, M> {
+        self.mul(&rhs.inverse())
+    }
+}
+
+impl<V: ModularReduce + Eq + One + Zero + GCD<Output = V> + ExtendedGCD, M: Modulus<Value = V>>
+    CheckedDiv for ModularInteger<V, M>
+where
+    for<'a, 'b> &'a V: Mul<&'b V, Output = V>,
+{
+    fn checked_div(&self, rhs: &Self) -> Option<Self> {
+        self.checked_mul(&rhs.checked_inverse()?)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -562,5 +666,417 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn test_div() {
+        let test = |l: i64, r: i64, expected: Option<i64>, modulus: i64| {
+            dbg!((l, r, expected, modulus));
+            assert_eq!(
+                ModularInteger::new(l, modulus).checked_div(&ModularInteger::new(r, modulus)),
+                expected.map(|expected| ModularInteger::new(expected, modulus))
+            );
+            let expected = match expected {
+                None => return,
+                Some(expected) => expected,
+            };
+            test_op_helper(
+                ModularInteger::new(l, modulus),
+                ModularInteger::new(r, modulus),
+                &ModularInteger::new(expected, modulus),
+                |l, r| *l /= r,
+                |l, r| *l /= r,
+                |l, r| l / r,
+                |l, r| l / r,
+                |l, r| l / r,
+                |l, r| l / r,
+            );
+        };
+
+        test(0, 0, None, 1);
+        test(0, 0, None, 2);
+        test(0, 1, Some(0), 2);
+        test(1, 0, None, 2);
+        test(1, 1, Some(1), 2);
+        test(0, 0, None, 3);
+        test(0, 1, Some(0), 3);
+        test(0, 2, Some(0), 3);
+        test(1, 0, None, 3);
+        test(1, 1, Some(1), 3);
+        test(1, 2, Some(2), 3);
+        test(2, 0, None, 3);
+        test(2, 1, Some(2), 3);
+        test(2, 2, Some(1), 3);
+        test(0, 0, None, 4);
+        test(0, 1, Some(0), 4);
+        test(0, 2, None, 4);
+        test(0, 3, Some(0), 4);
+        test(1, 0, None, 4);
+        test(1, 1, Some(1), 4);
+        test(1, 2, None, 4);
+        test(1, 3, Some(3), 4);
+        test(2, 0, None, 4);
+        test(2, 1, Some(2), 4);
+        test(2, 2, None, 4);
+        test(2, 3, Some(2), 4);
+        test(3, 0, None, 4);
+        test(3, 1, Some(3), 4);
+        test(3, 2, None, 4);
+        test(3, 3, Some(1), 4);
+        test(0, 0, None, 5);
+        test(0, 1, Some(0), 5);
+        test(0, 2, Some(0), 5);
+        test(0, 3, Some(0), 5);
+        test(0, 4, Some(0), 5);
+        test(1, 0, None, 5);
+        test(1, 1, Some(1), 5);
+        test(1, 2, Some(3), 5);
+        test(1, 3, Some(2), 5);
+        test(1, 4, Some(4), 5);
+        test(2, 0, None, 5);
+        test(2, 1, Some(2), 5);
+        test(2, 2, Some(1), 5);
+        test(2, 3, Some(4), 5);
+        test(2, 4, Some(3), 5);
+        test(3, 0, None, 5);
+        test(3, 1, Some(3), 5);
+        test(3, 2, Some(4), 5);
+        test(3, 3, Some(1), 5);
+        test(3, 4, Some(2), 5);
+        test(4, 0, None, 5);
+        test(4, 1, Some(4), 5);
+        test(4, 2, Some(2), 5);
+        test(4, 3, Some(3), 5);
+        test(4, 4, Some(1), 5);
+        test(0, 0, None, 6);
+        test(0, 1, Some(0), 6);
+        test(0, 2, None, 6);
+        test(0, 3, None, 6);
+        test(0, 4, None, 6);
+        test(0, 5, Some(0), 6);
+        test(1, 0, None, 6);
+        test(1, 1, Some(1), 6);
+        test(1, 2, None, 6);
+        test(1, 3, None, 6);
+        test(1, 4, None, 6);
+        test(1, 5, Some(5), 6);
+        test(2, 0, None, 6);
+        test(2, 1, Some(2), 6);
+        test(2, 2, None, 6);
+        test(2, 3, None, 6);
+        test(2, 4, None, 6);
+        test(2, 5, Some(4), 6);
+        test(3, 0, None, 6);
+        test(3, 1, Some(3), 6);
+        test(3, 2, None, 6);
+        test(3, 3, None, 6);
+        test(3, 4, None, 6);
+        test(3, 5, Some(3), 6);
+        test(4, 0, None, 6);
+        test(4, 1, Some(4), 6);
+        test(4, 2, None, 6);
+        test(4, 3, None, 6);
+        test(4, 4, None, 6);
+        test(4, 5, Some(2), 6);
+        test(5, 0, None, 6);
+        test(5, 1, Some(5), 6);
+        test(5, 2, None, 6);
+        test(5, 3, None, 6);
+        test(5, 4, None, 6);
+        test(5, 5, Some(1), 6);
+        test(0, 0, None, 7);
+        test(0, 1, Some(0), 7);
+        test(0, 2, Some(0), 7);
+        test(0, 3, Some(0), 7);
+        test(0, 4, Some(0), 7);
+        test(0, 5, Some(0), 7);
+        test(0, 6, Some(0), 7);
+        test(1, 0, None, 7);
+        test(1, 1, Some(1), 7);
+        test(1, 2, Some(4), 7);
+        test(1, 3, Some(5), 7);
+        test(1, 4, Some(2), 7);
+        test(1, 5, Some(3), 7);
+        test(1, 6, Some(6), 7);
+        test(2, 0, None, 7);
+        test(2, 1, Some(2), 7);
+        test(2, 2, Some(1), 7);
+        test(2, 3, Some(3), 7);
+        test(2, 4, Some(4), 7);
+        test(2, 5, Some(6), 7);
+        test(2, 6, Some(5), 7);
+        test(3, 0, None, 7);
+        test(3, 1, Some(3), 7);
+        test(3, 2, Some(5), 7);
+        test(3, 3, Some(1), 7);
+        test(3, 4, Some(6), 7);
+        test(3, 5, Some(2), 7);
+        test(3, 6, Some(4), 7);
+        test(4, 0, None, 7);
+        test(4, 1, Some(4), 7);
+        test(4, 2, Some(2), 7);
+        test(4, 3, Some(6), 7);
+        test(4, 4, Some(1), 7);
+        test(4, 5, Some(5), 7);
+        test(4, 6, Some(3), 7);
+        test(5, 0, None, 7);
+        test(5, 1, Some(5), 7);
+        test(5, 2, Some(6), 7);
+        test(5, 3, Some(4), 7);
+        test(5, 4, Some(3), 7);
+        test(5, 5, Some(1), 7);
+        test(5, 6, Some(2), 7);
+        test(6, 0, None, 7);
+        test(6, 1, Some(6), 7);
+        test(6, 2, Some(3), 7);
+        test(6, 3, Some(2), 7);
+        test(6, 4, Some(5), 7);
+        test(6, 5, Some(4), 7);
+        test(6, 6, Some(1), 7);
+        test(0, 0, None, 8);
+        test(0, 1, Some(0), 8);
+        test(0, 2, None, 8);
+        test(0, 3, Some(0), 8);
+        test(0, 4, None, 8);
+        test(0, 5, Some(0), 8);
+        test(0, 6, None, 8);
+        test(0, 7, Some(0), 8);
+        test(1, 0, None, 8);
+        test(1, 1, Some(1), 8);
+        test(1, 2, None, 8);
+        test(1, 3, Some(3), 8);
+        test(1, 4, None, 8);
+        test(1, 5, Some(5), 8);
+        test(1, 6, None, 8);
+        test(1, 7, Some(7), 8);
+        test(2, 0, None, 8);
+        test(2, 1, Some(2), 8);
+        test(2, 2, None, 8);
+        test(2, 3, Some(6), 8);
+        test(2, 4, None, 8);
+        test(2, 5, Some(2), 8);
+        test(2, 6, None, 8);
+        test(2, 7, Some(6), 8);
+        test(3, 0, None, 8);
+        test(3, 1, Some(3), 8);
+        test(3, 2, None, 8);
+        test(3, 3, Some(1), 8);
+        test(3, 4, None, 8);
+        test(3, 5, Some(7), 8);
+        test(3, 6, None, 8);
+        test(3, 7, Some(5), 8);
+        test(4, 0, None, 8);
+        test(4, 1, Some(4), 8);
+        test(4, 2, None, 8);
+        test(4, 3, Some(4), 8);
+        test(4, 4, None, 8);
+        test(4, 5, Some(4), 8);
+        test(4, 6, None, 8);
+        test(4, 7, Some(4), 8);
+        test(5, 0, None, 8);
+        test(5, 1, Some(5), 8);
+        test(5, 2, None, 8);
+        test(5, 3, Some(7), 8);
+        test(5, 4, None, 8);
+        test(5, 5, Some(1), 8);
+        test(5, 6, None, 8);
+        test(5, 7, Some(3), 8);
+        test(6, 0, None, 8);
+        test(6, 1, Some(6), 8);
+        test(6, 2, None, 8);
+        test(6, 3, Some(2), 8);
+        test(6, 4, None, 8);
+        test(6, 5, Some(6), 8);
+        test(6, 6, None, 8);
+        test(6, 7, Some(2), 8);
+        test(7, 0, None, 8);
+        test(7, 1, Some(7), 8);
+        test(7, 2, None, 8);
+        test(7, 3, Some(5), 8);
+        test(7, 4, None, 8);
+        test(7, 5, Some(3), 8);
+        test(7, 6, None, 8);
+        test(7, 7, Some(1), 8);
+        test(0, 0, None, 9);
+        test(0, 1, Some(0), 9);
+        test(0, 2, Some(0), 9);
+        test(0, 3, None, 9);
+        test(0, 4, Some(0), 9);
+        test(0, 5, Some(0), 9);
+        test(0, 6, None, 9);
+        test(0, 7, Some(0), 9);
+        test(0, 8, Some(0), 9);
+        test(1, 0, None, 9);
+        test(1, 1, Some(1), 9);
+        test(1, 2, Some(5), 9);
+        test(1, 3, None, 9);
+        test(1, 4, Some(7), 9);
+        test(1, 5, Some(2), 9);
+        test(1, 6, None, 9);
+        test(1, 7, Some(4), 9);
+        test(1, 8, Some(8), 9);
+        test(2, 0, None, 9);
+        test(2, 1, Some(2), 9);
+        test(2, 2, Some(1), 9);
+        test(2, 3, None, 9);
+        test(2, 4, Some(5), 9);
+        test(2, 5, Some(4), 9);
+        test(2, 6, None, 9);
+        test(2, 7, Some(8), 9);
+        test(2, 8, Some(7), 9);
+        test(3, 0, None, 9);
+        test(3, 1, Some(3), 9);
+        test(3, 2, Some(6), 9);
+        test(3, 3, None, 9);
+        test(3, 4, Some(3), 9);
+        test(3, 5, Some(6), 9);
+        test(3, 6, None, 9);
+        test(3, 7, Some(3), 9);
+        test(3, 8, Some(6), 9);
+        test(4, 0, None, 9);
+        test(4, 1, Some(4), 9);
+        test(4, 2, Some(2), 9);
+        test(4, 3, None, 9);
+        test(4, 4, Some(1), 9);
+        test(4, 5, Some(8), 9);
+        test(4, 6, None, 9);
+        test(4, 7, Some(7), 9);
+        test(4, 8, Some(5), 9);
+        test(5, 0, None, 9);
+        test(5, 1, Some(5), 9);
+        test(5, 2, Some(7), 9);
+        test(5, 3, None, 9);
+        test(5, 4, Some(8), 9);
+        test(5, 5, Some(1), 9);
+        test(5, 6, None, 9);
+        test(5, 7, Some(2), 9);
+        test(5, 8, Some(4), 9);
+        test(6, 0, None, 9);
+        test(6, 1, Some(6), 9);
+        test(6, 2, Some(3), 9);
+        test(6, 3, None, 9);
+        test(6, 4, Some(6), 9);
+        test(6, 5, Some(3), 9);
+        test(6, 6, None, 9);
+        test(6, 7, Some(6), 9);
+        test(6, 8, Some(3), 9);
+        test(7, 0, None, 9);
+        test(7, 1, Some(7), 9);
+        test(7, 2, Some(8), 9);
+        test(7, 3, None, 9);
+        test(7, 4, Some(4), 9);
+        test(7, 5, Some(5), 9);
+        test(7, 6, None, 9);
+        test(7, 7, Some(1), 9);
+        test(7, 8, Some(2), 9);
+        test(8, 0, None, 9);
+        test(8, 1, Some(8), 9);
+        test(8, 2, Some(4), 9);
+        test(8, 3, None, 9);
+        test(8, 4, Some(2), 9);
+        test(8, 5, Some(7), 9);
+        test(8, 6, None, 9);
+        test(8, 7, Some(5), 9);
+        test(8, 8, Some(1), 9);
+        test(0, 0, None, 10);
+        test(0, 1, Some(0), 10);
+        test(0, 2, None, 10);
+        test(0, 3, Some(0), 10);
+        test(0, 4, None, 10);
+        test(0, 5, None, 10);
+        test(0, 6, None, 10);
+        test(0, 7, Some(0), 10);
+        test(0, 8, None, 10);
+        test(0, 9, Some(0), 10);
+        test(1, 0, None, 10);
+        test(1, 1, Some(1), 10);
+        test(1, 2, None, 10);
+        test(1, 3, Some(7), 10);
+        test(1, 4, None, 10);
+        test(1, 5, None, 10);
+        test(1, 6, None, 10);
+        test(1, 7, Some(3), 10);
+        test(1, 8, None, 10);
+        test(1, 9, Some(9), 10);
+        test(2, 0, None, 10);
+        test(2, 1, Some(2), 10);
+        test(2, 2, None, 10);
+        test(2, 3, Some(4), 10);
+        test(2, 4, None, 10);
+        test(2, 5, None, 10);
+        test(2, 6, None, 10);
+        test(2, 7, Some(6), 10);
+        test(2, 8, None, 10);
+        test(2, 9, Some(8), 10);
+        test(3, 0, None, 10);
+        test(3, 1, Some(3), 10);
+        test(3, 2, None, 10);
+        test(3, 3, Some(1), 10);
+        test(3, 4, None, 10);
+        test(3, 5, None, 10);
+        test(3, 6, None, 10);
+        test(3, 7, Some(9), 10);
+        test(3, 8, None, 10);
+        test(3, 9, Some(7), 10);
+        test(4, 0, None, 10);
+        test(4, 1, Some(4), 10);
+        test(4, 2, None, 10);
+        test(4, 3, Some(8), 10);
+        test(4, 4, None, 10);
+        test(4, 5, None, 10);
+        test(4, 6, None, 10);
+        test(4, 7, Some(2), 10);
+        test(4, 8, None, 10);
+        test(4, 9, Some(6), 10);
+        test(5, 0, None, 10);
+        test(5, 1, Some(5), 10);
+        test(5, 2, None, 10);
+        test(5, 3, Some(5), 10);
+        test(5, 4, None, 10);
+        test(5, 5, None, 10);
+        test(5, 6, None, 10);
+        test(5, 7, Some(5), 10);
+        test(5, 8, None, 10);
+        test(5, 9, Some(5), 10);
+        test(6, 0, None, 10);
+        test(6, 1, Some(6), 10);
+        test(6, 2, None, 10);
+        test(6, 3, Some(2), 10);
+        test(6, 4, None, 10);
+        test(6, 5, None, 10);
+        test(6, 6, None, 10);
+        test(6, 7, Some(8), 10);
+        test(6, 8, None, 10);
+        test(6, 9, Some(4), 10);
+        test(7, 0, None, 10);
+        test(7, 1, Some(7), 10);
+        test(7, 2, None, 10);
+        test(7, 3, Some(9), 10);
+        test(7, 4, None, 10);
+        test(7, 5, None, 10);
+        test(7, 6, None, 10);
+        test(7, 7, Some(1), 10);
+        test(7, 8, None, 10);
+        test(7, 9, Some(3), 10);
+        test(8, 0, None, 10);
+        test(8, 1, Some(8), 10);
+        test(8, 2, None, 10);
+        test(8, 3, Some(6), 10);
+        test(8, 4, None, 10);
+        test(8, 5, None, 10);
+        test(8, 6, None, 10);
+        test(8, 7, Some(4), 10);
+        test(8, 8, None, 10);
+        test(8, 9, Some(2), 10);
+        test(9, 0, None, 10);
+        test(9, 1, Some(9), 10);
+        test(9, 2, None, 10);
+        test(9, 3, Some(3), 10);
+        test(9, 4, None, 10);
+        test(9, 5, None, 10);
+        test(9, 6, None, 10);
+        test(9, 7, Some(7), 10);
+        test(9, 8, None, 10);
+        test(9, 9, Some(1), 10);
     }
 }
