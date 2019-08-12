@@ -4,6 +4,7 @@
 use crate::traits::ExtendedGCD;
 use crate::traits::ExtendedGCDResult;
 use crate::traits::GCD;
+use crate::util::IsPseudoPrime;
 use num_bigint::BigInt;
 use num_bigint::BigUint;
 use num_integer::Integer;
@@ -51,8 +52,46 @@ impl<T: Modulus> Modulus for &'_ T {
     }
 }
 
-pub trait StaticModulus: Modulus + 'static + Copy {
+pub trait StaticModulus: Modulus + 'static + Copy + Default {
     fn get_modulus() -> Self::Value;
+}
+
+#[derive(Copy, Clone, Hash, Eq, PartialEq, Debug)]
+pub struct PrimeModulus<M>(M);
+
+impl<V: Integer + IsPseudoPrime + Clone, M: Modulus<Value = V>> PrimeModulus<M> {
+    pub fn new(modulus: M) -> Self {
+        debug_assert!(modulus.to_modulus().is_pseudo_prime());
+        Self(modulus)
+    }
+}
+
+impl<V: Integer + IsPseudoPrime + Clone, M: Modulus<Value = V>> Modulus for PrimeModulus<M> {
+    type Value = V;
+    fn to_modulus(&self) -> &V {
+        self.0.to_modulus()
+    }
+    fn into_modulus(self) -> V {
+        self.0.into_modulus()
+    }
+}
+
+impl<V: Integer + IsPseudoPrime + Clone, M: Modulus<Value = V> + StaticModulus> Default
+    for PrimeModulus<M>
+{
+    fn default() -> Self {
+        Self::new(M::default())
+    }
+}
+
+impl<V: Integer + IsPseudoPrime + Clone, M: Modulus<Value = V> + StaticModulus> StaticModulus
+    for PrimeModulus<M>
+{
+    fn get_modulus() -> V {
+        let retval = M::get_modulus();
+        debug_assert!(retval.is_pseudo_prime());
+        retval
+    }
 }
 
 macro_rules! impl_int_modulus {

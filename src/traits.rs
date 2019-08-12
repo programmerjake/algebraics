@@ -5,7 +5,7 @@ use crate::polynomial::PolynomialCoefficient;
 use num_bigint::{BigInt, BigUint};
 use num_integer::Integer;
 use num_rational::Ratio;
-use num_traits::{CheckedDiv, CheckedMul, Signed, Zero};
+use num_traits::{CheckedDiv, CheckedMul, Signed, ToPrimitive, Zero};
 use std::ops::Mul;
 
 /// GCD and LCM
@@ -302,6 +302,75 @@ impl DivRemNearest for BigUint {
             return None;
         }
         Some(self.div_rem(rhs))
+    }
+}
+
+pub trait TrailingZeros: Integer {
+    /// returns number of trailing zero bits in the two's complement representation of `Self`
+    /// returns `None` for zero
+    fn trailing_zeros(&self) -> Option<usize>;
+}
+
+macro_rules! impl_prim_trailing_zeros {
+    ($t:ty) => {
+        impl TrailingZeros for $t {
+            fn trailing_zeros(&self) -> Option<usize> {
+                if *self == 0 {
+                    None
+                } else {
+                    Some((*self).trailing_zeros() as usize)
+                }
+            }
+        }
+    };
+}
+
+impl_prim_trailing_zeros!(u8);
+impl_prim_trailing_zeros!(u16);
+impl_prim_trailing_zeros!(u32);
+impl_prim_trailing_zeros!(u64);
+impl_prim_trailing_zeros!(u128);
+impl_prim_trailing_zeros!(i8);
+impl_prim_trailing_zeros!(i16);
+impl_prim_trailing_zeros!(i32);
+impl_prim_trailing_zeros!(i64);
+impl_prim_trailing_zeros!(i128);
+
+impl TrailingZeros for BigUint {
+    fn trailing_zeros(&self) -> Option<usize> {
+        if let Some(v) = self.to_u32() {
+            return TrailingZeros::trailing_zeros(&v);
+        }
+        if let Some(v) = self.to_u128() {
+            return TrailingZeros::trailing_zeros(&v);
+        }
+        let limit = (self + 1u32).bits();
+        let mut bit = 1;
+        while bit < limit {
+            bit <<= 1;
+        }
+        let mut retval = 0;
+        let mut value = self.clone();
+        while bit != 0 {
+            let shifted_right = &value >> bit;
+            if &shifted_right << bit == value {
+                retval |= bit;
+                value = shifted_right;
+            }
+            bit >>= 1;
+        }
+        Some(retval)
+    }
+}
+
+impl TrailingZeros for BigInt {
+    fn trailing_zeros(&self) -> Option<usize> {
+        TrailingZeros::trailing_zeros(
+            &self
+                .abs()
+                .to_biguint()
+                .expect("abs should return non-negative values"),
+        )
     }
 }
 

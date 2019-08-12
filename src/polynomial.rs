@@ -974,7 +974,6 @@ impl<T: PolynomialCoefficient> Deref for SturmSequence<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::util::tests::DebugAsDisplay;
 
     #[test]
     fn test_eval() {
