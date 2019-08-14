@@ -305,14 +305,60 @@ impl DivRemNearest for BigUint {
     }
 }
 
+pub trait IntegerBits {
+    const BITS: usize;
+}
+
+macro_rules! impl_integer_bits {
+    ($($t:ty),*) => {
+        $(
+            impl IntegerBits for $t {
+                const BITS: usize = (0 as $t).trailing_zeros() as usize;
+            }
+        )*
+    };
+}
+
+impl_integer_bits!(u8, i8, u16, i16, u32, i32, u64, i64, u128, i128, usize, isize);
+
+pub trait FloorLog2: Integer {
+    /// returns floor(log2(self)) if self is positive
+    /// returns `None` for zero or negative
+    fn floor_log2(&self) -> Option<usize>;
+}
+
+pub trait CeilLog2: Integer {
+    /// returns ceil(log2(self)) if self is positive
+    /// returns `None` for zero or negative
+    fn ceil_log2(&self) -> Option<usize>;
+}
+
 pub trait TrailingZeros: Integer {
     /// returns number of trailing zero bits in the two's complement representation of `Self`
     /// returns `None` for zero
     fn trailing_zeros(&self) -> Option<usize>;
 }
 
-macro_rules! impl_prim_trailing_zeros {
+macro_rules! impl_prim_trailing_zeros_and_log2 {
     ($t:ty) => {
+        impl FloorLog2 for $t {
+            fn floor_log2(&self) -> Option<usize> {
+                if *self <= 0 {
+                    None
+                } else {
+                    Some(<Self as IntegerBits>::BITS - self.leading_zeros() as usize - 1)
+                }
+            }
+        }
+        impl CeilLog2 for $t {
+            fn ceil_log2(&self) -> Option<usize> {
+                if *self <= 0 {
+                    None
+                } else {
+                    Some(<Self as IntegerBits>::BITS - (*self - 1).leading_zeros() as usize)
+                }
+            }
+        }
         impl TrailingZeros for $t {
             fn trailing_zeros(&self) -> Option<usize> {
                 if *self == 0 {
@@ -325,28 +371,47 @@ macro_rules! impl_prim_trailing_zeros {
     };
 }
 
-impl_prim_trailing_zeros!(u8);
-impl_prim_trailing_zeros!(u16);
-impl_prim_trailing_zeros!(u32);
-impl_prim_trailing_zeros!(u64);
-impl_prim_trailing_zeros!(u128);
-impl_prim_trailing_zeros!(i8);
-impl_prim_trailing_zeros!(i16);
-impl_prim_trailing_zeros!(i32);
-impl_prim_trailing_zeros!(i64);
-impl_prim_trailing_zeros!(i128);
+impl_prim_trailing_zeros_and_log2!(u8);
+impl_prim_trailing_zeros_and_log2!(u16);
+impl_prim_trailing_zeros_and_log2!(u32);
+impl_prim_trailing_zeros_and_log2!(u64);
+impl_prim_trailing_zeros_and_log2!(u128);
+impl_prim_trailing_zeros_and_log2!(i8);
+impl_prim_trailing_zeros_and_log2!(i16);
+impl_prim_trailing_zeros_and_log2!(i32);
+impl_prim_trailing_zeros_and_log2!(i64);
+impl_prim_trailing_zeros_and_log2!(i128);
+
+impl CeilLog2 for BigUint {
+    fn ceil_log2(&self) -> Option<usize> {
+        if self.is_zero() {
+            None
+        } else {
+            Some((self - 1u32).bits())
+        }
+    }
+}
+
+impl FloorLog2 for BigUint {
+    fn floor_log2(&self) -> Option<usize> {
+        if self.is_zero() {
+            None
+        } else {
+            Some(self.bits() - 1)
+        }
+    }
+}
 
 impl TrailingZeros for BigUint {
     fn trailing_zeros(&self) -> Option<usize> {
+        let ceil_log2 = self.ceil_log2();
+        // handle self == 0 by returning None
+        let ceil_log2 = ceil_log2?;
         if let Some(v) = self.to_u32() {
-            return TrailingZeros::trailing_zeros(&v);
+            return Some(v.trailing_zeros() as usize);
         }
-        if let Some(v) = self.to_u128() {
-            return TrailingZeros::trailing_zeros(&v);
-        }
-        let limit = (self + 1u32).bits();
         let mut bit = 1;
-        while bit < limit {
+        while bit < ceil_log2 {
             bit <<= 1;
         }
         let mut retval = 0;
@@ -360,6 +425,26 @@ impl TrailingZeros for BigUint {
             bit >>= 1;
         }
         Some(retval)
+    }
+}
+
+impl CeilLog2 for BigInt {
+    fn ceil_log2(&self) -> Option<usize> {
+        if self.is_positive() {
+            Some((self - 1u32).bits())
+        } else {
+            None
+        }
+    }
+}
+
+impl FloorLog2 for BigInt {
+    fn floor_log2(&self) -> Option<usize> {
+        if self.is_positive() {
+            Some(self.bits() - 1)
+        } else {
+            None
+        }
     }
 }
 
@@ -384,6 +469,7 @@ pub trait IsolatedRealRoot<T: PolynomialCoefficient + Integer> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use num_traits::One;
 
     #[test]
     fn test_gcd_lcm() {
@@ -391,5 +477,61 @@ mod tests {
         let b = Ratio::new(48, 12934);
         assert_eq!(a.gcd(&b), Ratio::new(6, 69_345_641));
         assert_eq!(a.lcm(&b), Ratio::new(24, 29));
+    }
+
+    #[test]
+    fn test_trailing_zeros() {
+        let one = BigUint::one();
+        for i in 0..=256 {
+            for j in 0..=i {
+                let v = (&one << dbg!(i)) | (&one << dbg!(j));
+                assert_eq!(v.trailing_zeros(), Some(j));
+            }
+        }
+    }
+
+    #[test]
+    fn test_ceil_log2() {
+        assert_eq!(BigUint::zero().ceil_log2(), None);
+        assert_eq!(BigInt::zero().ceil_log2(), None);
+        assert_eq!(0.ceil_log2(), None);
+        let one = BigUint::one();
+        assert_eq!(one.ceil_log2(), Some(0));
+        assert_eq!(BigInt::one().ceil_log2(), Some(0));
+        assert_eq!(1.ceil_log2(), Some(0));
+        for i in 0..=256 {
+            for j in 0..=i {
+                let v = (&one << dbg!(i)) + (&one << dbg!(j));
+                assert_eq!(v.ceil_log2(), Some(i + 1));
+                assert_eq!(BigInt::from(v).ceil_log2(), Some(i + 1));
+                if i < 32 {
+                    if let Some(v) = (1u32 << i).checked_add(1 << j) {
+                        assert_eq!(v.ceil_log2(), Some(i + 1));
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_floor_log2() {
+        assert_eq!(BigUint::zero().floor_log2(), None);
+        assert_eq!(BigInt::zero().floor_log2(), None);
+        assert_eq!(0.floor_log2(), None);
+        let one = BigUint::one();
+        assert_eq!(one.floor_log2(), Some(0));
+        assert_eq!(BigInt::one().floor_log2(), Some(0));
+        assert_eq!(1.floor_log2(), Some(0));
+        for i in 0..=256 {
+            for j in 0..=i {
+                let v = (&one << dbg!(i)) | (&one << dbg!(j));
+                assert_eq!(v.floor_log2(), Some(i));
+                assert_eq!(BigInt::from(v).floor_log2(), Some(i));
+                if i < 32 {
+                    let v = (1u32 << i) | (1 << j);
+                    assert_eq!(v.floor_log2(), Some(i), "{:#x}", v);
+                }
+            }
+        }
     }
 }
