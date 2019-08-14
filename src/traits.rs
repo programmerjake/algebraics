@@ -307,6 +307,10 @@ impl DivRemNearest for BigUint {
 
 pub trait IntegerBits {
     const BITS: usize;
+    /// returns Self::BITS
+    fn type_bits(&self) -> usize {
+        Self::BITS
+    }
 }
 
 macro_rules! impl_integer_bits {

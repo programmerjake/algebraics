@@ -3,6 +3,7 @@
 use crate::mod_int::ModularInteger;
 use crate::mod_int::ModularReducePow;
 use crate::mod_int::Modulus;
+use crate::traits::FloorLog2;
 use crate::traits::TrailingZeros;
 use num_integer::Integer;
 use num_integer::Roots;
@@ -11,6 +12,7 @@ use num_traits::One;
 use num_traits::ToPrimitive;
 use num_traits::Zero;
 use std::cmp::Ordering;
+use std::fmt;
 use std::ops::MulAssign;
 use std::ops::Shr;
 use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Neg, Not};
@@ -508,18 +510,19 @@ fn is_prime_check_small_divisors(v: u128) -> Option<bool> {
         return Some(false);
     }
     let count = 100;
-    for prime in &PRIMES_THAT_FIT_IN_U16[..count] {
-        if v % u128::from(*prime) == 0 {
+    for &prime in &PRIMES_THAT_FIT_IN_U16[..count] {
+        let prime = u128::from(prime);
+        if v == prime {
+            return Some(true);
+        }
+        if v % prime == 0 {
             return Some(false);
         }
+        if prime * prime > v {
+            return Some(true);
+        }
     }
-    let limit_prime = u128::from(PRIMES_THAT_FIT_IN_U16[count]);
-    let limit = limit_prime * limit_prime;
-    if v > limit {
-        None
-    } else {
-        Some(v < limit)
-    }
+    None
 }
 
 fn is_pseudo_prime_miller_rabin_test_for_base<T: IsPseudoPrime>(
@@ -566,13 +569,15 @@ pub trait IsPseudoPrime:
         } else {
             for prime in PRIMES_THAT_FIT_IN_U16 as &[_] {
                 let prime = Self::from_u16(*prime).expect("can't convert small prime to T");
-                if (self.clone() % prime).is_zero() {
+                if self.is_multiple_of(&prime) {
                     return false;
                 }
             }
         }
         let d = self.clone() - Self::one();
-        let r = d.trailing_zeros().expect("self was checked earlier to be greater than 1");
+        let r = d
+            .trailing_zeros()
+            .expect("self was checked earlier to be greater than 1");
         let d = d >> r;
 
         // from https://oeis.org/A014233
@@ -599,6 +604,98 @@ pub trait IsPseudoPrime:
             return true;
         }
         unimplemented!("TODO: implement lucas probable prime test")
+    }
+}
+
+#[derive(Copy, Clone, Hash, Eq, PartialEq, Debug, Default)]
+pub struct NotAPseudoPrimePower;
+
+impl fmt::Display for NotAPseudoPrimePower {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "not a pseudo-prime power")
+    }
+}
+
+#[derive(Copy, Clone, Hash, Eq, PartialEq, Debug)]
+pub struct BaseAndExponent<T> {
+    base: T,
+    exponent: usize,
+}
+
+pub trait IsPseudoPrimePower: IsPseudoPrime + FloorLog2 {
+    fn is_pseudo_prime_power(&self) -> Result<BaseAndExponent<Self>, NotAPseudoPrimePower> {
+        let max_power = self.floor_log2().ok_or(NotAPseudoPrimePower)?;
+        if max_power == 0 {
+            // max_power is 0 only if self is 1
+            return Err(NotAPseudoPrimePower);
+        }
+        let prime_count = 100;
+        for &small_prime in &PRIMES_THAT_FIT_IN_U16[0..prime_count] {
+            let prime = Self::from_u16(small_prime).expect("can't convert small prime to T");
+            if self.is_multiple_of(&prime) {
+                let powers_len = max_power.floor_log2().expect("") + 1;
+                // powers[i] == prime.pow(1 << i)
+                let mut powers = Vec::with_capacity(powers_len);
+                match self.cmp(&prime) {
+                    Ordering::Less => {
+                        unreachable!(
+                            "already checked for self <= 0, which are \
+                             the only multiples of prime less than prime"
+                        );
+                    }
+                    Ordering::Equal => {
+                        return Ok(BaseAndExponent {
+                            base: prime,
+                            exponent: 1,
+                        });
+                    }
+                    Ordering::Greater => {}
+                }
+                powers.push(prime.clone());
+                let mut exponent = 1;
+                for i in 1..powers_len {
+                    let mut power = powers[i - 1].clone();
+                    power *= power.clone();
+                    exponent <<= 1;
+                    match self.cmp(&power) {
+                        Ordering::Less => break,
+                        Ordering::Equal => {
+                            return Ok(BaseAndExponent {
+                                base: prime,
+                                exponent,
+                            });
+                        }
+                        Ordering::Greater => {
+                            assert!(i < powers_len - 1, "underestimated powers_len");
+                        }
+                    }
+                    powers.push(power);
+                }
+                let mut power = powers.pop().expect("powers is known to not be empty");
+                for (shift, mut current_power) in powers.into_iter().enumerate().rev() {
+                    current_power *= power.clone();
+                    let current_exponent = exponent | (1 << shift);
+                    match self.cmp(&current_power) {
+                        Ordering::Less => {
+                            power = current_power;
+                            exponent = current_exponent;
+                        }
+                        Ordering::Equal => {
+                            return Ok(BaseAndExponent {
+                                base: prime,
+                                exponent: current_exponent,
+                            });
+                        }
+                        Ordering::Greater => {}
+                    }
+                }
+                unreachable!("should have checked all possible powers in above loop");
+            }
+        }
+        let last_checked_small_prime = PRIMES_THAT_FIT_IN_U16[prime_count - 1];
+        let last_checked_small_prime =
+            Self::from_u16(last_checked_small_prime).expect("can't convert small prime to T");
+        unimplemented!("FIXME: implement")
     }
 }
 
