@@ -376,11 +376,13 @@ impl_prim_trailing_zeros_and_log2!(u16);
 impl_prim_trailing_zeros_and_log2!(u32);
 impl_prim_trailing_zeros_and_log2!(u64);
 impl_prim_trailing_zeros_and_log2!(u128);
+impl_prim_trailing_zeros_and_log2!(usize);
 impl_prim_trailing_zeros_and_log2!(i8);
 impl_prim_trailing_zeros_and_log2!(i16);
 impl_prim_trailing_zeros_and_log2!(i32);
 impl_prim_trailing_zeros_and_log2!(i64);
 impl_prim_trailing_zeros_and_log2!(i128);
+impl_prim_trailing_zeros_and_log2!(isize);
 
 impl CeilLog2 for BigUint {
     fn ceil_log2(&self) -> Option<usize> {
