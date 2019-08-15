@@ -505,6 +505,40 @@ pub const PRIMES_THAT_FIT_IN_U16: &[u16; 6542] = &[
     65423, 65437, 65447, 65449, 65479, 65497, 65519, 65521,
 ];
 
+pub fn is_prime_u32(v: u32) -> bool {
+    if v <= 1 {
+        return false;
+    }
+    for &prime in &PRIMES_THAT_FIT_IN_U16[..] {
+        let prime = u32::from(prime);
+        if v == prime {
+            return true;
+        }
+        if v % prime == 0 {
+            return false;
+        }
+        if prime * prime > v {
+            return true;
+        }
+    }
+    true
+}
+
+pub fn prev_prime_u32(mut v: u32) -> Option<u32> {
+    if v <= 2 {
+        return None;
+    }
+    if v == 3 {
+        return Some(2);
+    }
+    v |= 1;
+    v -= 2;
+    while !is_prime_u32(v) {
+        v -= 2;
+    }
+    Some(v)
+}
+
 fn is_prime_check_small_divisors(v: u128) -> Option<bool> {
     if v <= 1 {
         return Some(false);
@@ -889,5 +923,19 @@ pub(crate) mod tests {
         assert_eq!(op_ref_move(&l, r.clone()), *expected);
         assert_eq!(op_move_ref(l.clone(), &r), *expected);
         assert_eq!(op_move_move(l, r), *expected);
+    }
+
+    pub(crate) fn test_unary_op_helper<
+        T: Clone + PartialEq + fmt::Debug,
+        OpRef: Fn(&T) -> T,
+        OpMove: Fn(T) -> T,
+    >(
+        v: T,
+        expected: &T,
+        op_ref: OpRef,
+        op_move: OpMove,
+    ) {
+        assert_eq!(op_ref(&v), *expected);
+        assert_eq!(op_move(v), *expected);
     }
 }
