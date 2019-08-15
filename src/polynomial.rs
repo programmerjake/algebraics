@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // See Notices.txt for copyright information
 use crate::traits::GCDAndLCM;
+use crate::traits::RingCharacteristic;
+use crate::traits::CharacteristicZero;
 use crate::traits::GCD;
 use num_bigint::BigInt;
 use num_integer::Integer;
@@ -815,9 +817,9 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
     /// splits `self` into square-free factors using Yun's algorithm
     ///
     /// Note that the returned factors are not necessarily irreducible.
-    pub fn square_free_factorization(&self) -> Vec<Self>
+    pub fn square_free_factorization_using_yuns_algorithm(&self) -> Vec<Self>
     where
-        T: GCD<Output = T> + PartialOrd + PolynomialDivSupported,
+        T: GCD<Output = T> + PartialOrd + PolynomialDivSupported + RingCharacteristic<Type=CharacteristicZero>,
         T::Element: Div<Output = T::Element> + DivAssign,
         for<'a> T::Element: Div<&'a T::Element, Output = T::Element> + DivAssign<&'a T::Element>,
     {
@@ -1067,13 +1069,13 @@ mod tests {
     }
 
     #[test]
-    fn test_square_free_factorization() {
+    fn test_square_free_factorization_using_yuns_algorithm() {
         fn test(
             poly: Polynomial<Ratio<BigInt>>,
             expected_factorization: Vec<Polynomial<Ratio<BigInt>>>,
         ) {
             println!("poly=({})", poly);
-            let square_free_factorization = poly.square_free_factorization();
+            let square_free_factorization = poly.square_free_factorization_using_yuns_algorithm();
             println!("square_free_factorization:");
             for i in &square_free_factorization {
                 println!("    {}", i);

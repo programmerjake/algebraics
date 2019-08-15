@@ -5,7 +5,10 @@ use crate::polynomial::PolynomialCoefficient;
 use num_bigint::{BigInt, BigUint};
 use num_integer::Integer;
 use num_rational::Ratio;
+use num_traits::One;
 use num_traits::{CheckedDiv, CheckedMul, Signed, ToPrimitive, Zero};
+use std::fmt;
+use std::ops::Add;
 use std::ops::Mul;
 
 /// GCD and LCM
@@ -471,6 +474,65 @@ pub trait IsolatedRealRoot<T: PolynomialCoefficient + Integer> {
     fn lower_bound(&self) -> &Ratio<T>;
     fn upper_bound(&self) -> &Ratio<T>;
 }
+
+#[derive(Copy, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Debug)]
+pub struct CharacteristicZero;
+
+impl Add for CharacteristicZero {
+    type Output = Self;
+    fn add(self, _rhs: Self) -> Self {
+        CharacteristicZero
+    }
+}
+
+impl Zero for CharacteristicZero {
+    fn zero() -> Self {
+        CharacteristicZero
+    }
+    fn is_zero(&self) -> bool {
+        true
+    }
+}
+
+pub trait RingCharacteristic: Zero + One {
+    type Type: Zero + fmt::Debug;
+    fn characteristic(&self) -> Self::Type;
+}
+
+impl<T: RingCharacteristic<Type = CharacteristicZero> + Clone + Integer> RingCharacteristic
+    for Ratio<T>
+{
+    type Type = CharacteristicZero;
+    fn characteristic(&self) -> CharacteristicZero {
+        CharacteristicZero
+    }
+}
+
+macro_rules! impl_characteristic_zero {
+    ($t:ty) => {
+        impl RingCharacteristic for $t {
+            type Type = CharacteristicZero;
+            fn characteristic(&self) -> CharacteristicZero {
+                CharacteristicZero
+            }
+        }
+    };
+}
+
+impl_characteristic_zero!(u8);
+impl_characteristic_zero!(i8);
+impl_characteristic_zero!(u16);
+impl_characteristic_zero!(i16);
+impl_characteristic_zero!(u32);
+impl_characteristic_zero!(i32);
+impl_characteristic_zero!(u64);
+impl_characteristic_zero!(i64);
+impl_characteristic_zero!(u128);
+impl_characteristic_zero!(i128);
+impl_characteristic_zero!(usize);
+impl_characteristic_zero!(isize);
+impl_characteristic_zero!(BigUint);
+impl_characteristic_zero!(BigInt);
 
 #[cfg(test)]
 mod tests {

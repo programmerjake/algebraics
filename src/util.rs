@@ -3,7 +3,9 @@
 use crate::mod_int::ModularInteger;
 use crate::mod_int::ModularReducePow;
 use crate::mod_int::Modulus;
+use crate::traits::CharacteristicZero;
 use crate::traits::FloorLog2;
+use crate::traits::RingCharacteristic;
 use crate::traits::TrailingZeros;
 use num_integer::Integer;
 use num_integer::Roots;
@@ -587,6 +589,7 @@ pub trait IsPseudoPrime:
     + TrailingZeros
     + Modulus<Value = Self>
     + Roots
+    + RingCharacteristic<Type = CharacteristicZero>
 {
     fn is_pseudo_prime(&self) -> bool {
         if *self <= One::one() {
