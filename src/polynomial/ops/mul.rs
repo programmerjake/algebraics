@@ -140,7 +140,10 @@ impl<'a, T: PolynomialCoefficient> MulAssign<&'a T> for Polynomial<T> {
     }
 }
 
-impl<T: PolynomialCoefficient> One for Polynomial<T> {
+impl<T: PolynomialCoefficient> One for Polynomial<T>
+where
+    T::Element: One,
+{
     fn one() -> Self {
         Self {
             elements: vec![One::one()],

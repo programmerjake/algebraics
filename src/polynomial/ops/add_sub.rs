@@ -20,12 +20,23 @@ fn add_sub_assign<T: PolynomialCoefficient, AddSubAssign: Fn(&mut T::Element, T:
     rhs: &Polynomial<T>,
     add_sub_assign: AddSubAssign,
 ) {
+    let source_element = match lhs.elements.first().or_else(|| rhs.elements.first()) {
+        Some(v) => v,
+        None => return,
+    };
     let GCDAndLCM { gcd, lcm: divisor } = lhs.divisor.gcd_lcm(&rhs.divisor);
     let lhs_divisor = mem::replace(&mut lhs.divisor, divisor);
-    let lhs_multiplier = T::divisor_to_element(Cow::Owned(lhs_divisor * &gcd));
-    let rhs_multiplier = T::divisor_to_element(Cow::Owned(gcd * &rhs.divisor));
+    let lhs_multiplier = T::divisor_to_element(
+        Cow::Owned(lhs_divisor * &gcd),
+        Cow::Borrowed(source_element),
+    );
+    let rhs_multiplier = T::divisor_to_element(
+        Cow::Owned(gcd * &rhs.divisor),
+        Cow::Borrowed(source_element),
+    );
     while lhs.len() < rhs.len() {
-        lhs.elements.push(Zero::zero());
+        lhs.elements
+            .push(T::make_zero_element(Cow::Borrowed(&rhs.elements[0])));
     }
     for (index, lhs_element) in lhs.elements.iter_mut().enumerate() {
         *lhs_element *= &lhs_multiplier;
@@ -47,10 +58,17 @@ fn add_sub_assign_single<
     let (rhs_numerator, rhs_divisor) = T::coefficient_to_element(rhs);
     let GCDAndLCM { gcd, lcm: divisor } = lhs.divisor.gcd_lcm(&rhs_divisor);
     let lhs_divisor = mem::replace(&mut lhs.divisor, divisor);
-    let lhs_multiplier = T::divisor_to_element(Cow::Owned(lhs_divisor * &gcd));
-    let rhs_multiplier = T::divisor_to_element(Cow::Owned(gcd * &rhs_divisor));
+    let lhs_multiplier = T::divisor_to_element(
+        Cow::Owned(lhs_divisor * &gcd),
+        Cow::Borrowed(&rhs_numerator),
+    );
+    let rhs_multiplier = T::divisor_to_element(
+        Cow::Owned(gcd * &rhs_divisor),
+        Cow::Borrowed(&rhs_numerator),
+    );
     if lhs.is_empty() {
-        lhs.elements.push(Zero::zero());
+        lhs.elements
+            .push(T::make_zero_element(Cow::Borrowed(&rhs_numerator)));
     }
     lhs.elements[0] *= &lhs_multiplier;
     add_sub_assign(&mut lhs.elements[0], rhs_numerator * &rhs_multiplier);

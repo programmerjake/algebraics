@@ -6,6 +6,7 @@ use crate::polynomial::PolynomialDivSupported;
 use crate::polynomial::PseudoDivRem;
 use crate::traits::GCDAndLCM;
 use crate::traits::GCD;
+use num_traits::One;
 use num_traits::Zero;
 use std::ops::Div;
 use std::ops::DivAssign;
@@ -13,7 +14,7 @@ use std::ops::DivAssign;
 impl<T: PolynomialCoefficient + GCD<Output = T> + PolynomialDivSupported + PartialOrd> GCD
     for Polynomial<T>
 where
-    T::Element: Div<Output = T::Element> + DivAssign,
+    T::Element: Div<Output = T::Element> + DivAssign + One,
     for<'a> T::Element: Div<&'a T::Element, Output = T::Element> + DivAssign<&'a T::Element>,
 {
     type Output = Self;

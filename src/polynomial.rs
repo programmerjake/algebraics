@@ -41,8 +41,6 @@ pub trait PolynomialCoefficientElement:
     + for<'a> AddAssign<&'a Self>
     + for<'a> SubAssign<&'a Self>
     + for<'a> MulAssign<&'a Self>
-    + One
-    + FromPrimitive
     + GCD<Self, Output = Self>
 {
 }
@@ -62,8 +60,6 @@ impl<
             + for<'a> AddAssign<&'a Self>
             + for<'a> SubAssign<&'a Self>
             + for<'a> MulAssign<&'a Self>
-            + One
-            + FromPrimitive
             + GCD<Self, Output = Self>,
     > PolynomialCoefficientElement for T
 {
@@ -74,7 +70,6 @@ pub trait PolynomialCoefficient:
     + Eq
     + fmt::Debug
     + hash::Hash
-    + Zero
     + Add<Output = Self>
     + Mul<Output = Self>
     + Sub<Output = Self>
@@ -88,8 +83,6 @@ pub trait PolynomialCoefficient:
     + for<'a> AddAssign<&'a Self>
     + for<'a> SubAssign<&'a Self>
     + for<'a> MulAssign<&'a Self>
-    + One
-    + FromPrimitive
 {
     type Element: PolynomialCoefficientElement;
     type Divisor: Clone
@@ -106,7 +99,56 @@ pub trait PolynomialCoefficient:
         + for<'a> DivAssign<&'a Self::Divisor>
         + GCD<Output = Self::Divisor>
         + One;
-    fn divisor_to_element(v: Cow<Self::Divisor>) -> Self::Element;
+    fn is_element_zero(element: &Self::Element) -> bool;
+    fn is_element_one(element: &Self::Element) -> bool;
+    fn is_coefficient_zero(coefficient: &Self) -> bool;
+    fn is_coefficient_one(coefficient: &Self) -> bool;
+    fn set_element_zero(element: &mut Self::Element);
+    fn set_element_one(element: &mut Self::Element);
+    fn set_coefficient_zero(coefficient: &mut Self);
+    fn set_coefficient_one(coefficient: &mut Self);
+    fn make_zero_element(element: Cow<Self::Element>) -> Self::Element {
+        let mut element = element.into_owned();
+        Self::set_element_zero(&mut element);
+        element
+    }
+    fn make_one_element(element: Cow<Self::Element>) -> Self::Element {
+        let mut element = element.into_owned();
+        Self::set_element_one(&mut element);
+        element
+    }
+    fn make_zero_coefficient_from_element(element: Cow<Self::Element>) -> Self {
+        Self::make_coefficient(
+            Cow::Owned(Self::make_zero_element(element)),
+            Cow::Owned(One::one()),
+        )
+    }
+    fn make_one_coefficient_from_element(element: Cow<Self::Element>) -> Self {
+        Self::make_coefficient(
+            Cow::Owned(Self::make_one_element(element)),
+            Cow::Owned(One::one()),
+        )
+    }
+    fn make_zero_coefficient_from_coefficient(coefficient: Cow<Self>) -> Self {
+        let mut coefficient = coefficient.into_owned();
+        Self::set_coefficient_zero(&mut coefficient);
+        coefficient
+    }
+    fn make_one_coefficient_from_coefficient(coefficient: Cow<Self>) -> Self {
+        let mut coefficient = coefficient.into_owned();
+        Self::set_coefficient_one(&mut coefficient);
+        coefficient
+    }
+    fn negate_element(element: &mut Self::Element) {
+        let zero = Self::make_zero_element(Cow::Borrowed(&element));
+        *element = -mem::replace(element, zero);
+    }
+    fn mul_element_by_usize(element: Cow<Self::Element>, multiplier: usize) -> Self::Element;
+    fn mul_assign_element_by_usize(element: &mut Self::Element, multiplier: usize);
+    fn divisor_to_element(
+        v: Cow<Self::Divisor>,
+        other_element: Cow<Self::Element>,
+    ) -> Self::Element;
     fn coefficients_to_elements(coefficients: Cow<[Self]>) -> (Vec<Self::Element>, Self::Divisor);
     fn make_coefficient(element: Cow<Self::Element>, divisor: Cow<Self::Divisor>) -> Self;
     fn reduce_divisor(elements: &mut [Self::Element], divisor: &mut Self::Divisor);
@@ -142,7 +184,7 @@ pub trait PolynomialCoefficient:
     }
     fn element_pow_usize(mut base: Self::Element, mut exponent: usize) -> Self::Element {
         if exponent == 0 {
-            return One::one();
+            return Self::make_one_element(Cow::Owned(base));
         }
         let mut retval = None;
         loop {
@@ -168,14 +210,105 @@ impl<
             + for<'a> DivAssign<&'a T>
             + for<'a> Div<&'a T, Output = T>
             + DivAssign
-            + RemAssign,
+            + RemAssign
+            + FromPrimitive,
     > PolynomialCoefficient for Ratio<T>
-where
-    Ratio<T>: FromPrimitive,
 {
     type Element = T;
     type Divisor = T;
-    fn divisor_to_element(v: Cow<Self::Divisor>) -> Self::Element {
+    fn is_element_zero(element: &Self::Element) -> bool {
+        element.is_zero()
+    }
+    fn is_element_one(element: &Self::Element) -> bool {
+        element.is_one()
+    }
+    fn is_coefficient_zero(coefficient: &Self) -> bool {
+        coefficient.is_zero()
+    }
+    fn is_coefficient_one(coefficient: &Self) -> bool {
+        coefficient.is_one()
+    }
+    fn set_element_zero(element: &mut Self::Element) {
+        element.set_zero();
+    }
+    fn set_element_one(element: &mut Self::Element) {
+        element.set_one();
+    }
+    fn set_coefficient_zero(coefficient: &mut Self) {
+        coefficient.set_zero();
+    }
+    fn set_coefficient_one(coefficient: &mut Self) {
+        coefficient.set_one();
+    }
+    fn make_zero_element(element: Cow<Self::Element>) -> Self::Element {
+        match element {
+            Cow::Borrowed(_) => Zero::zero(),
+            Cow::Owned(mut element) => {
+                element.set_zero();
+                element
+            }
+        }
+    }
+    fn make_one_element(element: Cow<Self::Element>) -> Self::Element {
+        match element {
+            Cow::Borrowed(_) => One::one(),
+            Cow::Owned(mut element) => {
+                element.set_one();
+                element
+            }
+        }
+    }
+    fn make_zero_coefficient_from_element(element: Cow<Self::Element>) -> Self {
+        match element {
+            Cow::Borrowed(_) => Zero::zero(),
+            Cow::Owned(element) => {
+                let mut coefficient = Ratio::from(element);
+                coefficient.set_zero();
+                coefficient
+            }
+        }
+    }
+    fn make_one_coefficient_from_element(element: Cow<Self::Element>) -> Self {
+        match element {
+            Cow::Borrowed(_) => One::one(),
+            Cow::Owned(element) => {
+                let mut coefficient = Ratio::from(element);
+                coefficient.set_one();
+                coefficient
+            }
+        }
+    }
+    fn make_zero_coefficient_from_coefficient(coefficient: Cow<Self>) -> Self {
+        match coefficient {
+            Cow::Borrowed(_) => Zero::zero(),
+            Cow::Owned(mut coefficient) => {
+                coefficient.set_zero();
+                coefficient
+            }
+        }
+    }
+    fn make_one_coefficient_from_coefficient(coefficient: Cow<Self>) -> Self {
+        match coefficient {
+            Cow::Borrowed(_) => One::one(),
+            Cow::Owned(mut coefficient) => {
+                coefficient.set_one();
+                coefficient
+            }
+        }
+    }
+    fn negate_element(element: &mut Self::Element) {
+        *element = -mem::replace(element, Zero::zero());
+    }
+    fn mul_element_by_usize(element: Cow<Self::Element>, multiplier: usize) -> Self::Element {
+        let multiplier =
+            Self::Element::from_usize(multiplier).expect("can't convert multiplier to element");
+        element.into_owned() * multiplier
+    }
+    fn mul_assign_element_by_usize(element: &mut Self::Element, multiplier: usize) {
+        *element *=
+            Self::Element::from_usize(multiplier).expect("can't convert multiplier to element");
+    }
+    fn divisor_to_element(v: Cow<Self::Divisor>, _: Cow<Self::Element>) -> Self::Element {
         v.into_owned()
     }
     fn coefficients_to_elements(coefficients: Cow<[Self]>) -> (Vec<Self::Element>, Self::Divisor) {
@@ -360,7 +493,68 @@ macro_rules! impl_polynomial_coefficient_for_int {
         impl PolynomialCoefficient for $t {
             type Element = $t;
             type Divisor = DivisorIsOne;
-            fn divisor_to_element(_v: Cow<Self::Divisor>) -> Self::Element {
+            fn is_element_zero(element:&Self::Element) -> bool {
+                element.is_zero()
+            }
+            fn is_element_one(element:&Self::Element) -> bool {
+                element.is_one()
+            }
+            fn is_coefficient_zero(coefficient:&Self) -> bool {
+                coefficient.is_zero()
+            }
+            fn is_coefficient_one(coefficient:&Self) -> bool {
+                coefficient.is_one()
+            }
+            fn set_element_zero(element: &mut Self::Element) {
+                element.set_zero();
+            }
+            fn set_element_one(element: &mut Self::Element) {
+                element.set_one();
+            }
+            fn set_coefficient_zero(coefficient: &mut Self) {
+                coefficient.set_zero();
+            }
+            fn set_coefficient_one(coefficient: &mut Self) {
+                coefficient.set_one();
+            }
+            fn make_zero_element(element: Cow<Self::Element>) -> Self::Element {
+                match element {
+                    Cow::Borrowed(_) => Zero::zero(),
+                    Cow::Owned(mut element) => {element.set_zero(); element}
+                }
+            }
+            fn make_one_element(element: Cow<Self::Element>) -> Self::Element {
+                match element {
+                    Cow::Borrowed(_) => One::one(),
+                    Cow::Owned(mut element) => {element.set_one(); element}
+                }
+            }
+            fn make_zero_coefficient_from_element(element: Cow<Self::Element>) -> Self {
+                Self::make_zero_element(element)
+            }
+            fn make_one_coefficient_from_element(element: Cow<Self::Element>) -> Self {
+                Self::make_one_element(element)
+            }
+            fn make_zero_coefficient_from_coefficient(coefficient: Cow<Self>) -> Self {
+                Self::make_zero_element(coefficient)
+            }
+            fn make_one_coefficient_from_coefficient(coefficient: Cow<Self>) -> Self {
+                Self::make_one_element(coefficient)
+            }
+            fn negate_element(element: &mut Self::Element) {
+                *element = -mem::replace(element, Zero::zero());
+            }
+            fn mul_element_by_usize(element: Cow<Self::Element>, multiplier: usize) -> Self::Element {
+                let multiplier = Self::Element::from_usize(multiplier).expect("can't convert multiplier to element");
+                match element {
+                    Cow::Borrowed(element)=>element * multiplier,
+                    Cow::Owned(element)=>element * multiplier,
+                }
+            }
+            fn mul_assign_element_by_usize(element: &mut Self::Element, multiplier: usize) {
+                *element *= Self::Element::from_usize(multiplier).expect("can't convert multiplier to element");
+            }
+            fn divisor_to_element(_v: Cow<Self::Divisor>, _: Cow<Self::Element>) -> Self::Element {
                 One::one()
             }
             fn coefficients_to_elements(coefficients: Cow<[Self]>) -> (Vec<Self::Element>, Self::Divisor) {
@@ -400,7 +594,7 @@ pub trait PolynomialDivSupported:
     + for<'a> Div<&'a Self, Output = Self>
     + Div<Output = Self>
 where
-    Self::Element: Div<Output = Self::Element> + DivAssign,
+    Self::Element: Div<Output = Self::Element> + DivAssign + One,
     for<'a> Self::Element:
         Div<&'a Self::Element, Output = Self::Element> + DivAssign<&'a Self::Element>,
 {
@@ -412,10 +606,9 @@ impl<
             + for<'a> Div<&'a T, Output = T>
             + for<'a> DivAssign<&'a T>
             + DivAssign
-            + RemAssign,
+            + RemAssign
+            + FromPrimitive,
     > PolynomialDivSupported for Ratio<T>
-where
-    Ratio<T>: FromPrimitive,
 {
 }
 
@@ -453,7 +646,7 @@ impl<'a, T: PolynomialCoefficient> From<Cow<'a, [T]>> for Polynomial<T> {
         match &mut coefficients {
             Cow::Borrowed(coefficients) => {
                 while let Some((last, rest)) = coefficients.split_last() {
-                    if !last.is_zero() {
+                    if !T::is_coefficient_zero(last) {
                         break;
                     }
                     *coefficients = rest;
@@ -461,7 +654,7 @@ impl<'a, T: PolynomialCoefficient> From<Cow<'a, [T]>> for Polynomial<T> {
             }
             Cow::Owned(coefficients) => {
                 while let Some(last) = coefficients.last() {
-                    if !last.is_zero() {
+                    if !T::is_coefficient_zero(last) {
                         break;
                     }
                     coefficients.pop();
@@ -487,10 +680,10 @@ impl<T: PolynomialCoefficient> From<&'_ [T]> for Polynomial<T> {
 
 impl<T: PolynomialCoefficient> From<T> for Polynomial<T> {
     fn from(coefficient: T) -> Self {
-        if coefficient.is_zero() {
+        let (element, divisor) = T::coefficient_to_element(Cow::Owned(coefficient));
+        if T::is_element_zero(&element) {
             Zero::zero()
         } else {
-            let (element, divisor) = T::coefficient_to_element(Cow::Owned(coefficient));
             Self {
                 elements: vec![element],
                 divisor,
@@ -501,10 +694,10 @@ impl<T: PolynomialCoefficient> From<T> for Polynomial<T> {
 
 impl<T: PolynomialCoefficient> From<&T> for Polynomial<T> {
     fn from(coefficient: &T) -> Self {
-        if coefficient.is_zero() {
+        let (element, divisor) = T::coefficient_to_element(Cow::Borrowed(coefficient));
+        if T::is_element_zero(&element) {
             Zero::zero()
         } else {
-            let (element, divisor) = T::coefficient_to_element(Cow::Borrowed(coefficient));
             Self {
                 elements: vec![element],
                 divisor,
@@ -603,12 +796,19 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
             Cow::Borrowed(&self.divisor),
         )
     }
-    pub fn highest_power_coefficient(&self) -> T {
+    pub fn nonzero_highest_power_coefficient(&self) -> Option<T> {
         if self.is_empty() {
-            Zero::zero()
+            None
         } else {
-            self.coefficient(self.len() - 1)
+            Some(self.coefficient(self.len() - 1))
         }
+    }
+    pub fn highest_power_coefficient(&self) -> T
+    where
+        T: Zero,
+    {
+        self.nonzero_highest_power_coefficient()
+            .unwrap_or_else(Zero::zero)
     }
     pub fn into_coefficients(self) -> Vec<T> {
         let divisor = &self.divisor;
@@ -634,7 +834,7 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
     }
     fn normalize(&mut self) {
         while let Some(last) = self.elements.last() {
-            if !last.is_zero() {
+            if !T::is_element_zero(last) {
                 break;
             }
             self.elements.pop();
@@ -646,45 +846,55 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
         self
     }
     pub fn negate(&mut self) {
-        for element in &mut self.elements {
-            *element = -mem::replace(element, Zero::zero());
+        self.elements.iter_mut().for_each(T::negate_element);
+    }
+    /// returns greatest common divisor of all coefficients
+    pub fn nonzero_content(&self) -> Option<T>
+    where
+        T: GCD<Output = T> + PartialOrd,
+    {
+        if let Some(mut retval) = self.iter().fold(None, |lhs: Option<T>, rhs| match lhs {
+            None => Some(rhs.clone()),
+            Some(lhs) => Some(lhs.gcd(&rhs)),
+        }) {
+            let c = self
+                .nonzero_highest_power_coefficient()
+                .expect("known to be nonzero");
+            let zero = T::make_zero_coefficient_from_coefficient(Cow::Borrowed(&c));
+            if (c < zero) != (retval < zero) {
+                retval = zero - retval;
+            }
+            Some(retval)
+        } else {
+            None
         }
     }
     /// returns greatest common divisor of all coefficients
     pub fn content(&self) -> T
     where
-        T: GCD<Output = T> + PartialOrd,
+        T: GCD<Output = T> + PartialOrd + Zero,
     {
-        let zero = T::zero();
-        if let Some(mut retval) = self.iter().fold(None, |lhs: Option<T>, rhs| match lhs {
-            None => Some(rhs.clone()),
-            Some(lhs) => Some(lhs.gcd(&rhs)),
-        }) {
-            if (self.highest_power_coefficient() < zero) != (retval < zero) {
-                retval = zero - retval;
-            }
-            retval
-        } else {
-            zero
-        }
+        self.nonzero_content().unwrap_or_else(Zero::zero)
     }
     pub fn primitive_part_assign(&mut self)
     where
         T: GCD<Output = T> + PartialOrd,
         for<'a> T::Element: DivAssign<&'a T::Element>,
     {
-        let (content_numerator, content_divisor) =
-            T::coefficient_to_element(Cow::Owned(dbg!(dbg!(&self).content())));
-        if content_numerator.is_zero() {
-            self.set_zero();
-            return;
-        }
+        let content = match self.nonzero_content() {
+            Some(v) => v,
+            None => return,
+        };
+        let (content_numerator, content_divisor) = T::coefficient_to_element(Cow::Owned(content));
         DivAssign::<T::Divisor>::div_assign(&mut self.divisor, content_divisor);
         for element in &mut self.elements {
             *element /= &content_numerator;
         }
         self.normalize();
-        debug_assert!(self.highest_power_coefficient() >= Zero::zero());
+        debug_assert!(self
+            .nonzero_highest_power_coefficient()
+            .map(|v| v >= T::make_zero_coefficient_from_coefficient(Cow::Borrowed(&v)))
+            .unwrap_or(true));
     }
     pub fn into_primitive_part(mut self) -> Self
     where
@@ -705,7 +915,9 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
     where
         T: for<'a> Div<&'a T, Output = T>,
     {
-        *self /= self.highest_power_coefficient();
+        if let Some(v) = self.nonzero_highest_power_coefficient() {
+            *self /= v;
+        }
     }
     pub fn into_monic(mut self) -> Self
     where
@@ -717,16 +929,22 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
     pub fn to_sturm_sequence(&self) -> SturmSequence<T>
     where
         T: PolynomialDivSupported,
-        for<'a> T::Element: DivAssign<&'a T::Element> + Div<&'a T::Element, Output = T::Element>,
-        T::Element: DivAssign + Div<Output = T::Element>,
+        for<'a> T::Element: DivAssign<&'a T::Element>
+            + Div<&'a T::Element, Output = T::Element>
+            + DivAssign
+            + Div<Output = T::Element>
+            + One,
     {
         self.clone().into_sturm_sequence()
     }
     pub fn into_sturm_sequence(self) -> SturmSequence<T>
     where
         T: PolynomialDivSupported,
-        for<'a> T::Element: DivAssign<&'a T::Element> + Div<&'a T::Element, Output = T::Element>,
-        T::Element: DivAssign + Div<Output = T::Element>,
+        for<'a> T::Element: DivAssign<&'a T::Element>
+            + Div<&'a T::Element, Output = T::Element>
+            + DivAssign
+            + Div<Output = T::Element>
+            + One,
     {
         let self_len = self.len();
         match self_len {
@@ -755,8 +973,11 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
     pub fn reduce_multiple_roots(&mut self)
     where
         T: PolynomialDivSupported + GCD<Output = T> + PartialOrd,
-        for<'a> T::Element: DivAssign<&'a T::Element> + Div<&'a T::Element, Output = T::Element>,
-        T::Element: DivAssign + Div<Output = T::Element>,
+        for<'a> T::Element: DivAssign<&'a T::Element>
+            + Div<&'a T::Element, Output = T::Element>
+            + DivAssign
+            + Div<Output = T::Element>
+            + One,
     {
         let derivative = self.derivative();
         *self /= self.gcd(&derivative);
@@ -767,8 +988,7 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
         }
         self.elements.remove(0);
         for (index, element) in self.elements.iter_mut().enumerate() {
-            let index = T::Element::from_usize(index + 1).expect("converting from usize failed");
-            MulAssign::<T::Element>::mul_assign(element, index);
+            T::mul_assign_element_by_usize(element, index + 1);
         }
         self.normalize();
     }
@@ -785,9 +1005,7 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
             .iter()
             .skip(1)
             .enumerate()
-            .map(|(index, element)| {
-                T::Element::from_usize(index + 1).expect("converting from usize failed") * element
-            })
+            .map(|(index, element)| T::mul_element_by_usize(Cow::Borrowed(element), index + 1))
             .collect();
         Self {
             elements,
@@ -805,7 +1023,7 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
             }
             retval
         } else {
-            Zero::zero()
+            T::make_zero_coefficient_from_coefficient(Cow::Borrowed(at))
         }
     }
     pub fn eval(&self, at: &T) -> T {
@@ -836,7 +1054,7 @@ where
         + PartialOrd
         + PolynomialDivSupported
         + RingCharacteristic<Type = CharacteristicZero>,
-    T::Element: Div<Output = T::Element> + DivAssign,
+    T::Element: Div<Output = T::Element> + DivAssign + One,
     for<'a> T::Element: Div<&'a T::Element, Output = T::Element> + DivAssign<&'a T::Element>,
 {
     /// splits `self` into square-free factors using Yun's algorithm
@@ -911,7 +1129,7 @@ macro_rules! impl_from_primitive_fn {
     };
 }
 
-impl<T: PolynomialCoefficient> FromPrimitive for Polynomial<T> {
+impl<T: PolynomialCoefficient + FromPrimitive> FromPrimitive for Polynomial<T> {
     impl_from_primitive_fn!(from_i8, i8);
     impl_from_primitive_fn!(from_u8, u8);
     impl_from_primitive_fn!(from_i16, i16);
@@ -981,8 +1199,11 @@ impl From<PolynomialIsZero> for std::io::Error {
 
 impl<T: PolynomialDivSupported> SturmSequence<T>
 where
-    for<'a> T::Element: DivAssign<&'a T::Element> + Div<&'a T::Element, Output = T::Element>,
-    T::Element: DivAssign + Div<Output = T::Element>,
+    for<'a> T::Element: DivAssign<&'a T::Element>
+        + Div<&'a T::Element, Output = T::Element>
+        + DivAssign
+        + Div<Output = T::Element>
+        + One,
 {
     pub fn new(polynomial: Polynomial<T>) -> Self {
         polynomial.into_sturm_sequence()
