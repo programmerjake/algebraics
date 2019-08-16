@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // See Notices.txt for copyright information
+use crate::traits::CharacteristicZero;
 use crate::traits::GCDAndLCM;
 use crate::traits::RingCharacteristic;
-use crate::traits::CharacteristicZero;
 use crate::traits::GCD;
 use num_bigint::BigInt;
 use num_integer::Integer;
@@ -814,18 +814,41 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
     pub fn into_eval(self, at: &T) -> T {
         Self::eval_helper(self.into_iter(), at)
     }
+}
+
+#[derive(Clone, Eq, Hash, PartialEq, Debug)]
+pub struct PolynomialFactors<T: PolynomialCoefficient> {
+    constant_factor: T,
+    // irreducible polynomials
+    polynomial_factors: Vec<Polynomial<T>>,
+}
+
+#[derive(Clone, Eq, Hash, PartialEq, Debug)]
+pub struct SquareFreePolynomialFactors<T: PolynomialCoefficient> {
+    constant_factor: T,
+    // `polynomial_factors[n]` is raised to the power `n + 1` in the polynomial that was factored
+    polynomial_factors: Vec<Polynomial<T>>,
+}
+
+impl<T> Polynomial<T>
+where
+    T: GCD<Output = T>
+        + PartialOrd
+        + PolynomialDivSupported
+        + RingCharacteristic<Type = CharacteristicZero>,
+    T::Element: Div<Output = T::Element> + DivAssign,
+    for<'a> T::Element: Div<&'a T::Element, Output = T::Element> + DivAssign<&'a T::Element>,
+{
     /// splits `self` into square-free factors using Yun's algorithm
     ///
     /// Note that the returned factors are not necessarily irreducible.
-    pub fn square_free_factorization_using_yuns_algorithm(&self) -> Vec<Self>
-    where
-        T: GCD<Output = T> + PartialOrd + PolynomialDivSupported + RingCharacteristic<Type=CharacteristicZero>,
-        T::Element: Div<Output = T::Element> + DivAssign,
-        for<'a> T::Element: Div<&'a T::Element, Output = T::Element> + DivAssign<&'a T::Element>,
-    {
+    pub fn square_free_factorization_using_yuns_algorithm(&self) -> SquareFreePolynomialFactors<T> {
         #![allow(clippy::many_single_char_names)]
         if self.is_zero() {
-            return vec![self.clone()];
+            return SquareFreePolynomialFactors {
+                constant_factor: One::one(),
+                polynomial_factors: vec![self.clone()],
+            };
         }
         // algorithm derived from https://en.wikipedia.org/wiki/Square-free_polynomial#Yun's_algorithm
         let content = self.content();
@@ -848,10 +871,10 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
                 break;
             }
         }
-        if !content.is_one() {
-            a[0] *= content;
+        SquareFreePolynomialFactors {
+            constant_factor: content,
+            polynomial_factors: a,
         }
-        a
     }
 }
 
@@ -1072,16 +1095,18 @@ mod tests {
     fn test_square_free_factorization_using_yuns_algorithm() {
         fn test(
             poly: Polynomial<Ratio<BigInt>>,
-            expected_factorization: Vec<Polynomial<Ratio<BigInt>>>,
+            expected_factorization: SquareFreePolynomialFactors<Ratio<BigInt>>,
         ) {
             println!("poly=({})", poly);
             let square_free_factorization = poly.square_free_factorization_using_yuns_algorithm();
             println!("square_free_factorization:");
-            for i in &square_free_factorization {
+            println!("    {}", square_free_factorization.constant_factor);
+            for i in &square_free_factorization.polynomial_factors {
                 println!("    {}", i);
             }
             println!("expected_factorization:");
-            for i in &expected_factorization {
+            println!("    {}", expected_factorization.constant_factor);
+            for i in &expected_factorization.polynomial_factors {
                 println!("    {}", i);
             }
             assert!(expected_factorization == square_free_factorization);
@@ -1112,23 +1137,44 @@ mod tests {
                 ri(1),
             ]
             .into(),
-            vec![
-                vec![ri(5), ri(1)].into(),
-                vec![ri(4), ri(1)].into(),
-                vec![ri(3), ri(1)].into(),
-                vec![ri(2), ri(1)].into(),
-                vec![ri(1), ri(1)].into(),
-            ],
+            SquareFreePolynomialFactors {
+                constant_factor: ri(1),
+                polynomial_factors: vec![
+                    vec![ri(5), ri(1)].into(),
+                    vec![ri(4), ri(1)].into(),
+                    vec![ri(3), ri(1)].into(),
+                    vec![ri(2), ri(1)].into(),
+                    vec![ri(1), ri(1)].into(),
+                ],
+            },
         );
-        test(Zero::zero(), vec![Zero::zero()]);
-        test(ri(123).into(), vec![ri(123).into()]);
+        test(
+            Zero::zero(),
+            SquareFreePolynomialFactors {
+                constant_factor: ri(1),
+                polynomial_factors: vec![Zero::zero()],
+            },
+        );
+        test(
+            ri(123).into(),
+            SquareFreePolynomialFactors {
+                constant_factor: ri(123),
+                polynomial_factors: vec![ri(1).into()],
+            },
+        );
         test(
             vec![ri(64), ri(16), ri(1)].into(),
-            vec![One::one(), vec![ri(8), ri(1)].into()],
+            SquareFreePolynomialFactors {
+                constant_factor: One::one(),
+                polynomial_factors: vec![One::one(), vec![ri(8), ri(1)].into()],
+            },
         );
         test(
             vec![ri(18), ri(9), ri(1)].into(),
-            vec![vec![ri(18), ri(9), ri(1)].into()],
+            SquareFreePolynomialFactors {
+                constant_factor: One::one(),
+                polynomial_factors: vec![vec![ri(18), ri(9), ri(1)].into()],
+            },
         );
         test(
             vec![
@@ -1145,14 +1191,17 @@ mod tests {
                 ri(1),
             ]
             .into(),
-            vec![
-                One::one(),
-                One::one(),
-                One::one(),
-                vec![ri(6), ri(1)].into(),
-                One::one(),
-                vec![ri(3), ri(1)].into(),
-            ],
+            SquareFreePolynomialFactors {
+                constant_factor: One::one(),
+                polynomial_factors: vec![
+                    One::one(),
+                    One::one(),
+                    One::one(),
+                    vec![ri(6), ri(1)].into(),
+                    One::one(),
+                    vec![ri(3), ri(1)].into(),
+                ],
+            },
         );
         test(
             vec![
@@ -1172,16 +1221,22 @@ mod tests {
                 ri(19_131_876),
             ]
             .into(),
-            vec![
-                vec![ri(4374), ri(2916)].into(),
-                vec![ri(7), ri(8), ri(1)].into(),
-                One::one(),
-                vec![ri(15), ri(32), ri(9)].into(),
-            ],
+            SquareFreePolynomialFactors {
+                constant_factor: ri(1458),
+                polynomial_factors: vec![
+                    vec![ri(3), ri(2)].into(),
+                    vec![ri(7), ri(8), ri(1)].into(),
+                    One::one(),
+                    vec![ri(15), ri(32), ri(9)].into(),
+                ],
+            },
         );
         test(
             vec![r(16, 5), r(16, 5), r(4, 5)].into(),
-            vec![r(4, 5).into(), vec![ri(2), ri(1)].into()],
+            SquareFreePolynomialFactors {
+                constant_factor: r(4, 5),
+                polynomial_factors: vec![ri(1).into(), vec![ri(2), ri(1)].into()],
+            },
         );
         test(
             vec![
@@ -1198,12 +1253,15 @@ mod tests {
                 ri(-614_656),
             ]
             .into(),
-            vec![
-                vec![ri(-80), ri(-112)].into(),
-                vec![ri(1), ri(4)].into(),
-                vec![ri(4), ri(7)].into(),
-                vec![ri(2), ri(1)].into(),
-            ],
+            SquareFreePolynomialFactors {
+                constant_factor: ri(-16),
+                polynomial_factors: vec![
+                    vec![ri(5), ri(7)].into(),
+                    vec![ri(1), ri(4)].into(),
+                    vec![ri(4), ri(7)].into(),
+                    vec![ri(2), ri(1)].into(),
+                ],
+            },
         );
     }
 }
