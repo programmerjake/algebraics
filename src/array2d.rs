@@ -4,10 +4,13 @@
 use std::borrow::Borrow;
 use std::borrow::BorrowMut;
 use std::fmt;
+use std::iter::FusedIterator;
 use std::ops::Bound;
 use std::ops::Index;
 use std::ops::IndexMut;
 use std::ops::RangeBounds;
+use std::slice;
+use std::vec;
 
 mod private {
     pub trait Sealed {}
@@ -18,19 +21,43 @@ mod private {
 }
 
 pub trait Array2DData: private::Sealed + Borrow<[<Self as Array2DData>::Element]> {
-    type Element: Clone;
+    type Element: Sized;
+    type StrideType: Copy + Default;
+    fn read_stride(y_size: usize, stride: Self::StrideType) -> usize;
+    fn make_stride(y_size: usize) -> Self::StrideType;
 }
 
-impl<T: Clone> Array2DData for Vec<T> {
+impl<T: Sized> Array2DData for Vec<T> {
     type Element = T;
+    type StrideType = ();
+    fn read_stride(y_size: usize, _stride: Self::StrideType) -> usize {
+        y_size
+    }
+    fn make_stride(_y_size: usize) -> Self::StrideType {
+        Default::default()
+    }
 }
 
-impl<'a, T: Clone> Array2DData for &'a [T] {
+impl<'a, T: Sized> Array2DData for &'a [T] {
     type Element = T;
+    type StrideType = usize;
+    fn read_stride(_y_size: usize, stride: Self::StrideType) -> usize {
+        stride
+    }
+    fn make_stride(y_size: usize) -> Self::StrideType {
+        y_size
+    }
 }
 
-impl<'a, T: Clone> Array2DData for &'a mut [T] {
+impl<'a, T: Sized> Array2DData for &'a mut [T] {
     type Element = T;
+    type StrideType = usize;
+    fn read_stride(_y_size: usize, stride: Self::StrideType) -> usize {
+        stride
+    }
+    fn make_stride(y_size: usize) -> Self::StrideType {
+        y_size
+    }
 }
 
 /// column-major 2D array
@@ -90,7 +117,7 @@ impl<'a, T: Clone> Array2DData for &'a mut [T] {
 pub struct Array2DBase<Data: Array2DData> {
     x_size: usize,
     y_size: usize,
-    stride: usize,
+    stride: Data::StrideType,
     data: Data,
 }
 
@@ -100,15 +127,18 @@ struct Array2DSliceData {
     data_offset: usize,
 }
 
+fn get_index_unchecked(stride: usize, x: usize, y: usize) -> usize {
+    x * stride + y
+}
+
 impl<Data: Array2DData> Array2DBase<Data> {
     /// data is a column-major 2D array
-    pub fn from_array<T: Into<Data>>(x_size: usize, y_size: usize, data: T) -> Self {
-        let data = data.into();
+    pub fn from_array(x_size: usize, y_size: usize, data: Data) -> Self {
         assert_eq!(x_size * y_size, data.borrow().len());
         Self {
             x_size,
             y_size,
-            stride: x_size,
+            stride: Data::make_stride(y_size),
             data,
         }
     }
@@ -118,13 +148,16 @@ impl<Data: Array2DData> Array2DBase<Data> {
     pub fn y_size(&self) -> usize {
         self.y_size
     }
-    fn get_index_unchecked(&self, x: usize, y: usize) -> usize {
-        x * self.stride + y
+    pub fn size(&self) -> (usize, usize) {
+        (self.x_size, self.y_size)
+    }
+    fn stride(&self) -> usize {
+        Data::read_stride(self.y_size, self.stride)
     }
     fn get_index(&self, x: usize, y: usize) -> usize {
         assert!(x < self.x_size);
         assert!(y < self.y_size);
-        self.get_index_unchecked(x, y)
+        get_index_unchecked(self.stride(), x, y)
     }
     fn do_slice(
         &self,
@@ -158,7 +191,7 @@ impl<Data: Array2DData> Array2DBase<Data> {
         Array2DSliceData {
             x_size: x_end - x_start,
             y_size: y_end - y_start,
-            data_offset: self.get_index_unchecked(x_start, y_start),
+            data_offset: get_index_unchecked(self.stride(), x_start, y_start),
         }
     }
     pub fn slice<XR: RangeBounds<usize>, YR: RangeBounds<usize>>(
@@ -179,7 +212,7 @@ impl<Data: Array2DData> Array2DBase<Data> {
         Array2DBase {
             x_size,
             y_size,
-            stride: self.stride,
+            stride: self.stride(),
             data: &self.data.borrow()[data_offset..],
         }
     }
@@ -204,9 +237,78 @@ impl<Data: Array2DData> Array2DBase<Data> {
         Array2DBase {
             x_size,
             y_size,
-            stride: self.stride,
+            stride: self.stride(),
             data: &mut self.data.borrow_mut()[data_offset..],
         }
+    }
+    pub fn positions(&self) -> Positions {
+        Positions::new(self.x_size, self.y_size)
+    }
+    pub fn iter(&self) -> Iter<Data::Element> {
+        Iter {
+            positions: self.positions(),
+            stride: self.stride(),
+            data: self.data.borrow(),
+        }
+    }
+    pub fn iter_mut(&mut self) -> IterMut<Data::Element>
+    where
+        Data: BorrowMut<[<Data as Array2DData>::Element]>,
+    {
+        IterMut {
+            positions: self.positions(),
+            data: IterOwnedData {
+                stride: self.stride(),
+                offset: 0,
+                iter: self.data.borrow_mut().iter_mut(),
+            },
+        }
+    }
+    pub fn to_owned(&self) -> Array2DOwned<Data::Element>
+    where
+        Data::Element: Clone,
+    {
+        Array2DBase::from_array(self.x_size, self.y_size, self.iter().cloned().collect())
+    }
+}
+
+impl<T> Array2DBase<Vec<T>> {
+    pub fn new_with_positions<F: FnMut(usize, usize) -> T>(
+        x_size: usize,
+        y_size: usize,
+        mut f: F,
+    ) -> Self {
+        Self::from_array(
+            x_size,
+            y_size,
+            Positions::new(x_size, y_size)
+                .map(move |(x, y)| f(x, y))
+                .collect(),
+        )
+    }
+    pub fn new_with<F: FnMut() -> T>(x_size: usize, y_size: usize, f: F) -> Self {
+        let len = x_size * y_size;
+        let mut data = Vec::with_capacity(len);
+        data.resize_with(len, f);
+        Self::from_array(x_size, y_size, data)
+    }
+    pub fn new(x_size: usize, y_size: usize, value: T) -> Self
+    where
+        T: Clone,
+    {
+        let len = x_size * y_size;
+        let mut data = Vec::with_capacity(len);
+        data.resize(len, value);
+        Self::from_array(x_size, y_size, data)
+    }
+    pub fn into_data(self) -> Vec<T> {
+        self.data
+    }
+    pub fn data(&self) -> &[T] {
+        &*self.data
+    }
+    pub fn data_mut(&mut self) -> &mut [T] {
+        &mut *self.data
     }
 }
 
@@ -316,3 +418,407 @@ impl<T: fmt::Display + Clone, Data: Array2DData<Element = T>> fmt::Display for A
 pub type Array2DOwned<T> = Array2DBase<Vec<T>>;
 pub type Array2DSlice<'a, T> = Array2DBase<&'a [T]>;
 pub type Array2DMutSlice<'a, T> = Array2DBase<&'a mut [T]>;
+
+/// column-major 2D positions iterator
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+pub struct Positions {
+    x: usize,
+    y: usize,
+    y_size: usize,
+    rev_x: usize,
+    after_rev_y: usize,
+}
+
+impl Default for Positions {
+    fn default() -> Self {
+        Self {
+            x: 0,
+            y: 0,
+            y_size: 0,
+            rev_x: 0,
+            after_rev_y: 0,
+        }
+    }
+}
+
+impl Positions {
+    pub fn new(x_size: usize, y_size: usize) -> Self {
+        if x_size == 0 || y_size == 0 {
+            Self::default()
+        } else {
+            Self {
+                x: 0,
+                y: 0,
+                y_size,
+                rev_x: x_size - 1,
+                after_rev_y: y_size,
+            }
+        }
+    }
+    pub fn is_finished(&self) -> bool {
+        self.x == self.rev_x && self.y == self.after_rev_y
+    }
+    pub fn pos(&self) -> Option<(usize, usize)> {
+        if self.is_finished() {
+            return None;
+        }
+        Some((self.x, self.y))
+    }
+    pub fn rev_pos(&self) -> Option<(usize, usize)> {
+        if self.is_finished() {
+            return None;
+        }
+        Some((self.rev_x, self.after_rev_y - 1))
+    }
+}
+
+impl Iterator for Positions {
+    type Item = (usize, usize);
+    fn next(&mut self) -> Option<(usize, usize)> {
+        let pos = self.pos()?;
+        self.y += 1;
+        if self.y == self.y_size && self.rev_x != self.x {
+            self.y = 0;
+            self.x += 1;
+        }
+        Some(pos)
+    }
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let len = self.len();
+        (len, Some(len))
+    }
+    fn count(self) -> usize {
+        self.len()
+    }
+    fn last(mut self) -> Option<(usize, usize)> {
+        self.next_back()
+    }
+}
+
+impl DoubleEndedIterator for Positions {
+    fn next_back(&mut self) -> Option<(usize, usize)> {
+        let pos = self.rev_pos()?;
+        self.after_rev_y -= 1;
+        if self.after_rev_y == 0 && self.rev_x != self.x {
+            self.after_rev_y = self.y_size;
+            self.rev_x -= 1;
+        }
+        Some(pos)
+    }
+}
+
+impl ExactSizeIterator for Positions {
+    fn len(&self) -> usize {
+        self.y_size * (self.rev_x - self.x) + self.after_rev_y - self.y
+    }
+}
+
+impl FusedIterator for Positions {}
+
+macro_rules! impl_positions_wrapper {
+    (($($trait_args:tt),*), $wrapper:ident, $item:ty) => {
+        impl<$($trait_args),*> Iterator for $wrapper<$($trait_args),*> {
+            type Item = $item;
+            fn next(&mut self) -> Option<$item> {
+                let (x, y) = self.positions.next()?;
+                Some(self.get_unchecked(x, y))
+            }
+            fn size_hint(&self) -> (usize, Option<usize>) {
+                self.positions.size_hint()
+            }
+            fn count(self) -> usize {
+                self.positions.count()
+            }
+            fn last(mut self) -> Option<$item> {
+                self.next_back()
+            }
+        }
+
+        impl<$($trait_args),*> DoubleEndedIterator for $wrapper<$($trait_args),*> {
+            fn next_back(&mut self) -> Option<$item> {
+                let (x, y) = self.positions.next_back()?;
+                Some(self.get_unchecked_back(x, y))
+            }
+        }
+
+        impl<$($trait_args),*> ExactSizeIterator for $wrapper<$($trait_args),*> {
+            fn len(&self) -> usize {
+                self.positions.len()
+            }
+        }
+
+        impl<$($trait_args),*> FusedIterator for $wrapper<$($trait_args),*> {}
+    };
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct IterWithPositions<'a, T> {
+    positions: Positions,
+    stride: usize,
+    data: &'a [T],
+}
+
+impl<'a, T> IterWithPositions<'a, T> {
+    pub fn positions(&self) -> Positions {
+        self.positions
+    }
+    pub fn without_positions(self) -> Iter<'a, T> {
+        let IterWithPositions {
+            positions,
+            stride,
+            data,
+        } = self;
+        Iter {
+            positions,
+            stride,
+            data,
+        }
+    }
+    fn get_unchecked(&self, x: usize, y: usize) -> ((usize, usize), &'a T) {
+        ((x, y), &self.data[get_index_unchecked(self.stride, x, y)])
+    }
+    fn get_unchecked_back(&self, x: usize, y: usize) -> ((usize, usize), &'a T) {
+        self.get_unchecked(x, y)
+    }
+}
+
+impl_positions_wrapper!(('a, T), IterWithPositions, ((usize, usize), &'a T));
+
+#[derive(Debug)]
+pub struct IterMutWithPositions<'a, T: 'a> {
+    positions: Positions,
+    data: IterOwnedData<slice::IterMut<'a, T>>,
+}
+
+impl<'a, T: 'a> IterMutWithPositions<'a, T> {
+    pub fn positions(&self) -> Positions {
+        self.positions
+    }
+    pub fn without_positions(self) -> IterMut<'a, T> {
+        let IterMutWithPositions { positions, data } = self;
+        IterMut { positions, data }
+    }
+    fn get_unchecked(&mut self, x: usize, y: usize) -> ((usize, usize), &'a mut T) {
+        ((x, y), self.data.get_unchecked(x, y))
+    }
+    fn get_unchecked_back(&mut self, x: usize, y: usize) -> ((usize, usize), &'a mut T) {
+        ((x, y), self.data.get_unchecked_back(x, y))
+    }
+}
+
+impl_positions_wrapper!(('a, T), IterMutWithPositions, ((usize, usize), &'a mut T));
+
+#[derive(Copy, Clone, Debug)]
+pub struct Iter<'a, T> {
+    positions: Positions,
+    stride: usize,
+    data: &'a [T],
+}
+
+impl<'a, T> Iter<'a, T> {
+    pub fn positions(&self) -> Positions {
+        self.positions
+    }
+    pub fn with_positions(self) -> IterWithPositions<'a, T> {
+        let Iter {
+            positions,
+            stride,
+            data,
+        } = self;
+        IterWithPositions {
+            positions,
+            stride,
+            data,
+        }
+    }
+    fn get_unchecked(&self, x: usize, y: usize) -> &'a T {
+        &self.data[get_index_unchecked(self.stride, x, y)]
+    }
+    fn get_unchecked_back(&self, x: usize, y: usize) -> &'a T {
+        self.get_unchecked(x, y)
+    }
+}
+
+impl_positions_wrapper!(('a, T), Iter, &'a T);
+
+#[derive(Debug)]
+struct IterOwnedData<Iter> {
+    stride: usize,
+    offset: usize,
+    iter: Iter,
+}
+
+impl<Iter: Iterator + DoubleEndedIterator + ExactSizeIterator> IterOwnedData<Iter> {
+    fn get_unchecked(&mut self, x: usize, y: usize) -> Iter::Item {
+        let index = get_index_unchecked(self.stride, x, y) - self.offset;
+        self.offset += index + 1;
+        self.iter.nth(index).expect("data shouldn't be empty")
+    }
+    fn get_unchecked_back(&mut self, x: usize, y: usize) -> Iter::Item {
+        let index = get_index_unchecked(self.stride, x, y) - self.offset;
+        self.iter
+            .nth_back(self.iter.len() - dbg!(index) - 1)
+            .expect("data shouldn't be empty")
+    }
+}
+
+#[derive(Debug)]
+pub struct IterMut<'a, T: 'a> {
+    positions: Positions,
+    data: IterOwnedData<slice::IterMut<'a, T>>,
+}
+
+impl<'a, T: 'a> IterMut<'a, T> {
+    pub fn positions(&self) -> Positions {
+        self.positions
+    }
+    pub fn with_positions(self) -> IterMutWithPositions<'a, T> {
+        let IterMut { positions, data } = self;
+        IterMutWithPositions { positions, data }
+    }
+    fn get_unchecked(&mut self, x: usize, y: usize) -> &'a mut T {
+        self.data.get_unchecked(x, y)
+    }
+    fn get_unchecked_back(&mut self, x: usize, y: usize) -> &'a mut T {
+        self.data.get_unchecked_back(x, y)
+    }
+}
+
+impl_positions_wrapper!(('a, T), IterMut, &'a mut T);
+
+#[derive(Debug)]
+pub struct IntoIterWithPositions<T> {
+    positions: Positions,
+    data: IterOwnedData<vec::IntoIter<T>>,
+}
+
+impl<T> IntoIterWithPositions<T> {
+    pub fn positions(&self) -> Positions {
+        self.positions
+    }
+    pub fn without_positions(self) -> IntoIter<T> {
+        let IntoIterWithPositions { positions, data } = self;
+        IntoIter { positions, data }
+    }
+    fn get_unchecked(&mut self, x: usize, y: usize) -> ((usize, usize), T) {
+        ((x, y), self.data.get_unchecked(x, y))
+    }
+    fn get_unchecked_back(&mut self, x: usize, y: usize) -> ((usize, usize), T) {
+        ((x, y), self.data.get_unchecked_back(x, y))
+    }
+}
+
+impl_positions_wrapper!((T), IntoIterWithPositions, ((usize, usize), T));
+
+#[derive(Debug)]
+pub struct IntoIter<T> {
+    positions: Positions,
+    data: IterOwnedData<vec::IntoIter<T>>,
+}
+
+impl<T> IntoIter<T> {
+    pub fn positions(&self) -> Positions {
+        self.positions
+    }
+    pub fn with_positions(self) -> IntoIterWithPositions<T> {
+        let IntoIter { positions, data } = self;
+        IntoIterWithPositions { positions, data }
+    }
+    fn get_unchecked(&mut self, x: usize, y: usize) -> T {
+        self.data.get_unchecked(x, y)
+    }
+    fn get_unchecked_back(&mut self, x: usize, y: usize) -> T {
+        self.data.get_unchecked_back(x, y)
+    }
+}
+
+impl_positions_wrapper!((T), IntoIter, T);
+
+impl<'a, Data: Array2DData> IntoIterator for &'a Array2DBase<Data> {
+    type Item = &'a Data::Element;
+    type IntoIter = Iter<'a, Data::Element>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
+impl<'a, T: 'a, Data: Array2DData<Element = T> + BorrowMut<[T]>> IntoIterator
+    for &'a mut Array2DBase<Data>
+{
+    type Item = &'a mut Data::Element;
+    type IntoIter = IterMut<'a, Data::Element>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter_mut()
+    }
+}
+
+impl<T> IntoIterator for Array2DBase<Vec<T>> {
+    type Item = T;
+    type IntoIter = IntoIter<T>;
+    fn into_iter(self) -> Self::IntoIter {
+        IntoIter {
+            positions: self.positions(),
+            data: IterOwnedData {
+                stride: self.stride(),
+                offset: 0,
+                iter: self.data.into_iter(),
+            },
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_positions() {
+        let expected_positions_list = &[(0, 0), (0, 1), (0, 2), (1, 0), (1, 1), (1, 2)];
+        for operation_mask in 0..(1 << expected_positions_list.len()) {
+            println!();
+            let mut positions = Positions::new(2, 3);
+            let mut expected_positions = expected_positions_list.iter().copied();
+            dbg!(positions);
+            assert_eq!(positions.len(), expected_positions.len());
+            for operation_index in 0..expected_positions_list.len() {
+                if (operation_mask & (1 << operation_index)) != 0 {
+                    let position = dbg!(positions.next());
+                    let expected_position = expected_positions.next();
+                    assert_eq!(position, expected_position);
+                } else {
+                    let position = dbg!(positions.next_back());
+                    let expected_position = expected_positions.next_back();
+                    assert_eq!(position, expected_position);
+                }
+                dbg!(positions);
+                assert_eq!(positions.len(), expected_positions.len());
+            }
+        }
+    }
+
+    #[test]
+    fn test_iter_mut() {
+        let mut array = Array2DOwned::new_with_positions(2, 3, |x, y| x * 10 + y);
+        let expected_list: Vec<_> = array.data().iter().copied().collect();
+        for operation_mask in 0..(1 << expected_list.len()) {
+            println!();
+            let mut expected = expected_list.iter().copied();
+            let mut iter_mut = array.iter_mut();
+            dbg!(&iter_mut);
+            assert_eq!(expected.len(), iter_mut.len());
+            for operation_index in 0..expected_list.len() {
+                if (operation_mask & (1 << operation_index)) != 0 {
+                    let value = dbg!(iter_mut.next()).copied();
+                    let expected_value = expected.next();
+                    assert_eq!(value, expected_value);
+                } else {
+                    let value = dbg!(iter_mut.next_back()).copied();
+                    let expected_value = expected.next_back();
+                    assert_eq!(value, expected_value);
+                }
+                dbg!(&iter_mut);
+                assert_eq!(expected.len(), iter_mut.len());
+            }
+        }
+    }
+}
