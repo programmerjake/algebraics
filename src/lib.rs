@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // See Notices.txt for copyright information
 pub mod array2d;
+pub mod lattice;
 pub mod mod_int;
 pub mod polynomial;
 pub mod prelude;
