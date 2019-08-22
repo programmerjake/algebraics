@@ -341,6 +341,14 @@ impl<Data: Array2DData> Array2DBase<Data> {
     {
         Array2DBase::from_array(self.x_size, self.y_size, self.iter().cloned().collect())
     }
+    pub fn swap_elements(&mut self, (x1, y1): (usize,usize), (x2, y2): (usize, usize))
+    where
+        Data: BorrowMut<[<Data as Array2DData>::Element]>,
+    {
+        let index1 = self.get_index(x1, y1);
+        let index2 = self.get_index(x2, y2);
+        self.data.borrow_mut().swap(index1, index2);
+    }
 }
 
 impl<T> Array2DBase<Vec<T>> {
@@ -385,8 +393,8 @@ impl<T> Array2DBase<Vec<T>> {
 
 impl<Data: Array2DData> Index<(usize, usize)> for Array2DBase<Data> {
     type Output = Data::Element;
-    fn index(&self, (vector_index, element_index): (usize, usize)) -> &Self::Output {
-        let index = self.get_index(vector_index, element_index);
+    fn index(&self, (x, y): (usize, usize)) -> &Self::Output {
+        let index = self.get_index(x, y);
         &self.data.borrow()[index]
     }
 }
@@ -394,8 +402,8 @@ impl<Data: Array2DData> Index<(usize, usize)> for Array2DBase<Data> {
 impl<Data: Array2DData + BorrowMut<[<Data as Array2DData>::Element]>> IndexMut<(usize, usize)>
     for Array2DBase<Data>
 {
-    fn index_mut(&mut self, (vector_index, element_index): (usize, usize)) -> &mut Self::Output {
-        let index = self.get_index(vector_index, element_index);
+    fn index_mut(&mut self, (x, y): (usize, usize)) -> &mut Self::Output {
+        let index = self.get_index(x, y);
         &mut self.data.borrow_mut()[index]
     }
 }
