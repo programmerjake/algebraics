@@ -8,19 +8,22 @@ use std::iter::FusedIterator;
 use std::ops::Bound;
 use std::ops::Index;
 use std::ops::IndexMut;
+use std::ops::Range;
 use std::ops::RangeBounds;
 use std::slice;
 use std::vec;
 
 mod private {
-    pub trait Sealed {}
+    pub trait SealedData {}
 
-    impl<T> Sealed for Vec<T> {}
-    impl<'a, T> Sealed for &'a [T] {}
-    impl<'a, T> Sealed for &'a mut [T] {}
+    impl<T> SealedData for Vec<T> {}
+    impl<'a, T> SealedData for &'a [T] {}
+    impl<'a, T> SealedData for &'a mut [T] {}
 }
 
-pub trait Array2DData: Sized + private::Sealed + Borrow<[<Self as Array2DData>::Element]> {
+pub trait Array2DData:
+    Sized + private::SealedData + Borrow<[<Self as Array2DData>::Element]>
+{
     type Element: Sized;
     type StrideType: Copy + Default;
     type IntoIter: Iterator;
@@ -163,6 +166,39 @@ fn get_index_unchecked(stride: usize, x: usize, y: usize) -> usize {
     x * stride + y
 }
 
+pub trait Array2DSliceBound {
+    fn to_slice_bound(self) -> (Bound<usize>, Bound<usize>);
+}
+
+impl Array2DSliceBound for usize {
+    fn to_slice_bound(self) -> (Bound<usize>, Bound<usize>) {
+        (Bound::Included(self), Bound::Included(self))
+    }
+}
+
+fn bound_cloned<T: Clone>(bound: Bound<&T>) -> Bound<T> {
+    match bound {
+        Bound::Unbounded => Bound::Unbounded,
+        Bound::Excluded(v) => Bound::Excluded(v.clone()),
+        Bound::Included(v) => Bound::Included(v.clone()),
+    }
+}
+
+macro_rules! impl_array2d_slice_bound {
+    ($t:ty) => {
+        impl Array2DSliceBound for $t {
+            fn to_slice_bound(self) -> (Bound<usize>, Bound<usize>) {
+                (
+                    bound_cloned(self.start_bound()),
+                    bound_cloned(self.end_bound()),
+                )
+            }
+        }
+    };
+}
+
+impl_array2d_slice_bound!(Range<usize>);
+
 impl<Data: Array2DData> Array2DBase<Data> {
     /// data is a column-major 2D array
     pub fn from_array(x_size: usize, y_size: usize, data: Data) -> Self {
@@ -191,56 +227,47 @@ impl<Data: Array2DData> Array2DBase<Data> {
         assert!(y < self.y_size);
         get_index_unchecked(self.stride(), x, y)
     }
-    fn do_slice(
+    fn do_slice<XB: Array2DSliceBound, YB: Array2DSliceBound>(
         &self,
-        x_start_bound: Bound<&usize>,
-        x_end_bound: Bound<&usize>,
-        y_start_bound: Bound<&usize>,
-        y_end_bound: Bound<&usize>,
+        x_bound: XB,
+        y_bound: YB,
     ) -> Array2DSliceData {
-        fn start(bound: Bound<&usize>) -> usize {
-            match bound {
+        fn start_and_end(
+            (start_bound, end_bound): (Bound<usize>, Bound<usize>),
+            size: usize,
+        ) -> (usize, usize) {
+            let start = match start_bound {
                 Bound::Unbounded => 0,
-                Bound::Excluded(&v) => v + 1,
-                Bound::Included(&v) => v,
-            }
-        }
-        fn end(bound: Bound<&usize>, size: usize) -> usize {
-            match bound {
+                Bound::Excluded(v) => v + 1,
+                Bound::Included(v) => v,
+            };
+            let end = match end_bound {
                 Bound::Unbounded => size,
-                Bound::Excluded(&v) => v,
-                Bound::Included(&v) => v - 1,
-            }
+                Bound::Excluded(v) => v,
+                Bound::Included(v) => v + 1,
+            };
+            assert!(start <= end);
+            assert!(end <= size);
+            (start, end)
         }
-        let x_start = start(x_start_bound);
-        let x_end = end(x_end_bound, self.x_size);
-        let y_start = start(y_start_bound);
-        let y_end = end(y_end_bound, self.y_size);
-        assert!(x_start <= x_end);
-        assert!(x_end <= self.x_size);
-        assert!(y_start <= y_end);
-        assert!(y_end <= self.y_size);
+        let (x_start, x_end) = start_and_end(x_bound.to_slice_bound(), self.x_size);
+        let (y_start, y_end) = start_and_end(y_bound.to_slice_bound(), self.y_size);
         Array2DSliceData {
             x_size: x_end - x_start,
             y_size: y_end - y_start,
             data_offset: get_index_unchecked(self.stride(), x_start, y_start),
         }
     }
-    pub fn slice<XR: RangeBounds<usize>, YR: RangeBounds<usize>>(
+    pub fn slice<XB: Array2DSliceBound, YB: Array2DSliceBound>(
         &self,
-        x: XR,
-        y: YR,
+        x_bound: XB,
+        y_bound: YB,
     ) -> Array2DSlice<Data::Element> {
         let Array2DSliceData {
             x_size,
             y_size,
             data_offset,
-        } = self.do_slice(
-            x.start_bound(),
-            x.end_bound(),
-            y.start_bound(),
-            y.end_bound(),
-        );
+        } = self.do_slice(x_bound, y_bound);
         Array2DBase {
             x_size,
             y_size,
@@ -248,10 +275,10 @@ impl<Data: Array2DData> Array2DBase<Data> {
             data: &self.data.borrow()[data_offset..],
         }
     }
-    pub fn slice_mut<XR: RangeBounds<usize>, YR: RangeBounds<usize>>(
+    pub fn slice_mut<XB: Array2DSliceBound, YB: Array2DSliceBound>(
         &mut self,
-        x: XR,
-        y: YR,
+        x_bound: XB,
+        y_bound: YB,
     ) -> Array2DMutSlice<Data::Element>
     where
         Data: BorrowMut<[<Data as Array2DData>::Element]>,
@@ -260,12 +287,7 @@ impl<Data: Array2DData> Array2DBase<Data> {
             x_size,
             y_size,
             data_offset,
-        } = self.do_slice(
-            x.start_bound(),
-            x.end_bound(),
-            y.start_bound(),
-            y.end_bound(),
-        );
+        } = self.do_slice(x_bound, y_bound);
         Array2DBase {
             x_size,
             y_size,
