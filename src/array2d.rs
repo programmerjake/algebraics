@@ -20,43 +20,75 @@ mod private {
     impl<'a, T> Sealed for &'a mut [T] {}
 }
 
-pub trait Array2DData: private::Sealed + Borrow<[<Self as Array2DData>::Element]> {
+pub trait Array2DData: Sized + private::Sealed + Borrow<[<Self as Array2DData>::Element]> {
     type Element: Sized;
     type StrideType: Copy + Default;
+    type IntoIter: Iterator;
     fn read_stride(y_size: usize, stride: Self::StrideType) -> usize;
     fn make_stride(y_size: usize) -> Self::StrideType;
+    fn into_iter(this: Array2DBase<Self>) -> Self::IntoIter;
 }
 
 impl<T: Sized> Array2DData for Vec<T> {
     type Element = T;
     type StrideType = ();
+    type IntoIter = IntoIter<T>;
     fn read_stride(y_size: usize, _stride: Self::StrideType) -> usize {
         y_size
     }
     fn make_stride(_y_size: usize) -> Self::StrideType {
         Default::default()
     }
+    fn into_iter(this: Array2DBase<Self>) -> Self::IntoIter {
+        IntoIter {
+            positions: this.positions(),
+            data: IterOwnedData {
+                stride: this.stride(),
+                offset: 0,
+                iter: this.data.into_iter(),
+            },
+        }
+    }
 }
 
 impl<'a, T: Sized> Array2DData for &'a [T] {
     type Element = T;
     type StrideType = usize;
+    type IntoIter = Iter<'a, T>;
     fn read_stride(_y_size: usize, stride: Self::StrideType) -> usize {
         stride
     }
     fn make_stride(y_size: usize) -> Self::StrideType {
         y_size
+    }
+    fn into_iter(this: Array2DBase<Self>) -> Self::IntoIter {
+        Iter {
+            positions: this.positions(),
+            stride: this.stride(),
+            data: this.data.borrow(),
+        }
     }
 }
 
 impl<'a, T: Sized> Array2DData for &'a mut [T] {
     type Element = T;
     type StrideType = usize;
+    type IntoIter = IterMut<'a, T>;
     fn read_stride(_y_size: usize, stride: Self::StrideType) -> usize {
         stride
     }
     fn make_stride(y_size: usize) -> Self::StrideType {
         y_size
+    }
+    fn into_iter(this: Array2DBase<Self>) -> Self::IntoIter {
+        IterMut {
+            positions: this.positions(),
+            data: IterOwnedData {
+                stride: this.stride(),
+                offset: 0,
+                iter: this.data.borrow_mut().iter_mut(),
+            },
+        }
     }
 }
 
@@ -752,18 +784,11 @@ impl<'a, T: 'a, Data: Array2DData<Element = T> + BorrowMut<[T]>> IntoIterator
     }
 }
 
-impl<T> IntoIterator for Array2DBase<Vec<T>> {
-    type Item = T;
-    type IntoIter = IntoIter<T>;
+impl<Data: Array2DData> IntoIterator for Array2DBase<Data> {
+    type Item = <Data::IntoIter as Iterator>::Item;
+    type IntoIter = Data::IntoIter;
     fn into_iter(self) -> Self::IntoIter {
-        IntoIter {
-            positions: self.positions(),
-            data: IterOwnedData {
-                stride: self.stride(),
-                offset: 0,
-                iter: self.data.into_iter(),
-            },
-        }
+        Data::into_iter(self)
     }
 }
 
