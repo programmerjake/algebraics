@@ -10,6 +10,11 @@ use std::ops::Index;
 use std::ops::IndexMut;
 use std::ops::Range;
 use std::ops::RangeBounds;
+use std::ops::RangeFrom;
+use std::ops::RangeFull;
+use std::ops::RangeInclusive;
+use std::ops::RangeTo;
+use std::ops::RangeToInclusive;
 use std::slice;
 use std::vec;
 
@@ -197,7 +202,19 @@ macro_rules! impl_array2d_slice_bound {
     };
 }
 
+impl_array2d_slice_bound!(RangeFull);
 impl_array2d_slice_bound!(Range<usize>);
+impl_array2d_slice_bound!(RangeFrom<usize>);
+impl_array2d_slice_bound!(RangeTo<usize>);
+impl_array2d_slice_bound!(RangeInclusive<usize>);
+impl_array2d_slice_bound!(RangeToInclusive<usize>);
+impl_array2d_slice_bound!((Bound<usize>, Bound<usize>));
+impl_array2d_slice_bound!(Range<&usize>);
+impl_array2d_slice_bound!(RangeFrom<&usize>);
+impl_array2d_slice_bound!(RangeTo<&usize>);
+impl_array2d_slice_bound!(RangeInclusive<&usize>);
+impl_array2d_slice_bound!(RangeToInclusive<&usize>);
+impl_array2d_slice_bound!((Bound<&usize>, Bound<&usize>));
 
 impl<Data: Array2DData> Array2DBase<Data> {
     /// data is a column-major 2D array
