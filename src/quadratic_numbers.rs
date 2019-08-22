@@ -1036,7 +1036,7 @@ mod tests {
 
     fn get_float_test_cases_big() -> impl Iterator<Item = (i32, i32, i32, f64)> {
         fn range() -> impl Iterator<Item = i32> {
-            -4..=4
+            -3..=3
         }
         range()
             .flat_map(|a| range().flat_map(move |b| range().map(move |c| (a, b, c))))
