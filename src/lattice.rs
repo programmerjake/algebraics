@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // See Notices.txt for copyright information
 
+use std::ops::AddAssign;
+use num_traits::Zero;
 use crate::array2d::Array2DOwned;
 use crate::array2d::Array2DSlice;
 use num_bigint::BigInt;
@@ -9,12 +11,20 @@ use std::ops::Div;
 use std::ops::Mul;
 use std::ops::Sub;
 
-pub fn inner_product<T: Clone + Add<Output = T> + Mul<Output = T>>(
-    a: Array2DSlice<T>,
-    b: Array2DSlice<T>,
-) -> T {
+pub fn inner_product<'a, T>(
+    a: Array2DSlice<'a, T>,
+    b: Array2DSlice<'a, T>,
+) -> T
+where
+    T:Zero+AddAssign,
+    for<'l, 'r> &'l T: Mul<&'r T, Output=T>,
+{
     assert_eq!(a.size(), b.size());
-    unimplemented!()
+    let mut retval = Zero::zero();
+    for (a, b) in a.into_iter().zip(b) {
+        retval += a * b;
+    }
+    retval
 }
 
 pub fn gram_schmidt<
