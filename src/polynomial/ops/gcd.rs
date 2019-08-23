@@ -4,18 +4,19 @@ use crate::polynomial::Polynomial;
 use crate::polynomial::PolynomialCoefficient;
 use crate::polynomial::PolynomialDivSupported;
 use crate::polynomial::PseudoDivRem;
+use crate::traits::ExactDiv;
+use crate::traits::ExactDivAssign;
 use crate::traits::GCDAndLCM;
 use crate::traits::GCD;
 use num_traits::One;
 use num_traits::Zero;
-use std::ops::Div;
-use std::ops::DivAssign;
 
 impl<T: PolynomialCoefficient + GCD<Output = T> + PolynomialDivSupported + PartialOrd> GCD
     for Polynomial<T>
 where
-    T::Element: Div<Output = T::Element> + DivAssign + One,
-    for<'a> T::Element: Div<&'a T::Element, Output = T::Element> + DivAssign<&'a T::Element>,
+    T::Element: ExactDiv<Output = T::Element> + ExactDivAssign + One,
+    for<'a> T::Element:
+        ExactDiv<&'a T::Element, Output = T::Element> + ExactDivAssign<&'a T::Element>,
 {
     type Output = Self;
     fn gcd(&self, rhs: &Self) -> Self {
@@ -36,7 +37,7 @@ where
         let lcm = if gcd.is_zero() {
             Zero::zero()
         } else {
-            self * rhs / &gcd
+            self * rhs.exact_div(&gcd)
         };
         GCDAndLCM { gcd, lcm }
     }

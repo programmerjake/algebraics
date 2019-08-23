@@ -6,6 +6,8 @@ use crate::polynomial::PolynomialCoefficient;
 use crate::polynomial::PolynomialCoefficientElement;
 use crate::polynomial::PolynomialDivSupported;
 use crate::polynomial::PseudoDivRem;
+use crate::traits::ExactDiv;
+use crate::traits::ExactDivAssign;
 use num_traits::CheckedDiv;
 use num_traits::CheckedRem;
 use num_traits::One;
@@ -114,15 +116,34 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
         self.checked_pseudo_div_rem(rhs)
             .expect("polynomial division by zero")
     }
+    pub fn exact_pseudo_div(self, rhs: &Self) -> (Polynomial<T>, T) {
+        let PseudoDivRem {
+            quotient,
+            remainder,
+            factor,
+        } = self.pseudo_div_rem(rhs);
+        assert!(remainder.is_zero(), "inexact division");
+        (quotient, factor)
+    }
+    pub fn checked_exact_pseudo_div(self, rhs: &Self) -> Option<(Polynomial<T>, T)> {
+        let PseudoDivRem {
+            quotient,
+            remainder,
+            factor,
+        } = self.checked_pseudo_div_rem(rhs)?;
+        if remainder.is_zero() {
+            None
+        } else {
+            Some((quotient, factor))
+        }
+    }
 }
 
 impl<T: PolynomialDivSupported> Polynomial<T>
 where
-    for<'a> T::Element: DivAssign<&'a T::Element>
-        + Div<&'a T::Element, Output = T::Element>
-        + DivAssign
-        + Div<Output = T::Element>
-        + One,
+    T::Element: ExactDiv<Output = T::Element> + ExactDivAssign + One,
+    for<'a> T::Element:
+        ExactDiv<&'a T::Element, Output = T::Element> + ExactDivAssign<&'a T::Element>,
 {
     pub fn checked_div_rem(self, rhs: &Self) -> Option<(Self, Self)> {
         let PseudoDivRem {
@@ -130,7 +151,10 @@ where
             remainder,
             factor,
         } = self.checked_pseudo_div_rem(rhs)?;
-        Some((quotient / &factor, remainder / factor))
+        Some((
+            quotient.checked_exact_div(&factor)?,
+            remainder.checked_exact_div(factor)?,
+        ))
     }
     pub fn div_rem(self, rhs: &Self) -> (Self, Self) {
         let PseudoDivRem {
@@ -138,39 +162,35 @@ where
             remainder,
             factor,
         } = self.pseudo_div_rem(rhs);
-        (quotient / &factor, remainder / factor)
+        (quotient.exact_div(&factor), remainder.exact_div(factor))
     }
 }
 
 impl<T: PolynomialDivSupported> CheckedDiv for Polynomial<T>
 where
-    for<'a> T::Element: DivAssign<&'a T::Element>
-        + Div<&'a T::Element, Output = T::Element>
-        + DivAssign
-        + Div<Output = T::Element>
-        + One,
+    T::Element: ExactDiv<Output = T::Element> + ExactDivAssign + One,
+    for<'a> T::Element:
+        ExactDiv<&'a T::Element, Output = T::Element> + ExactDivAssign<&'a T::Element>,
 {
     fn checked_div(&self, rhs: &Self) -> Option<Self> {
         let PseudoDivRem {
             quotient, factor, ..
         } = self.clone().checked_pseudo_div_rem(rhs)?;
-        Some(quotient / factor)
+        Some(quotient.checked_exact_div(factor)?)
     }
 }
 
 impl<T: PolynomialDivSupported> CheckedRem for Polynomial<T>
 where
-    for<'a> T::Element: DivAssign<&'a T::Element>
-        + Div<&'a T::Element, Output = T::Element>
-        + DivAssign
-        + Div<Output = T::Element>
-        + One,
+    T::Element: ExactDiv<Output = T::Element> + ExactDivAssign + One,
+    for<'a> T::Element:
+        ExactDiv<&'a T::Element, Output = T::Element> + ExactDivAssign<&'a T::Element>,
 {
     fn checked_rem(&self, rhs: &Self) -> Option<Self> {
         let PseudoDivRem {
             remainder, factor, ..
         } = self.clone().checked_pseudo_div_rem(rhs)?;
-        Some(remainder / factor)
+        Some(remainder.checked_exact_div(factor)?)
     }
 }
 
@@ -178,35 +198,49 @@ macro_rules! impl_div_rem {
     ($l:ty, $l_to_owned:expr, $r:ty) => {
         impl<T: PolynomialDivSupported> Div<$r> for $l
         where
-            for<'a> T::Element: DivAssign<&'a T::Element>
-                + Div<&'a T::Element, Output = T::Element>
-                + DivAssign
-                + Div<Output = T::Element>
-                + One,
+            T::Element: ExactDiv<Output = T::Element> + ExactDivAssign + One,
+            for<'a> T::Element:
+                ExactDiv<&'a T::Element, Output = T::Element> + ExactDivAssign<&'a T::Element>,
         {
             type Output = Polynomial<T>;
             fn div(self, rhs: $r) -> Polynomial<T> {
                 let PseudoDivRem {
                     quotient, factor, ..
                 } = $l_to_owned(self).pseudo_div_rem(rhs.borrow());
-                quotient / factor
+                quotient.exact_div(factor)
             }
         }
 
         impl<T: PolynomialDivSupported> Rem<$r> for $l
         where
-            for<'a> T::Element: DivAssign<&'a T::Element>
-                + Div<&'a T::Element, Output = T::Element>
-                + DivAssign
-                + Div<Output = T::Element>
-                + One,
+            T::Element: ExactDiv<Output = T::Element> + ExactDivAssign + One,
+            for<'a> T::Element:
+                ExactDiv<&'a T::Element, Output = T::Element> + ExactDivAssign<&'a T::Element>,
         {
             type Output = Polynomial<T>;
             fn rem(self, rhs: $r) -> Polynomial<T> {
                 let PseudoDivRem {
                     remainder, factor, ..
                 } = $l_to_owned(self).pseudo_div_rem(rhs.borrow());
-                remainder / factor
+                remainder.exact_div(factor)
+            }
+        }
+
+        impl<T: PolynomialDivSupported> ExactDiv<$r> for $l
+        where
+            T::Element: ExactDiv<Output = T::Element> + ExactDivAssign + One,
+            for<'a> T::Element:
+                ExactDiv<&'a T::Element, Output = T::Element> + ExactDivAssign<&'a T::Element>,
+        {
+            type Output = Polynomial<T>;
+            fn exact_div(self, rhs: $r) -> Polynomial<T> {
+                let (quotient, factor) = $l_to_owned(self).exact_pseudo_div(rhs.borrow());
+                quotient.exact_div(factor)
+            }
+            fn checked_exact_div(self, rhs: $r) -> Option<Polynomial<T>> {
+                let (quotient, factor) =
+                    $l_to_owned(self).checked_exact_pseudo_div(rhs.borrow())?;
+                quotient.checked_exact_div(factor)
             }
         }
     };
@@ -218,35 +252,48 @@ impl_div_rem!(&'_ Polynomial<T>, Clone::clone, Polynomial<T>);
 
 impl<'a, 'b, T: PolynomialDivSupported> Div<&'a Polynomial<T>> for &'b Polynomial<T>
 where
-    for<'c> T::Element: DivAssign<&'c T::Element>
-        + Div<&'c T::Element, Output = T::Element>
-        + DivAssign
-        + Div<Output = T::Element>
-        + One,
+    T::Element: ExactDiv<Output = T::Element> + ExactDivAssign + One,
+    for<'c> T::Element:
+        ExactDiv<&'c T::Element, Output = T::Element> + ExactDivAssign<&'c T::Element>,
 {
     type Output = Polynomial<T>;
     fn div(self, rhs: &Polynomial<T>) -> Polynomial<T> {
         let PseudoDivRem {
             quotient, factor, ..
         } = self.clone().pseudo_div_rem(rhs);
-        quotient / factor
+        quotient.exact_div(factor)
     }
 }
 
 impl<'a, 'b, T: PolynomialDivSupported> Rem<&'a Polynomial<T>> for &'b Polynomial<T>
 where
-    for<'c> T::Element: DivAssign<&'c T::Element>
-        + Div<&'c T::Element, Output = T::Element>
-        + DivAssign
-        + Div<Output = T::Element>
-        + One,
+    T::Element: ExactDiv<Output = T::Element> + ExactDivAssign + One,
+    for<'c> T::Element:
+        ExactDiv<&'c T::Element, Output = T::Element> + ExactDivAssign<&'c T::Element>,
 {
     type Output = Polynomial<T>;
     fn rem(self, rhs: &Polynomial<T>) -> Polynomial<T> {
         let PseudoDivRem {
             remainder, factor, ..
         } = self.clone().pseudo_div_rem(rhs);
-        remainder / factor
+        remainder.exact_div(factor)
+    }
+}
+
+impl<'l, 'r, T: PolynomialDivSupported> ExactDiv<&'r Polynomial<T>> for &'l Polynomial<T>
+where
+    T::Element: ExactDiv<Output = T::Element> + ExactDivAssign + One,
+    for<'a> T::Element:
+        ExactDiv<&'a T::Element, Output = T::Element> + ExactDivAssign<&'a T::Element>,
+{
+    type Output = Polynomial<T>;
+    fn exact_div(self, rhs: &Polynomial<T>) -> Polynomial<T> {
+        let (quotient, factor) = self.clone().exact_pseudo_div(rhs.borrow());
+        quotient.exact_div(factor)
+    }
+    fn checked_exact_div(self, rhs: &Polynomial<T>) -> Option<Polynomial<T>> {
+        let (quotient, factor) = self.clone().checked_exact_pseudo_div(rhs.borrow())?;
+        quotient.checked_exact_div(factor)
     }
 }
 
@@ -254,29 +301,37 @@ macro_rules! impl_div_rem_eq {
     ($r:ty) => {
         impl<T: PolynomialDivSupported> DivAssign<$r> for Polynomial<T>
         where
-            for<'a> T::Element: DivAssign<&'a T::Element>
-                + Div<&'a T::Element, Output = T::Element>
-                + DivAssign
-                + Div<Output = T::Element>
-                + One,
+            T::Element: ExactDiv<Output = T::Element> + ExactDivAssign + One,
+            for<'a> T::Element:
+                ExactDiv<&'a T::Element, Output = T::Element> + ExactDivAssign<&'a T::Element>,
         {
             fn div_assign(&mut self, rhs: $r) {
                 let lhs = mem::replace(self, Zero::zero());
-                *self = lhs / rhs;
+                *self = lhs.exact_div(rhs);
             }
         }
 
         impl<T: PolynomialDivSupported> RemAssign<$r> for Polynomial<T>
         where
-            for<'a> T::Element: DivAssign<&'a T::Element>
-                + Div<&'a T::Element, Output = T::Element>
-                + DivAssign
-                + Div<Output = T::Element>
-                + One,
+            T::Element: ExactDiv<Output = T::Element> + ExactDivAssign + One,
+            for<'a> T::Element:
+                ExactDiv<&'a T::Element, Output = T::Element> + ExactDivAssign<&'a T::Element>,
         {
             fn rem_assign(&mut self, rhs: $r) {
                 let lhs = mem::replace(self, Zero::zero());
                 *self = lhs % rhs;
+            }
+        }
+
+        impl<T: PolynomialDivSupported> ExactDivAssign<$r> for Polynomial<T>
+        where
+            T::Element: ExactDiv<Output = T::Element> + ExactDivAssign + One,
+            for<'a> T::Element:
+                ExactDiv<&'a T::Element, Output = T::Element> + ExactDivAssign<&'a T::Element>,
+        {
+            fn exact_div_assign(&mut self, rhs: $r) {
+                let lhs = mem::replace(self, Zero::zero());
+                *self = lhs.exact_div(rhs);
             }
         }
     };
@@ -285,16 +340,19 @@ macro_rules! impl_div_rem_eq {
 impl_div_rem_eq!(Polynomial<T>);
 impl_div_rem_eq!(&'_ Polynomial<T>);
 
-fn div_single<T: PolynomialCoefficient + for<'a> Div<&'a T, Output = T>>(
+fn div_single<T: PolynomialCoefficient + for<'a> ExactDiv<&'a T, Output = T>>(
     lhs: Cow<Polynomial<T>>,
     rhs: &T,
 ) -> Polynomial<T> {
-    fn do_div<T: PolynomialCoefficient + for<'a> Div<&'a T, Output = T>, I: Iterator<Item = T>>(
+    fn do_div<
+        T: PolynomialCoefficient + for<'a> ExactDiv<&'a T, Output = T>,
+        I: Iterator<Item = T>,
+    >(
         coefficients: I,
         rhs: &T,
     ) -> Polynomial<T> {
         coefficients
-            .map(|coefficient| coefficient / rhs)
+            .map(|coefficient| coefficient.exact_div(rhs))
             .collect::<Vec<_>>()
             .into()
     }
@@ -304,14 +362,44 @@ fn div_single<T: PolynomialCoefficient + for<'a> Div<&'a T, Output = T>>(
     }
 }
 
-fn div_assign_single<T: PolynomialCoefficient + for<'a> Div<&'a T, Output = T>>(
+fn div_assign_single<T: PolynomialCoefficient + for<'a> ExactDiv<&'a T, Output = T>>(
     lhs: &mut Polynomial<T>,
     rhs: &T,
 ) {
     *lhs = div_single(Cow::Owned(mem::replace(lhs, Zero::zero())), rhs);
 }
 
-impl<'a, T: PolynomialCoefficient + for<'b> Div<&'b T, Output = T>> Div<&'a T>
+fn checked_div_single<T: PolynomialCoefficient + for<'a> ExactDiv<&'a T, Output = T>>(
+    lhs: Cow<Polynomial<T>>,
+    rhs: &T,
+) -> Option<Polynomial<T>> {
+    fn do_div<
+        T: PolynomialCoefficient + for<'a> ExactDiv<&'a T, Output = T>,
+        I: Iterator<Item = T>,
+    >(
+        coefficients: I,
+        rhs: &T,
+    ) -> Option<Polynomial<T>> {
+        coefficients
+            .map(|coefficient| coefficient.checked_exact_div(rhs))
+            .collect::<Option<Vec<_>>>()
+            .map(Into::into)
+    }
+    match lhs {
+        Cow::Borrowed(lhs) => do_div(lhs.iter(), rhs),
+        Cow::Owned(lhs) => do_div(lhs.into_iter(), rhs),
+    }
+}
+
+fn checked_div_assign_single<T: PolynomialCoefficient + for<'a> ExactDiv<&'a T, Output = T>>(
+    lhs: &mut Polynomial<T>,
+    rhs: &T,
+) -> Result<(), ()> {
+    *lhs = checked_div_single(Cow::Owned(mem::replace(lhs, Zero::zero())), rhs).ok_or(())?;
+    Ok(())
+}
+
+impl<'a, T: PolynomialCoefficient + for<'b> ExactDiv<&'b T, Output = T>> Div<&'a T>
     for &'a Polynomial<T>
 {
     type Output = Polynomial<T>;
@@ -320,38 +408,112 @@ impl<'a, T: PolynomialCoefficient + for<'b> Div<&'b T, Output = T>> Div<&'a T>
     }
 }
 
-impl<'a, T: PolynomialCoefficient + for<'b> Div<&'b T, Output = T>> Div<T> for &'a Polynomial<T> {
+impl<'a, T: PolynomialCoefficient + for<'b> ExactDiv<&'b T, Output = T>> Div<T>
+    for &'a Polynomial<T>
+{
     type Output = Polynomial<T>;
     fn div(self, rhs: T) -> Polynomial<T> {
         div_single(Cow::Borrowed(self), &rhs)
     }
 }
 
-impl<'a, T: PolynomialCoefficient + for<'b> Div<&'b T, Output = T>> Div<&'a T> for Polynomial<T> {
+impl<'a, T: PolynomialCoefficient + for<'b> ExactDiv<&'b T, Output = T>> Div<&'a T>
+    for Polynomial<T>
+{
     type Output = Polynomial<T>;
     fn div(self, rhs: &T) -> Polynomial<T> {
         div_single(Cow::Owned(self), rhs)
     }
 }
 
-impl<T: PolynomialCoefficient + for<'a> Div<&'a T, Output = T>> Div<T> for Polynomial<T> {
+impl<T: PolynomialCoefficient + for<'a> ExactDiv<&'a T, Output = T>> Div<T> for Polynomial<T> {
     type Output = Polynomial<T>;
     fn div(self, rhs: T) -> Polynomial<T> {
         div_single(Cow::Owned(self), &rhs)
     }
 }
 
-impl<T: PolynomialCoefficient + for<'a> Div<&'a T, Output = T>> DivAssign<T> for Polynomial<T> {
+impl<T: PolynomialCoefficient + for<'a> ExactDiv<&'a T, Output = T>> DivAssign<T>
+    for Polynomial<T>
+{
     fn div_assign(&mut self, rhs: T) {
         div_assign_single(self, &rhs);
     }
 }
 
-impl<'a, T: PolynomialCoefficient + for<'b> Div<&'b T, Output = T>> DivAssign<&'a T>
+impl<'a, T: PolynomialCoefficient + for<'b> ExactDiv<&'b T, Output = T>> DivAssign<&'a T>
     for Polynomial<T>
 {
     fn div_assign(&mut self, rhs: &T) {
         div_assign_single(self, rhs);
+    }
+}
+
+impl<'a, T: PolynomialCoefficient + for<'b> ExactDiv<&'b T, Output = T>> ExactDiv<&'a T>
+    for &'a Polynomial<T>
+{
+    type Output = Polynomial<T>;
+    fn exact_div(self, rhs: &T) -> Polynomial<T> {
+        div_single(Cow::Borrowed(self), rhs)
+    }
+    fn checked_exact_div(self, rhs: &T) -> Option<Polynomial<T>> {
+        checked_div_single(Cow::Borrowed(self), rhs)
+    }
+}
+
+impl<'a, T: PolynomialCoefficient + for<'b> ExactDiv<&'b T, Output = T>> ExactDiv<T>
+    for &'a Polynomial<T>
+{
+    type Output = Polynomial<T>;
+    fn exact_div(self, rhs: T) -> Polynomial<T> {
+        div_single(Cow::Borrowed(self), &rhs)
+    }
+    fn checked_exact_div(self, rhs: T) -> Option<Polynomial<T>> {
+        checked_div_single(Cow::Borrowed(self), &rhs)
+    }
+}
+
+impl<'a, T: PolynomialCoefficient + for<'b> ExactDiv<&'b T, Output = T>> ExactDiv<&'a T>
+    for Polynomial<T>
+{
+    type Output = Polynomial<T>;
+    fn exact_div(self, rhs: &T) -> Polynomial<T> {
+        div_single(Cow::Owned(self), rhs)
+    }
+    fn checked_exact_div(self, rhs: &T) -> Option<Polynomial<T>> {
+        checked_div_single(Cow::Owned(self), rhs)
+    }
+}
+
+impl<T: PolynomialCoefficient + for<'a> ExactDiv<&'a T, Output = T>> ExactDiv<T> for Polynomial<T> {
+    type Output = Polynomial<T>;
+    fn exact_div(self, rhs: T) -> Polynomial<T> {
+        div_single(Cow::Owned(self), &rhs)
+    }
+    fn checked_exact_div(self, rhs: T) -> Option<Polynomial<T>> {
+        checked_div_single(Cow::Owned(self), &rhs)
+    }
+}
+
+impl<T: PolynomialCoefficient + for<'a> ExactDiv<&'a T, Output = T>> ExactDivAssign<T>
+    for Polynomial<T>
+{
+    fn exact_div_assign(&mut self, rhs: T) {
+        div_assign_single(self, &rhs);
+    }
+    fn checked_exact_div_assign(&mut self, rhs: T) -> Result<(), ()> {
+        checked_div_assign_single(self, &rhs)
+    }
+}
+
+impl<'a, T: PolynomialCoefficient + for<'b> ExactDiv<&'b T, Output = T>> ExactDivAssign<&'a T>
+    for Polynomial<T>
+{
+    fn exact_div_assign(&mut self, rhs: &T) {
+        div_assign_single(self, rhs);
+    }
+    fn checked_exact_div_assign(&mut self, rhs: &T) -> Result<(), ()> {
+        checked_div_assign_single(self, rhs)
     }
 }
 

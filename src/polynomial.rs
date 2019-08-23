@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // See Notices.txt for copyright information
+use crate::traits::AlwaysExactDivAssign;
 use crate::traits::CharacteristicZero;
+use crate::traits::ExactDiv;
+use crate::traits::ExactDivAssign;
 use crate::traits::GCDAndLCM;
 use crate::traits::RingCharacteristic;
 use crate::traits::GCD;
@@ -588,27 +591,17 @@ impl_polynomial_coefficient_for_int! {
 }
 
 pub trait PolynomialDivSupported:
-    PolynomialCoefficient<Divisor = <Self as PolynomialCoefficient>::Element>
-    + for<'a> DivAssign<&'a Self>
-    + DivAssign
-    + for<'a> Div<&'a Self, Output = Self>
-    + Div<Output = Self>
+    PolynomialCoefficient + for<'a> AlwaysExactDivAssign<&'a Self> + AlwaysExactDivAssign
 where
-    Self::Element: Div<Output = Self::Element> + DivAssign + One,
+    Self::Element: ExactDiv<Output = Self::Element> + ExactDivAssign + One,
     for<'a> Self::Element:
-        Div<&'a Self::Element, Output = Self::Element> + DivAssign<&'a Self::Element>,
+        ExactDiv<&'a Self::Element, Output = Self::Element> + ExactDivAssign<&'a Self::Element>,
 {
 }
 
-impl<
-        T: PolynomialCoefficientElement
-            + Integer
-            + for<'a> Div<&'a T, Output = T>
-            + for<'a> DivAssign<&'a T>
-            + DivAssign
-            + RemAssign
-            + FromPrimitive,
-    > PolynomialDivSupported for Ratio<T>
+impl<T: PolynomialCoefficient> PolynomialDivSupported for T where
+    T: for<'a> ExactDiv<&'a T, Output = T>+for<'a> Div<&'a T, Output=T> + AlwaysExactDivAssign+for<'a> AlwaysExactDivAssign<&'a T>,
+    for<'b> T::Element: ExactDivAssign<&'b T::Element> + One+ExactDivAssign,
 {
 }
 
@@ -879,7 +872,7 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
     pub fn primitive_part_assign(&mut self)
     where
         T: GCD<Output = T> + PartialOrd,
-        for<'a> T::Element: DivAssign<&'a T::Element>,
+        for<'a> T::Element: ExactDivAssign<&'a T::Element>,
     {
         let content = match self.nonzero_content() {
             Some(v) => v,
@@ -888,7 +881,7 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
         let (content_numerator, content_divisor) = T::coefficient_to_element(Cow::Owned(content));
         DivAssign::<T::Divisor>::div_assign(&mut self.divisor, content_divisor);
         for element in &mut self.elements {
-            *element /= &content_numerator;
+            element.exact_div_assign(&content_numerator);
         }
         self.normalize();
         debug_assert!(self
@@ -899,7 +892,7 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
     pub fn into_primitive_part(mut self) -> Self
     where
         T: GCD<Output = T> + PartialOrd,
-        for<'a> T::Element: DivAssign<&'a T::Element>,
+        for<'a> T::Element: ExactDivAssign<&'a T::Element>,
     {
         self.primitive_part_assign();
         self
@@ -907,13 +900,13 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
     pub fn primitive_part(&self) -> Self
     where
         T: GCD<Output = T> + PartialOrd,
-        for<'a> T::Element: DivAssign<&'a T::Element>,
+        for<'a> T::Element: ExactDivAssign<&'a T::Element>,
     {
         self.clone().into_primitive_part()
     }
     pub fn monic_assign(&mut self)
     where
-        T: for<'a> Div<&'a T, Output = T>,
+        T: for<'a> ExactDiv<&'a T, Output = T>,
     {
         if let Some(v) = self.nonzero_highest_power_coefficient() {
             *self /= v;
@@ -921,7 +914,7 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
     }
     pub fn into_monic(mut self) -> Self
     where
-        T: for<'a> Div<&'a T, Output = T>,
+        T: for<'a> ExactDiv<&'a T, Output = T>,
     {
         self.monic_assign();
         self
@@ -929,10 +922,10 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
     pub fn to_sturm_sequence(&self) -> SturmSequence<T>
     where
         T: PolynomialDivSupported,
-        for<'a> T::Element: DivAssign<&'a T::Element>
-            + Div<&'a T::Element, Output = T::Element>
-            + DivAssign
-            + Div<Output = T::Element>
+        for<'a> T::Element: ExactDivAssign<&'a T::Element>
+            + ExactDiv<&'a T::Element, Output = T::Element>
+            + ExactDivAssign
+            + ExactDiv<Output = T::Element>
             + One,
     {
         self.clone().into_sturm_sequence()
@@ -940,10 +933,10 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
     pub fn into_sturm_sequence(self) -> SturmSequence<T>
     where
         T: PolynomialDivSupported,
-        for<'a> T::Element: DivAssign<&'a T::Element>
-            + Div<&'a T::Element, Output = T::Element>
-            + DivAssign
-            + Div<Output = T::Element>
+        for<'a> T::Element: ExactDivAssign<&'a T::Element>
+            + ExactDiv<&'a T::Element, Output = T::Element>
+            + ExactDivAssign
+            + ExactDiv<Output = T::Element>
             + One,
     {
         let self_len = self.len();
@@ -973,14 +966,14 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
     pub fn reduce_multiple_roots(&mut self)
     where
         T: PolynomialDivSupported + GCD<Output = T> + PartialOrd,
-        for<'a> T::Element: DivAssign<&'a T::Element>
-            + Div<&'a T::Element, Output = T::Element>
-            + DivAssign
-            + Div<Output = T::Element>
+        for<'a> T::Element: ExactDivAssign<&'a T::Element>
+            + ExactDiv<&'a T::Element, Output = T::Element>
+            + ExactDivAssign
+            + ExactDiv<Output = T::Element>
             + One,
     {
         let derivative = self.derivative();
-        *self /= self.gcd(&derivative);
+        *self /= GCD::gcd(self, &derivative);
     }
     fn convert_to_derivative(&mut self) {
         if self.is_empty() {
@@ -1054,8 +1047,9 @@ where
         + PartialOrd
         + PolynomialDivSupported
         + RingCharacteristic<Type = CharacteristicZero>,
-    T::Element: Div<Output = T::Element> + DivAssign + One,
-    for<'a> T::Element: Div<&'a T::Element, Output = T::Element> + DivAssign<&'a T::Element>,
+    T::Element: ExactDiv<Output = T::Element> + ExactDivAssign + One,
+    for<'a> T::Element:
+        ExactDiv<&'a T::Element, Output = T::Element> + ExactDivAssign<&'a T::Element>,
 {
     /// splits `self` into square-free factors using Yun's algorithm
     ///
@@ -1199,10 +1193,10 @@ impl From<PolynomialIsZero> for std::io::Error {
 
 impl<T: PolynomialDivSupported> SturmSequence<T>
 where
-    for<'a> T::Element: DivAssign<&'a T::Element>
-        + Div<&'a T::Element, Output = T::Element>
-        + DivAssign
-        + Div<Output = T::Element>
+    for<'a> T::Element: ExactDivAssign<&'a T::Element>
+        + ExactDiv<&'a T::Element, Output = T::Element>
+        + ExactDivAssign
+        + ExactDiv<Output = T::Element>
         + One,
 {
     pub fn new(polynomial: Polynomial<T>) -> Self {

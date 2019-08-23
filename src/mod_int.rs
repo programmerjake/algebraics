@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // See Notices.txt for copyright information
 
+use crate::traits::AlwaysExactDiv;
+use crate::traits::AlwaysExactDivAssign;
+use crate::traits::ExactDiv;
+use crate::traits::ExactDivAssign;
 use crate::traits::ExtendedGCD;
 use crate::traits::ExtendedGCDResult;
 use crate::traits::GCD;
@@ -16,6 +20,7 @@ use num_traits::FromPrimitive;
 use num_traits::One;
 use num_traits::ToPrimitive;
 use num_traits::Zero;
+use std::borrow::Borrow;
 use std::convert::identity;
 use std::convert::TryInto;
 use std::fmt;
@@ -658,6 +663,52 @@ impl<V: ModularReduce + Eq + One + Zero + GCD<Output = V> + ExtendedGCD, M: Modu
         self.checked_mul(&rhs.checked_inverse()?)
     }
 }
+
+macro_rules! impl_exact_div {
+    (($($lifetimes:tt),*), $v:ident, $m:ident, $lhs:ty, $rhs:ty) => {
+        impl<$($lifetimes,)* $v, $m> ExactDiv<$rhs> for $lhs
+        where
+            $v: ModularReduce + Eq + One + Zero + GCD<Output = $v> + ExtendedGCD, $m: Modulus<Value = $v>
+        {
+            type Output = ModularInteger<$v, $m>;
+            fn exact_div(self, rhs: $rhs) -> Self::Output {
+                self.div(rhs)
+            }
+            fn checked_exact_div(self, rhs: $rhs) -> Option<Self::Output> {
+                self.checked_div(rhs.borrow())
+            }
+        }
+
+        impl<$($lifetimes,)* $v, $m> AlwaysExactDiv<$rhs> for $lhs
+        where
+            $v: ModularReduce + Integer + GCD<Output = $v> + ExtendedGCD, $m: Modulus<Value = $v> + PrimeModulus
+        {
+        }
+    };
+    (assign ($($lifetimes:tt),*), $v:ident, $m:ident, $lhs:ty, $rhs:ty) => {
+        impl_exact_div!(($($lifetimes),*), $v, $m, $lhs, $rhs);
+
+        impl<$($lifetimes,)* $v, $m> ExactDivAssign<$rhs> for $lhs
+        where
+            $v: ModularReduce + Eq + One + Zero + GCD<Output = $v> + ExtendedGCD, $m: Modulus<Value = $v>
+        {
+            fn exact_div_assign(&mut self, rhs: $rhs) {
+                self.div_assign(rhs);
+            }
+        }
+
+        impl<$($lifetimes,)* $v, $m> AlwaysExactDivAssign<$rhs> for $lhs
+        where
+            $v: ModularReduce + Integer + GCD<Output = $v> + ExtendedGCD, $m: Modulus<Value = $v> + PrimeModulus
+        {
+        }
+    };
+}
+
+impl_exact_div!(assign (), V, M, ModularInteger<V, M>, ModularInteger<V, M>);
+impl_exact_div!(assign ('r), V, M, ModularInteger<V, M>, &'r ModularInteger<V, M>);
+impl_exact_div!(('l), V, M, &'l ModularInteger<V, M>, ModularInteger<V, M>);
+impl_exact_div!(('l, 'r), V, M, &'l ModularInteger<V, M>, &'r ModularInteger<V, M>);
 
 #[cfg(test)]
 mod tests {

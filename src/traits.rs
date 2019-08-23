@@ -5,10 +5,14 @@ use crate::polynomial::PolynomialCoefficient;
 use num_bigint::{BigInt, BigUint};
 use num_integer::Integer;
 use num_rational::Ratio;
+use num_traits::CheckedRem;
+use num_traits::NumAssign;
 use num_traits::One;
 use num_traits::{CheckedDiv, CheckedMul, Signed, ToPrimitive, Zero};
 use std::fmt;
 use std::ops::Add;
+use std::ops::Div;
+use std::ops::DivAssign;
 use std::ops::Mul;
 
 /// GCD and LCM
@@ -538,6 +542,199 @@ impl_characteristic_zero!(usize);
 impl_characteristic_zero!(isize);
 impl_characteristic_zero!(BigUint);
 impl_characteristic_zero!(BigInt);
+
+pub trait ExactDiv<Rhs = Self>: Sized {
+    type Output;
+    #[must_use]
+    fn exact_div(self, rhs: Rhs) -> Self::Output {
+        self.checked_exact_div(rhs).expect("exact division failed")
+    }
+    #[must_use]
+    fn checked_exact_div(self, rhs: Rhs) -> Option<Self::Output>;
+}
+
+pub trait ExactDivAssign<Rhs = Self>: ExactDiv<Rhs, Output = Self> {
+    fn exact_div_assign(&mut self, rhs: Rhs) {
+        if let Err(()) = self.checked_exact_div_assign(rhs) {
+            panic!("exact division failed");
+        }
+    }
+    #[must_use]
+    fn checked_exact_div_assign(&mut self, rhs: Rhs) -> Result<(), ()> {
+        (&*self)
+            .checked_exact_div(rhs)
+            .map(|v| {
+                *self = v;
+            })
+            .ok_or(())
+    }
+}
+
+/// division always produces exact results except for division by zero, overflow, or similar
+pub trait AlwaysExactDiv<Rhs = Self>:
+    ExactDiv<Rhs> + Div<Rhs, Output = <Self as ExactDiv<Rhs>>::Output>
+{
+}
+
+/// division always produces exact results except for division by zero, overflow, or similar
+pub trait AlwaysExactDivAssign<Rhs = Self>:
+    AlwaysExactDiv<Rhs> + ExactDivAssign<Rhs> + DivAssign<Rhs> + ExactDiv<Rhs, Output = Self> + Div<Rhs, Output = Self>
+{
+}
+
+macro_rules! impl_exact_div_for_ratio {
+    (($($lifetimes:tt),*), $t:ident, $lhs:ty, $rhs:ty) => {
+        impl<$($lifetimes,)* $t> ExactDiv<$rhs> for $lhs
+        where
+            $t: Clone + Integer,
+        {
+            type Output = Ratio<$t>;
+            fn exact_div(self, rhs: $rhs) -> Self::Output {
+                self.div(rhs)
+            }
+            fn checked_exact_div(self, rhs: $rhs) -> Option<Self::Output> {
+                if rhs.is_zero() {
+                    None
+                } else {
+                    Some(self.div(rhs))
+                }
+            }
+        }
+
+        impl<$($lifetimes,)* $t> AlwaysExactDiv<$rhs> for $lhs
+        where
+            $t: Clone + Integer,
+        {
+        }
+    };
+    (assign ($($lifetimes:tt),*), $t:ident, $lhs:ty, $rhs:ty) => {
+        impl_exact_div_for_ratio!(($($lifetimes),*), $t, $lhs, $rhs);
+
+        impl<$($lifetimes,)* $t> ExactDivAssign<$rhs> for $lhs
+        where
+            $t: Clone + Integer + NumAssign,
+        {
+            fn exact_div_assign(&mut self, rhs: $rhs) {
+                self.div_assign(rhs);
+            }
+            fn checked_exact_div_assign(&mut self, rhs: $rhs) -> Result<(), ()> {
+                if rhs.is_zero() {
+                    Err(())
+                } else {
+                    self.div_assign(rhs);
+                    Ok(())
+                }
+            }
+        }
+
+        impl<$($lifetimes,)* $t> AlwaysExactDivAssign<$rhs> for $lhs
+        where
+            $t: Clone + Integer + NumAssign,
+        {
+        }
+    };
+}
+
+impl_exact_div_for_ratio!(assign(), T, Ratio<T>, T);
+impl_exact_div_for_ratio!(assign(), T, Ratio<T>, Ratio<T>);
+impl_exact_div_for_ratio!(assign ('r), T, Ratio<T>, &'r T);
+impl_exact_div_for_ratio!(assign ('r), T, Ratio<T>, &'r Ratio<T>);
+
+impl_exact_div_for_ratio!(('l), T, &'l Ratio<T>, T);
+impl_exact_div_for_ratio!(('l), T, &'l Ratio<T>, Ratio<T>);
+impl_exact_div_for_ratio!(('l, 'r), T, &'l Ratio<T>, &'r T);
+impl_exact_div_for_ratio!(('l, 'r), T, &'l Ratio<T>, &'r Ratio<T>);
+
+fn checked_div_rem<T: CheckedDiv + CheckedRem>(lhs: &T, rhs: &T) -> Option<(T, T)> {
+    Some((lhs.checked_div(rhs)?, lhs.checked_rem(rhs)?))
+}
+
+fn bigint_checked_div_rem<T: Integer>(lhs: &T, rhs: &T) -> Option<(T, T)> {
+    if rhs.is_zero() {
+        None
+    } else {
+        Some(lhs.div_rem(rhs))
+    }
+}
+
+macro_rules! impl_exact_div_for_int {
+    ($t:ident, $checked_div_rem:ident) => {
+        impl<'l, 'r> ExactDiv<&'r $t> for &'l $t {
+            type Output = $t;
+            fn exact_div(self, rhs: &$t) -> $t {
+                let (retval, remainder) = self.div_rem(rhs);
+                assert!(remainder.is_zero(), "inexact division");
+                retval
+            }
+            fn checked_exact_div(self, rhs: &$t) -> Option<$t> {
+                let (retval, remainder) = $checked_div_rem(self, rhs)?;
+                if remainder.is_zero() {
+                    Some(retval)
+                } else {
+                    None
+                }
+            }
+        }
+
+        impl ExactDiv<&'_ $t> for $t {
+            type Output = $t;
+            fn exact_div(self, rhs: &$t) -> $t {
+                (&self).exact_div(rhs)
+            }
+            fn checked_exact_div(self, rhs: &$t) -> Option<Self::Output> {
+                (&self).checked_exact_div(rhs)
+            }
+        }
+
+        impl ExactDiv<$t> for &'_ $t {
+            type Output = $t;
+            fn exact_div(self, rhs: $t) -> $t {
+                self.exact_div(&rhs)
+            }
+            fn checked_exact_div(self, rhs: $t) -> Option<Self::Output> {
+                self.checked_exact_div(&rhs)
+            }
+        }
+
+        impl ExactDiv<$t> for $t {
+            type Output = $t;
+            fn exact_div(self, rhs: $t) -> $t {
+                (&self).exact_div(&rhs)
+            }
+            fn checked_exact_div(self, rhs: $t) -> Option<Self::Output> {
+                (&self).checked_exact_div(&rhs)
+            }
+        }
+
+        impl ExactDivAssign<&'_ $t> for $t {
+            fn exact_div_assign(&mut self, rhs: &$t) {
+                *self = (&*self).exact_div(rhs);
+            }
+        }
+
+        impl ExactDivAssign<$t> for $t {
+            fn exact_div_assign(&mut self, rhs: $t) {
+                *self = (&*self).exact_div(rhs);
+            }
+        }
+    };
+}
+
+impl_exact_div_for_int!(u8, checked_div_rem);
+impl_exact_div_for_int!(i8, checked_div_rem);
+impl_exact_div_for_int!(u16, checked_div_rem);
+impl_exact_div_for_int!(i16, checked_div_rem);
+impl_exact_div_for_int!(u32, checked_div_rem);
+impl_exact_div_for_int!(i32, checked_div_rem);
+impl_exact_div_for_int!(u64, checked_div_rem);
+impl_exact_div_for_int!(i64, checked_div_rem);
+impl_exact_div_for_int!(u128, checked_div_rem);
+impl_exact_div_for_int!(i128, checked_div_rem);
+impl_exact_div_for_int!(usize, checked_div_rem);
+impl_exact_div_for_int!(isize, checked_div_rem);
+
+impl_exact_div_for_int!(BigInt, bigint_checked_div_rem);
+impl_exact_div_for_int!(BigUint, bigint_checked_div_rem);
 
 #[cfg(test)]
 mod tests {
