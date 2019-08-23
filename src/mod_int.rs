@@ -695,6 +695,14 @@ macro_rules! impl_exact_div {
             fn exact_div_assign(&mut self, rhs: $rhs) {
                 self.div_assign(rhs);
             }
+            fn checked_exact_div_assign(&mut self, rhs: $rhs) -> Result<(), ()> {
+                (&*self)
+                    .checked_exact_div(rhs)
+                    .map(|v| {
+                        *self = v;
+                    })
+                    .ok_or(())
+            }
         }
 
         impl<$($lifetimes,)* $v, $m> AlwaysExactDivAssign<$rhs> for $lhs

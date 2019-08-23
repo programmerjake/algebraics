@@ -333,6 +333,14 @@ macro_rules! impl_div_rem_eq {
                 let lhs = mem::replace(self, Zero::zero());
                 *self = lhs.exact_div(rhs);
             }
+            fn checked_exact_div_assign(&mut self, rhs: $r) -> Result<(), ()> {
+                (&*self)
+                    .checked_exact_div(rhs)
+                    .map(|v| {
+                        *self = v;
+                    })
+                    .ok_or(())
+            }
         }
     };
 }

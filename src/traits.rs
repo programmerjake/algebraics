@@ -560,19 +560,12 @@ pub trait ExactDivAssign<Rhs = Self>: ExactDiv<Rhs, Output = Self> {
         }
     }
     #[must_use]
-    fn checked_exact_div_assign(&mut self, rhs: Rhs) -> Result<(), ()> {
-        (&*self)
-            .checked_exact_div(rhs)
-            .map(|v| {
-                *self = v;
-            })
-            .ok_or(())
-    }
+    fn checked_exact_div_assign(&mut self, rhs: Rhs) -> Result<(), ()>;
 }
 
 /// division always produces exact results except for division by zero, overflow, or similar
 pub trait AlwaysExactDiv<Rhs = Self>:
-    ExactDiv<Rhs> + Div<Rhs, Output = <Self as ExactDiv<Rhs>>::Output>
+    ExactDiv<Rhs> + Div<Rhs/*, Output = <Self as ExactDiv<Rhs>>::Output*/>
 {
 }
 
@@ -714,11 +707,27 @@ macro_rules! impl_exact_div_for_int {
             fn exact_div_assign(&mut self, rhs: &$t) {
                 *self = (&*self).exact_div(rhs);
             }
+            fn checked_exact_div_assign(&mut self, rhs: &$t) -> Result<(), ()> {
+                (&*self)
+                    .checked_exact_div(rhs)
+                    .map(|v| {
+                        *self = v;
+                    })
+                    .ok_or(())
+            }
         }
 
         impl ExactDivAssign<$t> for $t {
             fn exact_div_assign(&mut self, rhs: $t) {
                 *self = (&*self).exact_div(rhs);
+            }
+            fn checked_exact_div_assign(&mut self, rhs: $t) -> Result<(), ()> {
+                (&*self)
+                    .checked_exact_div(rhs)
+                    .map(|v| {
+                        *self = v;
+                    })
+                    .ok_or(())
             }
         }
     };
