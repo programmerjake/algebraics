@@ -341,7 +341,7 @@ impl<Data: Array2DData> Array2DBase<Data> {
     {
         Array2DBase::from_array(self.x_size, self.y_size, self.iter().cloned().collect())
     }
-    pub fn swap_elements(&mut self, (x1, y1): (usize,usize), (x2, y2): (usize, usize))
+    pub fn swap_elements(&mut self, (x1, y1): (usize, usize), (x2, y2): (usize, usize))
     where
         Data: BorrowMut<[<Data as Array2DData>::Element]>,
     {
