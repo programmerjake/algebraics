@@ -53,20 +53,25 @@ pub struct ExtendedGCDAndLCM<T> {
 
 pub trait GCD<Rhs = Self> {
     type Output;
+    #[must_use]
     fn gcd(&self, rhs: &Rhs) -> Self::Output {
         self.gcd_lcm(rhs).gcd
     }
+    #[must_use]
     fn lcm(&self, rhs: &Rhs) -> Self::Output {
         self.gcd_lcm(rhs).lcm
     }
+    #[must_use]
     fn gcd_lcm(&self, rhs: &Rhs) -> GCDAndLCM<Self::Output>;
 }
 
 pub trait ExtendedGCD<Rhs = Self>: GCD<Rhs> {
+    #[must_use]
     fn extended_gcd(&self, rhs: &Rhs) -> ExtendedGCDResult<Self::Output> {
         let ExtendedGCDAndLCM { gcd, x, y, .. } = self.extended_gcd_lcm(rhs);
         ExtendedGCDResult { gcd, x, y }
     }
+    #[must_use]
     fn extended_gcd_lcm(&self, rhs: &Rhs) -> ExtendedGCDAndLCM<Self::Output>;
 }
 
