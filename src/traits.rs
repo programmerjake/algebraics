@@ -578,7 +578,11 @@ pub trait AlwaysExactDiv<Rhs = Self>:
 
 /// division always produces exact results except for division by zero, overflow, or similar
 pub trait AlwaysExactDivAssign<Rhs = Self>:
-    AlwaysExactDiv<Rhs> + ExactDivAssign<Rhs> + DivAssign<Rhs> + ExactDiv<Rhs, Output = Self> + Div<Rhs, Output = Self>
+    AlwaysExactDiv<Rhs>
+    + ExactDivAssign<Rhs>
+    + DivAssign<Rhs>
+    + ExactDiv<Rhs, Output = Self>
+    + Div<Rhs, Output = Self>
 {
 }
 

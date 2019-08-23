@@ -599,9 +599,13 @@ where
 {
 }
 
-impl<T: PolynomialCoefficient> PolynomialDivSupported for T where
-    T: for<'a> ExactDiv<&'a T, Output = T>+for<'a> Div<&'a T, Output=T> + AlwaysExactDivAssign+for<'a> AlwaysExactDivAssign<&'a T>,
-    for<'b> T::Element: ExactDivAssign<&'b T::Element> + One+ExactDivAssign,
+impl<T: PolynomialCoefficient> PolynomialDivSupported for T
+where
+    T: for<'a> ExactDiv<&'a T, Output = T>
+        + for<'a> Div<&'a T, Output = T>
+        + AlwaysExactDivAssign
+        + for<'a> AlwaysExactDivAssign<&'a T>,
+    for<'b> T::Element: ExactDivAssign<&'b T::Element> + One + ExactDivAssign,
 {
 }
 
