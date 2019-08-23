@@ -91,22 +91,22 @@ where
                 }
                 orthogonal_basis = gram_schmidt(basis.slice(.., ..));
             }
-            let mu_k_km1 = mu(k, k - 1, &basis, &orthogonal_basis);
-            if inner_product(orthogonal_basis.slice(k, ..), orthogonal_basis.slice(k, ..))
-                >= (delta.clone() - mu_k_km1.clone() * mu_k_km1)
-                    * inner_product(
-                        orthogonal_basis.slice(k - 1, ..),
-                        orthogonal_basis.slice(k - 1, ..),
-                    )
-            {
-                k += 1;
-            } else {
-                for y in 0..basis.y_size() {
-                    basis.swap_elements((k, y), (k - 1, y));
-                }
-                orthogonal_basis = gram_schmidt(basis.slice(.., ..));
-                k = 1.max(k - 1);
+        }
+        let mu_k_km1 = mu(k, k - 1, &basis, &orthogonal_basis);
+        if inner_product(orthogonal_basis.slice(k, ..), orthogonal_basis.slice(k, ..))
+            >= (delta.clone() - mu_k_km1.clone() * mu_k_km1)
+                * inner_product(
+                    orthogonal_basis.slice(k - 1, ..),
+                    orthogonal_basis.slice(k - 1, ..),
+                )
+        {
+            k += 1;
+        } else {
+            for y in 0..basis.y_size() {
+                basis.swap_elements((k, y), (k - 1, y));
             }
+            orthogonal_basis = gram_schmidt(basis.slice(.., ..));
+            k = 1.max(k - 1);
         }
     }
     basis
@@ -242,7 +242,7 @@ mod tests {
             4,
             4,
             ints(&[
-                11, -8, -4, 77, 68, -25, 5, 23, 45, 43, 17, -17, 1, 99, 91, 8,
+                11, -8, -4, 77, 68, -25, 5, 23, 45, 43, 17, -17, -32, -4, 66, -12,
             ]),
         );
         println!("expected:\n{:#}", expected);
