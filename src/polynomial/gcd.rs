@@ -3,32 +3,28 @@
 use crate::polynomial::Polynomial;
 use crate::polynomial::PolynomialCoefficient;
 use crate::polynomial::PolynomialDivSupported;
+use crate::polynomial::PolynomialReducingFactorSupported;
 use crate::polynomial::PseudoDivRem;
 use crate::traits::ExactDiv;
-use crate::traits::ExactDivAssign;
 use crate::traits::GCDAndLCM;
 use crate::traits::GCD;
-use num_traits::One;
 use num_traits::Zero;
 
-impl<T: PolynomialCoefficient + GCD<Output = T> + PolynomialDivSupported + PartialOrd> GCD
-    for Polynomial<T>
+impl<T> GCD for Polynomial<T>
 where
-    T::Element: ExactDiv<Output = T::Element> + ExactDivAssign + One,
-    for<'a> T::Element:
-        ExactDiv<&'a T::Element, Output = T::Element> + ExactDivAssign<&'a T::Element>,
+    T: PolynomialCoefficient + PolynomialDivSupported + PolynomialReducingFactorSupported,
 {
     type Output = Self;
     fn gcd(&self, rhs: &Self) -> Self {
-        let mut l = self.clone().into_primitive_part();
-        let mut r = rhs.clone().into_primitive_part();
+        let mut l = self.to_reduced();
+        let mut r = rhs.to_reduced();
         if l.is_zero() {
             return r;
         }
         while !r.is_zero() {
             let PseudoDivRem { remainder, .. } = l.pseudo_div_rem(&r);
             l = r;
-            r = remainder.into_primitive_part();
+            r = remainder.into_reduced();
         }
         l
     }
@@ -368,14 +364,14 @@ mod tests {
         test_case(
             vec![ri(0), ri(1), ri(2), ri(2)].into(),
             vec![ri(0), r(1, 3), r(2, 3), r(2, 3)].into(),
-            vec![ri(0), ri(1), ri(2), ri(2)].into(),
-            vec![ri(0), r(1, 3), r(2, 3), r(2, 3)].into(),
+            vec![ri(0), r(1, 2), ri(1), ri(1)].into(),
+            vec![ri(0), r(2, 3), r(4, 3), r(4, 3)].into(),
         );
         test_case(
             vec![ri(0), r(1, 2), r(1, 2), ri(1)].into(),
             vec![ri(0), r(1, 3), r(1, 3), r(2, 3)].into(),
-            vec![ri(0), ri(1), ri(1), ri(2)].into(),
-            vec![ri(0), r(1, 6), r(1, 6), r(1, 3)].into(),
+            vec![ri(0), r(1, 2), r(1, 2), ri(1)].into(),
+            vec![ri(0), r(1, 3), r(1, 3), r(2, 3)].into(),
         );
         test_case(Zero::zero(), Zero::zero(), Zero::zero(), Zero::zero());
     }

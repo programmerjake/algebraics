@@ -28,6 +28,7 @@ use std::slice;
 use std::vec;
 
 mod add_sub;
+mod distinct_degree_factorization;
 mod div_rem;
 mod gcd;
 mod mul;
@@ -205,6 +206,33 @@ pub trait PolynomialCoefficient:
             base *= base.clone();
         }
         retval.unwrap_or_else(|| unreachable!())
+    }
+}
+
+pub trait PolynomialReducingFactorSupported: PolynomialCoefficient {
+    /// returns the factor `f` of the passed in polynomial `p` where `p / f` is content-free (for integer polynomials) or monic (for polynomials over fields).
+    fn get_nonzero_reducing_factor(
+        elements: &[Self::Element],
+        divisor: &Self::Divisor,
+    ) -> Option<Self>;
+}
+
+impl<
+        T: PolynomialCoefficientElement
+            + Integer
+            + for<'a> DivAssign<&'a T>
+            + for<'a> Div<&'a T, Output = T>
+            + DivAssign
+            + RemAssign
+            + FromPrimitive
+            + GCD<Output = T>,
+    > PolynomialReducingFactorSupported for Ratio<T>
+{
+    fn get_nonzero_reducing_factor(
+        elements: &[Self::Element],
+        divisor: &Self::Divisor,
+    ) -> Option<Self> {
+        Some(Ratio::new(elements.last()?.clone(), divisor.clone()))
     }
 }
 
@@ -574,6 +602,26 @@ macro_rules! impl_polynomial_coefficient_for_int {
                 (coefficient.into_owned(), DivisorIsOne)
             }
         }
+
+        impl PolynomialReducingFactorSupported for $t {
+            fn get_nonzero_reducing_factor(elements: &[Self::Element], _divisor: &Self::Divisor) -> Option<Self> {
+                if let Some(mut retval) = elements.iter().fold(None, |lhs: Option<Self>, rhs| match lhs {
+                    None => Some(rhs.clone()),
+                    Some(lhs) => Some(GCD::gcd(&lhs, &rhs)),
+                }) {
+                    let c = elements
+                        .last()
+                        .expect("known to be nonzero");
+                    let zero = Self::zero();
+                    if (*c < zero) != (retval < zero) {
+                        retval = zero - retval;
+                    }
+                    Some(retval)
+                } else {
+                    None
+                }
+            }
+        }
     };
     {$($t:ty;)+} => {
         $(
@@ -594,20 +642,11 @@ impl_polynomial_coefficient_for_int! {
 
 pub trait PolynomialDivSupported:
     PolynomialCoefficient + for<'a> AlwaysExactDivAssign<&'a Self> + AlwaysExactDivAssign
-where
-    Self::Element: ExactDiv<Output = Self::Element> + ExactDivAssign + One,
-    for<'a> Self::Element:
-        ExactDiv<&'a Self::Element, Output = Self::Element> + ExactDivAssign<&'a Self::Element>,
 {
 }
 
-impl<T: PolynomialCoefficient> PolynomialDivSupported for T
-where
-    T: for<'a> ExactDiv<&'a T, Output = T>
-        + for<'a> Div<&'a T, Output = T>
-        + AlwaysExactDivAssign
-        + for<'a> AlwaysExactDivAssign<&'a T>,
-    for<'b> T::Element: ExactDivAssign<&'b T::Element> + One + ExactDivAssign,
+impl<T: PolynomialCoefficient> PolynomialDivSupported for T where
+    T: AlwaysExactDivAssign + for<'a> AlwaysExactDivAssign<&'a T>
 {
 }
 
@@ -925,25 +964,54 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
         self.monic_assign();
         self
     }
+    /// returns the factor `f` of the passed in polynomial `p` where `p / f` is content-free (for integer polynomials) or monic (for polynomials over fields).
+    pub fn nonzero_reducing_factor(&self) -> Option<T>
+    where
+        T: PolynomialReducingFactorSupported,
+    {
+        T::get_nonzero_reducing_factor(&self.elements, &self.divisor)
+    }
+    /// returns the factor `f` of the passed in polynomial `p` where `p / f` is content-free (for integer polynomials) or monic (for polynomials over fields).
+    /// returns zero when `p` is zero.
+    pub fn reducing_factor(&self) -> T
+    where
+        T: PolynomialReducingFactorSupported + Zero,
+    {
+        self.nonzero_reducing_factor().unwrap_or_else(T::zero)
+    }
+    /// converts `self` to be content-free (for integer polynomials) or monic (for polynomials over fields).
+    pub fn reduce_assign(&mut self)
+    where
+        T: PolynomialReducingFactorSupported + for<'a> ExactDiv<&'a T, Output = T>,
+    {
+        if let Some(d) = self.nonzero_reducing_factor() {
+            self.exact_div_assign(d);
+        }
+    }
+    /// returns `self` converted to be content-free (for integer polynomials) or monic (for polynomials over fields).
+    pub fn into_reduced(mut self) -> Self
+    where
+        T: PolynomialReducingFactorSupported + for<'a> ExactDiv<&'a T, Output = T>,
+    {
+        self.reduce_assign();
+        self
+    }
+    /// returns `self` converted to be content-free (for integer polynomials) or monic (for polynomials over fields).
+    pub fn to_reduced(&self) -> Self
+    where
+        T: PolynomialReducingFactorSupported + for<'a> ExactDiv<&'a T, Output = T>,
+    {
+        self.clone().into_reduced()
+    }
     pub fn to_sturm_sequence(&self) -> SturmSequence<T>
     where
         T: PolynomialDivSupported,
-        for<'a> T::Element: ExactDivAssign<&'a T::Element>
-            + ExactDiv<&'a T::Element, Output = T::Element>
-            + ExactDivAssign
-            + ExactDiv<Output = T::Element>
-            + One,
     {
         self.clone().into_sturm_sequence()
     }
     pub fn into_sturm_sequence(self) -> SturmSequence<T>
     where
         T: PolynomialDivSupported,
-        for<'a> T::Element: ExactDivAssign<&'a T::Element>
-            + ExactDiv<&'a T::Element, Output = T::Element>
-            + ExactDivAssign
-            + ExactDiv<Output = T::Element>
-            + One,
     {
         let self_len = self.len();
         match self_len {
@@ -971,12 +1039,7 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
     }
     pub fn reduce_multiple_roots(&mut self)
     where
-        T: PolynomialDivSupported + GCD<Output = T> + PartialOrd,
-        for<'a> T::Element: ExactDivAssign<&'a T::Element>
-            + ExactDiv<&'a T::Element, Output = T::Element>
-            + ExactDivAssign
-            + ExactDiv<Output = T::Element>
-            + One,
+        T: PolynomialDivSupported + PolynomialReducingFactorSupported,
     {
         let derivative = self.derivative();
         *self /= GCD::gcd(self, &derivative);
@@ -1049,13 +1112,12 @@ pub struct SquareFreePolynomialFactors<T: PolynomialCoefficient> {
 
 impl<T> Polynomial<T>
 where
-    T: GCD<Output = T>
-        + PartialOrd
-        + PolynomialDivSupported
-        + RingCharacteristic<Type = CharacteristicZero>,
-    T::Element: ExactDiv<Output = T::Element> + ExactDivAssign + One,
-    for<'a> T::Element:
-        ExactDiv<&'a T::Element, Output = T::Element> + ExactDivAssign<&'a T::Element>,
+    T: PolynomialDivSupported
+        + RingCharacteristic<Type = CharacteristicZero>
+        + PolynomialReducingFactorSupported
+        + GCD<Output = T>
+        + PartialOrd,
+    for<'a> T::Element: ExactDivAssign<&'a T::Element>,
 {
     /// splits `self` into square-free factors using Yun's algorithm
     ///
@@ -1072,13 +1134,13 @@ where
         let content = self.content();
         let f = self / &content;
         let f_prime = f.derivative();
-        let a0 = f.gcd(&f_prime);
+        let a0 = f.gcd(&f_prime).into_primitive_part();
         let mut b = f / &a0;
         let mut c = f_prime / &a0;
         let mut d = c - b.derivative();
         let mut a = Vec::new();
         loop {
-            let a_i = b.gcd(&d);
+            let a_i = b.gcd(&d).into_primitive_part();
             b /= &a_i;
             c = d / &a_i;
             d = c - b.derivative();
@@ -1197,14 +1259,7 @@ impl From<PolynomialIsZero> for std::io::Error {
     }
 }
 
-impl<T: PolynomialDivSupported> SturmSequence<T>
-where
-    for<'a> T::Element: ExactDivAssign<&'a T::Element>
-        + ExactDiv<&'a T::Element, Output = T::Element>
-        + ExactDivAssign
-        + ExactDiv<Output = T::Element>
-        + One,
-{
+impl<T: PolynomialDivSupported> SturmSequence<T> {
     pub fn new(polynomial: Polynomial<T>) -> Self {
         polynomial.into_sturm_sequence()
     }

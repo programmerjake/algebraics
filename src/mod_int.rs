@@ -3,6 +3,7 @@
 
 use crate::polynomial::DivisorIsOne;
 use crate::polynomial::PolynomialCoefficient;
+use crate::polynomial::PolynomialReducingFactorSupported;
 use crate::traits::AlwaysExactDiv;
 use crate::traits::AlwaysExactDivAssign;
 use crate::traits::ExactDiv;
@@ -880,6 +881,19 @@ where
         let ModularInteger { value, modulus } = base;
         let value = value.pow_modular_reduce(&exponent, &modulus);
         ModularInteger { value, modulus }
+    }
+}
+
+impl<V, M> PolynomialReducingFactorSupported for ModularInteger<V, M>
+where
+    V: ModularReducePow<usize> + Integer + fmt::Debug + Hash,
+    M: Modulus<Value = V> + PrimeModulus + fmt::Debug + Hash,
+{
+    fn get_nonzero_reducing_factor(
+        elements: &[Self::Element],
+        _divisor: &Self::Divisor,
+    ) -> Option<Self> {
+        Some(elements.last()?.clone())
     }
 }
 
