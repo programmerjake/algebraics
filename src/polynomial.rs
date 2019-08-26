@@ -27,7 +27,10 @@ use std::ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign};
 use std::slice;
 use std::vec;
 
-mod ops;
+mod add_sub;
+mod div_rem;
+mod gcd;
+mod mul;
 
 pub trait PolynomialCoefficientElement:
     PolynomialCoefficient<Divisor = DivisorIsOne>
