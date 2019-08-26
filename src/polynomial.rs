@@ -47,7 +47,6 @@ pub trait PolynomialCoefficientElement:
     + for<'a> AddAssign<&'a Self>
     + for<'a> SubAssign<&'a Self>
     + for<'a> MulAssign<&'a Self>
-    + GCD<Self, Output = Self>
 {
 }
 
@@ -65,8 +64,7 @@ impl<
             + MulAssign
             + for<'a> AddAssign<&'a Self>
             + for<'a> SubAssign<&'a Self>
-            + for<'a> MulAssign<&'a Self>
-            + GCD<Self, Output = Self>,
+            + for<'a> MulAssign<&'a Self>,
     > PolynomialCoefficientElement for T
 {
 }
@@ -217,7 +215,8 @@ impl<
             + for<'a> Div<&'a T, Output = T>
             + DivAssign
             + RemAssign
-            + FromPrimitive,
+            + FromPrimitive
+            + GCD<Output = T>,
     > PolynomialCoefficient for Ratio<T>
 {
     type Element = T;

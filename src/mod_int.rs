@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // See Notices.txt for copyright information
 
+use crate::polynomial::DivisorIsOne;
+use crate::polynomial::PolynomialCoefficient;
 use crate::traits::AlwaysExactDiv;
 use crate::traits::AlwaysExactDivAssign;
 use crate::traits::ExactDiv;
@@ -21,9 +23,11 @@ use num_traits::One;
 use num_traits::ToPrimitive;
 use num_traits::Zero;
 use std::borrow::Borrow;
+use std::borrow::Cow;
 use std::convert::identity;
 use std::convert::TryInto;
 use std::fmt;
+use std::hash::Hash;
 use std::ops::Add;
 use std::ops::AddAssign;
 use std::ops::Div;
@@ -104,6 +108,46 @@ pub trait ModularReduce: Clone + Eq {
         self.modular_mul_move_assign(rhs, modulus);
         self
     }
+    fn modular_reduce_from_bigint<M: Modulus<Value = Self>>(v: BigInt, modulus: M) -> Self;
+    fn modular_reduce_from_biguint<M: Modulus<Value = Self>>(v: BigUint, modulus: M) -> Self {
+        Self::modular_reduce_from_bigint(v.into(), modulus)
+    }
+    fn modular_reduce_from_u8<M: Modulus<Value = Self>>(v: u8, modulus: M) -> Self {
+        Self::modular_reduce_from_u16(v.into(), modulus)
+    }
+    fn modular_reduce_from_u16<M: Modulus<Value = Self>>(v: u16, modulus: M) -> Self {
+        Self::modular_reduce_from_u32(v.into(), modulus)
+    }
+    fn modular_reduce_from_u32<M: Modulus<Value = Self>>(v: u32, modulus: M) -> Self {
+        Self::modular_reduce_from_u64(v.into(), modulus)
+    }
+    fn modular_reduce_from_u64<M: Modulus<Value = Self>>(v: u64, modulus: M) -> Self {
+        Self::modular_reduce_from_u128(v.into(), modulus)
+    }
+    fn modular_reduce_from_u128<M: Modulus<Value = Self>>(v: u128, modulus: M) -> Self {
+        Self::modular_reduce_from_biguint(v.into(), modulus)
+    }
+    fn modular_reduce_from_usize<M: Modulus<Value = Self>>(v: usize, modulus: M) -> Self {
+        Self::modular_reduce_from_u128(v as _, modulus)
+    }
+    fn modular_reduce_from_i8<M: Modulus<Value = Self>>(v: i8, modulus: M) -> Self {
+        Self::modular_reduce_from_i16(v.into(), modulus)
+    }
+    fn modular_reduce_from_i16<M: Modulus<Value = Self>>(v: i16, modulus: M) -> Self {
+        Self::modular_reduce_from_i32(v.into(), modulus)
+    }
+    fn modular_reduce_from_i32<M: Modulus<Value = Self>>(v: i32, modulus: M) -> Self {
+        Self::modular_reduce_from_i64(v.into(), modulus)
+    }
+    fn modular_reduce_from_i64<M: Modulus<Value = Self>>(v: i64, modulus: M) -> Self {
+        Self::modular_reduce_from_i128(v.into(), modulus)
+    }
+    fn modular_reduce_from_i128<M: Modulus<Value = Self>>(v: i128, modulus: M) -> Self {
+        Self::modular_reduce_from_bigint(v.into(), modulus)
+    }
+    fn modular_reduce_from_isize<M: Modulus<Value = Self>>(v: isize, modulus: M) -> Self {
+        Self::modular_reduce_from_i128(v as _, modulus)
+    }
 }
 
 pub trait ModularReducePow<E = Self>: ModularReduce {
@@ -143,7 +187,7 @@ where
 }
 
 macro_rules! impl_int_modulus {
-    ($t:ty, $wide:ty, $to_wide:expr, $from_wide:expr) => {
+    ($t:ty, $wide:ty, $to_wide:expr, $from_wide:expr, $from_bigint:ident) => {
         impl Modulus for $t {
             type Value = Self;
             fn to_modulus(&self) -> &Self::Value {
@@ -188,13 +232,18 @@ macro_rules! impl_int_modulus {
                 wide %= $to_wide(modulus.to_modulus().clone());
                 *self = $from_wide(wide);
             }
+            fn modular_reduce_from_bigint<M: Modulus<Value = Self>>(v: BigInt, modulus: M) -> Self {
+                v.mod_floor(&modulus.into_modulus().into())
+                    .$from_bigint()
+                    .expect(concat!(stringify!($from_bigint), " failed"))
+            }
         }
     };
 }
 
 macro_rules! impl_prim_int_modulus {
-    ($t:ty, $wide:ty, $to_wide:expr, $from_wide:expr) => {
-        impl_int_modulus!($t, $wide, $to_wide, $from_wide);
+    ($t:ty, $wide:ty, $to_wide:expr, $from_wide:expr, $from_bigint:ident) => {
+        impl_int_modulus!($t, $wide, $to_wide, $from_wide, $from_bigint);
 
         impl<E: Integer + Clone + FromPrimitive> ModularReducePow<E> for $t {
             fn pow_modular_reduce<M: Modulus<Value = Self>>(
@@ -235,16 +284,16 @@ macro_rules! impl_prim_int_modulus {
 }
 
 macro_rules! impl_bigint_modulus {
-    ($t:ty) => {
-        impl_int_modulus!($t, $t, identity, identity);
+    ($t:ty, $from_bigint:ident) => {
+        impl_int_modulus!($t, $t, identity, identity, $from_bigint);
 
-        impl ModularReducePow for $t {
+        impl<E: Clone + Into<$t>> ModularReducePow<E> for $t {
             fn pow_modular_reduce<M: Modulus<Value = Self>>(
                 &self,
-                exponent: &Self,
+                exponent: &E,
                 modulus: M,
             ) -> Self {
-                self.modpow(exponent, modulus.to_modulus())
+                self.modpow(&exponent.clone().into(), modulus.to_modulus())
             }
         }
     };
@@ -265,20 +314,29 @@ fn convert_to_u128(v: BigUint) -> u128 {
     v.to_u128().expect("can't convert to u128")
 }
 
-impl_prim_int_modulus!(i8, i16, i16::from, convert_to);
-impl_prim_int_modulus!(u8, u16, u16::from, convert_to);
-impl_prim_int_modulus!(i16, i32, i32::from, convert_to);
-impl_prim_int_modulus!(u16, u32, u32::from, convert_to);
-impl_prim_int_modulus!(i32, i64, i64::from, convert_to);
-impl_prim_int_modulus!(u32, u64, u64::from, convert_to);
-impl_prim_int_modulus!(i64, i128, i128::from, convert_to);
-impl_prim_int_modulus!(u64, u128, u128::from, convert_to);
-impl_prim_int_modulus!(i128, BigInt, BigInt::from, convert_to_i128);
-impl_prim_int_modulus!(u128, BigUint, BigUint::from, convert_to_u128);
-impl_prim_int_modulus!(isize, i128, convert_to::<isize, i128>, convert_to);
-impl_prim_int_modulus!(usize, u128, convert_to::<usize, u128>, convert_to);
-impl_bigint_modulus!(BigInt);
-impl_bigint_modulus!(BigUint);
+/// helper trait for impl_bigint_modulus!
+trait BigIntToOptionBigInt: Sized {
+    fn bigint_to_option_bigint(self) -> Option<Self> {
+        Some(self)
+    }
+}
+
+impl BigIntToOptionBigInt for BigInt {}
+
+impl_prim_int_modulus!(i8, i16, i16::from, convert_to, to_i8);
+impl_prim_int_modulus!(u8, u16, u16::from, convert_to, to_u8);
+impl_prim_int_modulus!(i16, i32, i32::from, convert_to, to_i16);
+impl_prim_int_modulus!(u16, u32, u32::from, convert_to, to_u16);
+impl_prim_int_modulus!(i32, i64, i64::from, convert_to, to_i32);
+impl_prim_int_modulus!(u32, u64, u64::from, convert_to, to_u32);
+impl_prim_int_modulus!(i64, i128, i128::from, convert_to, to_i64);
+impl_prim_int_modulus!(u64, u128, u128::from, convert_to, to_u64);
+impl_prim_int_modulus!(i128, BigInt, BigInt::from, convert_to_i128, to_i128);
+impl_prim_int_modulus!(u128, BigUint, BigUint::from, convert_to_u128, to_u128);
+impl_prim_int_modulus!(isize, i128, convert_to::<isize, i128>, convert_to, to_isize);
+impl_prim_int_modulus!(usize, u128, convert_to::<usize, u128>, convert_to, to_usize);
+impl_bigint_modulus!(BigInt, bigint_to_option_bigint);
+impl_bigint_modulus!(BigUint, to_biguint);
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub struct ModularInteger<V, M> {
@@ -314,6 +372,10 @@ impl<V: ModularReduce + Eq, M: Modulus<Value = V>> ModularInteger<V, M> {
     pub fn new<T: Into<V>>(value: T, modulus: M) -> Self {
         let value = value.into().modular_reduce(&modulus);
         Self { value, modulus }
+    }
+    /// `*self = -*self`
+    pub fn neg_assign(&mut self) {
+        V::modular_neg_assign(&mut self.value, &self.modulus);
     }
 }
 
@@ -717,6 +779,109 @@ impl_exact_div!(assign (), V, M, ModularInteger<V, M>, ModularInteger<V, M>);
 impl_exact_div!(assign ('r), V, M, ModularInteger<V, M>, &'r ModularInteger<V, M>);
 impl_exact_div!(('l), V, M, &'l ModularInteger<V, M>, ModularInteger<V, M>);
 impl_exact_div!(('l, 'r), V, M, &'l ModularInteger<V, M>, &'r ModularInteger<V, M>);
+
+impl<V, M> PolynomialCoefficient for ModularInteger<V, M>
+where
+    V: ModularReducePow<usize> + Eq + One + Zero + fmt::Debug + Hash,
+    M: Modulus<Value = V> + fmt::Debug + Hash,
+{
+    type Element = Self;
+    type Divisor = DivisorIsOne;
+    fn is_element_zero(element: &Self::Element) -> bool {
+        element.value.is_zero()
+    }
+    fn is_element_one(element: &Self::Element) -> bool {
+        element.value.is_one()
+    }
+    fn is_coefficient_zero(coefficient: &Self) -> bool {
+        coefficient.value.is_zero()
+    }
+    fn is_coefficient_one(coefficient: &Self) -> bool {
+        coefficient.value.is_one()
+    }
+    fn set_element_zero(element: &mut Self::Element) {
+        element.value.set_zero();
+    }
+    fn set_element_one(element: &mut Self::Element) {
+        element.value = V::modular_reduce(V::one(), &element.modulus);
+    }
+    fn set_coefficient_zero(coefficient: &mut Self) {
+        Self::set_element_zero(coefficient);
+    }
+    fn set_coefficient_one(coefficient: &mut Self) {
+        Self::set_element_one(coefficient);
+    }
+    fn make_zero_element(element: Cow<Self::Element>) -> Self::Element {
+        let modulus = match element {
+            Cow::Borrowed(element) => element.modulus.clone(),
+            Cow::Owned(element) => element.modulus,
+        };
+        Self::new(V::zero(), modulus)
+    }
+    fn make_one_element(element: Cow<Self::Element>) -> Self::Element {
+        let modulus = match element {
+            Cow::Borrowed(element) => element.modulus.clone(),
+            Cow::Owned(element) => element.modulus,
+        };
+        Self::new(V::one(), modulus)
+    }
+    fn make_zero_coefficient_from_element(element: Cow<Self::Element>) -> Self {
+        Self::make_zero_element(element)
+    }
+    fn make_one_coefficient_from_element(element: Cow<Self::Element>) -> Self {
+        Self::make_one_element(element)
+    }
+    fn make_zero_coefficient_from_coefficient(coefficient: Cow<Self>) -> Self {
+        Self::make_zero_element(coefficient)
+    }
+    fn make_one_coefficient_from_coefficient(coefficient: Cow<Self>) -> Self {
+        Self::make_one_element(coefficient)
+    }
+    fn negate_element(element: &mut Self::Element) {
+        element.neg_assign();
+    }
+    fn mul_element_by_usize(element: Cow<Self::Element>, multiplier: usize) -> Self::Element {
+        let mut element = element.into_owned();
+        Self::mul_assign_element_by_usize(&mut element, multiplier);
+        element
+    }
+    fn mul_assign_element_by_usize(element: &mut Self::Element, multiplier: usize) {
+        element.value.modular_mul_move_assign(
+            V::modular_reduce_from_usize(multiplier, &element.modulus),
+            &element.modulus,
+        );
+    }
+    fn divisor_to_element(
+        _v: Cow<Self::Divisor>,
+        other_element: Cow<Self::Element>,
+    ) -> Self::Element {
+        Self::make_one_element(other_element)
+    }
+    fn coefficients_to_elements(coefficients: Cow<[Self]>) -> (Vec<Self::Element>, Self::Divisor) {
+        (coefficients.into_owned(), One::one())
+    }
+    fn make_coefficient(element: Cow<Self::Element>, _divisor: Cow<Self::Divisor>) -> Self {
+        element.into_owned()
+    }
+    fn reduce_divisor(_elements: &mut [Self::Element], _divisor: &mut Self::Divisor) {}
+    fn get_reduced_divisor(
+        elements: &[Self::Element],
+        _divisor: &Self::Divisor,
+    ) -> (Vec<Self::Element>, Self::Divisor) {
+        (elements.to_vec(), One::one())
+    }
+    fn coefficient_to_element(coefficient: Cow<Self>) -> (Self::Element, Self::Divisor) {
+        (coefficient.into_owned(), One::one())
+    }
+    fn divisor_pow_usize(_base: Self::Divisor, _exponent: usize) -> Self::Divisor {
+        One::one()
+    }
+    fn element_pow_usize(base: Self::Element, exponent: usize) -> Self::Element {
+        let ModularInteger { value, modulus } = base;
+        let value = value.pow_modular_reduce(&exponent, &modulus);
+        ModularInteger { value, modulus }
+    }
+}
 
 #[cfg(test)]
 mod tests {
