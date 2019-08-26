@@ -307,7 +307,7 @@ macro_rules! impl_div_rem_eq {
         {
             fn div_assign(&mut self, rhs: $r) {
                 let lhs = mem::replace(self, Zero::zero());
-                *self = lhs.exact_div(rhs);
+                *self = lhs / rhs;
             }
         }
 
