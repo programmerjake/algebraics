@@ -350,7 +350,7 @@ impl<'r, V: ModularReduce + Eq, M: Modulus<Value = V>> AddAssign<&'r ModularInte
     }
 }
 
-impl<'r, V: 'r + ModularReduce + Eq, M: Modulus<Value = V>> Add<&'r ModularInteger<V, M>>
+impl<'r, V: ModularReduce + Eq, M: Modulus<Value = V>> Add<&'r ModularInteger<V, M>>
     for ModularInteger<V, M>
 {
     type Output = ModularInteger<V, M>;
@@ -376,7 +376,7 @@ impl<'l, V: ModularReduce + Eq, M: Modulus<Value = V>> Add<ModularInteger<V, M>>
     }
 }
 
-impl<'l, 'r, V: 'r + ModularReduce + Eq, M: Modulus<Value = V>> Add<&'r ModularInteger<V, M>>
+impl<'l, 'r, V: ModularReduce + Eq, M: Modulus<Value = V>> Add<&'r ModularInteger<V, M>>
     for &'l ModularInteger<V, M>
 {
     type Output = ModularInteger<V, M>;
@@ -529,7 +529,7 @@ impl<'r, V: ModularReduce + Eq, M: Modulus<Value = V>> MulAssign<&'r ModularInte
     }
 }
 
-impl<'r, V: 'r + ModularReduce + Eq, M: Modulus<Value = V>> Mul<&'r ModularInteger<V, M>>
+impl<'r, V: ModularReduce + Eq, M: Modulus<Value = V>> Mul<&'r ModularInteger<V, M>>
     for ModularInteger<V, M>
 {
     type Output = ModularInteger<V, M>;
@@ -555,7 +555,7 @@ impl<'l, V: ModularReduce + Eq, M: Modulus<Value = V>> Mul<ModularInteger<V, M>>
     }
 }
 
-impl<'l, 'r, V: 'r + ModularReduce + Eq, M: Modulus<Value = V>> Mul<&'r ModularInteger<V, M>>
+impl<'l, 'r, V: ModularReduce + Eq, M: Modulus<Value = V>> Mul<&'r ModularInteger<V, M>>
     for &'l ModularInteger<V, M>
 {
     type Output = ModularInteger<V, M>;
