@@ -2,12 +2,12 @@
 # See Notices.txt for copyright information
 [package]
 name = "algebraics"
-version = "0.0.1"
+version = "0.0.2"
 authors = ["Jacob Lifshay <programmerjake@gmail.com>"]
 edition = "2018"
 license = "LGPL-2.1-or-later"
-description = "algebraic numbers library"
-keywords = ["algebraic-numbers", "arbitrary-precision", "polynomial", "real-numbers", "exact-arithmetic"]
+description = "algebraic numbers library; placeholder for https://github.com/programmerjake/algebraics"
+keywords = ["algebraic-numbers", "arbitrary-precision", "polynomials", "real-numbers", "exact-arithmetic"]
 
 [dependencies]
 num-traits = "0.2"
