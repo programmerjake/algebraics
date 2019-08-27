@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# See Notices.txt for copyright information
+[package]
+name = "algebraics"
+version = "0.0.1"
+authors = ["Jacob Lifshay <programmerjake@gmail.com>"]
+edition = "2018"
+license = "LGPL-2.1-or-later"
+
+[dependencies]
+num-traits = "0.2"
+num-bigint = "0.2"
+num-integer = "0.1"
+num-rational = "0.2"
