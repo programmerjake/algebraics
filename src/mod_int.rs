@@ -31,6 +31,7 @@ use std::fmt;
 use std::hash::Hash;
 use std::ops::Add;
 use std::ops::AddAssign;
+use std::ops::Deref;
 use std::ops::Div;
 use std::ops::DivAssign;
 use std::ops::Mul;
@@ -185,6 +186,61 @@ pub trait PrimeModulus: PrimePowerModulus
 where
     <Self as Modulus>::Value: Integer + Clone,
 {
+}
+
+#[derive(Copy, Clone, Hash, Eq, PartialEq, Debug, Default)]
+pub struct KnownPrime<T: Modulus>(T);
+
+impl<T: Modulus> KnownPrime<T> {
+    pub fn new_unsafe(prime: T) -> Self {
+        KnownPrime(prime)
+    }
+    pub fn unwrap(self) -> T {
+        self.0
+    }
+}
+
+impl<T: Modulus> Deref for KnownPrime<T> {
+    type Target = T;
+    fn deref(&self) -> &T {
+        &self.0
+    }
+}
+
+impl<T: Modulus> Modulus for KnownPrime<T> {
+    type Value = T::Value;
+    fn to_modulus(&self) -> &Self::Value {
+        self.0.to_modulus()
+    }
+    fn into_modulus(self) -> Self::Value {
+        self.0.into_modulus()
+    }
+}
+
+impl<T: Modulus> PrimePowerModulus for KnownPrime<T>
+where
+    T::Value: Integer,
+{
+    fn base_and_exponent(&self) -> BaseAndExponent<T::Value> {
+        BaseAndExponent {
+            base: self.clone().into_modulus(),
+            exponent: One::one(),
+        }
+    }
+}
+
+impl<T: Modulus> PrimeModulus for KnownPrime<T> where T::Value: Integer {}
+
+impl<T: StaticModulus> StaticModulus for KnownPrime<T> {
+    fn get_modulus() -> Self::Value {
+        T::get_modulus()
+    }
+}
+
+impl<T: Modulus + fmt::Display> fmt::Display for KnownPrime<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.0.fmt(f)
+    }
 }
 
 macro_rules! impl_int_modulus {
