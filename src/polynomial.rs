@@ -1104,6 +1104,29 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
     pub fn into_eval(self, at: &T) -> T {
         Self::eval_helper(self.into_iter(), at)
     }
+    pub fn set_one_if_nonzero(&mut self) -> Result<(), ()> {
+        if self.elements.is_empty() {
+            Err(())
+        } else {
+            self.elements.drain(1..);
+            self.divisor = One::one();
+            T::set_element_one(&mut self.elements[0]);
+            Ok(())
+        }
+    }
+    pub fn into_one_if_nonzero(mut self) -> Result<Self, Self> {
+        match self.set_one_if_nonzero() {
+            Ok(()) => Ok(self),
+            Err(()) => Err(self),
+        }
+    }
+    pub fn to_one_if_nonzero(&self) -> Result<Self, ()> {
+        let first_element = self.elements.first().ok_or(())?;
+        Ok(Self {
+            elements: vec![T::make_one_element(Cow::Borrowed(first_element))],
+            divisor: One::one(),
+        })
+    }
 }
 
 #[derive(Clone, Eq, Hash, PartialEq, Debug)]
