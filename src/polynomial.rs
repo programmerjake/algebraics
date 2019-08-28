@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // See Notices.txt for copyright information
+use std::iter::FromIterator;
 use crate::traits::AlwaysExactDivAssign;
 use crate::traits::CharacteristicZero;
 use crate::traits::ExactDiv;
@@ -206,6 +207,9 @@ pub trait PolynomialCoefficient:
             base *= base.clone();
         }
         retval.unwrap_or_else(|| unreachable!())
+    }
+    fn from_iterator<I: Iterator<Item=Self>>(iter: I) -> Polynomial<Self> {
+        Self::coefficients_to_elements(Cow::Owned(iter.collect())).into()
     }
 }
 
@@ -668,6 +672,12 @@ pub struct PseudoDivRem<T: PolynomialCoefficient> {
 pub struct Polynomial<T: PolynomialCoefficient> {
     elements: Vec<T::Element>,
     divisor: T::Divisor,
+}
+
+impl<T: PolynomialCoefficient> FromIterator<T> for Polynomial<T> {
+    fn from_iter<I: IntoIterator<Item=T>>(iter: I) -> Self {
+        T::from_iterator(iter.into_iter())
+    }
 }
 
 impl<T: PolynomialCoefficient> Default for Polynomial<T> {
