@@ -1120,9 +1120,10 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
             Err(()) => Err(self),
         }
     }
-    pub fn to_one_if_nonzero(&self) -> Result<Self, ()> {
-        let first_element = self.elements.first().ok_or(())?;
-        Ok(Self {
+    #[must_use]
+    pub fn to_one_if_nonzero(&self) -> Option<Self> {
+        let first_element = self.elements.first()?;
+        Some(Self {
             elements: vec![T::make_one_element(Cow::Borrowed(first_element))],
             divisor: One::one(),
         })

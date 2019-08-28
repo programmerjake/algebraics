@@ -471,7 +471,7 @@ impl<T: PolynomialDivSupported> Polynomial<T> {
             return None;
         }
         if exponent.is_zero() {
-            return self.to_one_if_nonzero().ok();
+            return self.to_one_if_nonzero();
         }
         let mut base = self.checked_rem(modulus)?;
         if exponent.is_one() {
