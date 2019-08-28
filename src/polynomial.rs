@@ -838,6 +838,17 @@ impl<T: PolynomialCoefficient> Into<(Vec<T::Element>, T::Divisor)> for Polynomia
 }
 
 impl<T: PolynomialCoefficient> Polynomial<T> {
+    pub fn make_monomial(coefficient: T, variable_exponent: usize) -> Self {
+        if T::is_coefficient_zero(&coefficient) {
+            return Self::zero();
+        }
+        let (element, divisor) = T::coefficient_to_element(Cow::Owned(coefficient));
+        let mut elements = Vec::with_capacity(variable_exponent + 1);
+        elements
+            .extend((0..variable_exponent).map(|_| T::make_zero_element(Cow::Borrowed(&element))));
+        elements.push(element);
+        Self { elements, divisor }
+    }
     pub fn coefficient(&self, index: usize) -> T {
         T::make_coefficient(
             Cow::Borrowed(&self.elements[index]),
@@ -1573,5 +1584,18 @@ mod tests {
                 ],
             },
         );
+    }
+
+    #[test]
+    fn test_make_monomial() {
+        assert_eq!(
+            Polynomial::from(vec![0, 0, 123]),
+            Polynomial::make_monomial(123, 2)
+        );
+        assert_eq!(
+            Polynomial::from(vec![123]),
+            Polynomial::make_monomial(123, 0)
+        );
+        assert_eq!(Polynomial::zero(), Polynomial::make_monomial(0, 5));
     }
 }
