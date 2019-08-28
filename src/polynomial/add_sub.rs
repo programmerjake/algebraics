@@ -6,6 +6,8 @@ use crate::polynomial::Polynomial;
 use crate::polynomial::PolynomialCoefficient;
 use crate::traits::GCDAndLCM;
 use crate::traits::GCD;
+use num_traits::CheckedAdd;
+use num_traits::CheckedSub;
 use num_traits::One;
 use num_traits::Zero;
 use std::borrow::Cow;
@@ -170,6 +172,12 @@ impl<'a, T: PolynomialCoefficient> Add<&'a T> for &'a Polynomial<T> {
     }
 }
 
+impl<T: PolynomialCoefficient> CheckedAdd for Polynomial<T> {
+    fn checked_add(&self, rhs: &Self) -> Option<Self> {
+        Some(self + rhs)
+    }
+}
+
 impl<T: PolynomialCoefficient> Zero for Polynomial<T> {
     fn zero() -> Self {
         Default::default()
@@ -276,6 +284,12 @@ impl<'a, T: PolynomialCoefficient> Sub<&'a T> for &'a Polynomial<T> {
         let mut lhs = self.clone();
         lhs -= rhs;
         lhs
+    }
+}
+
+impl<T: PolynomialCoefficient> CheckedSub for Polynomial<T> {
+    fn checked_sub(&self, rhs: &Self) -> Option<Self> {
+        Some(self - rhs)
     }
 }
 

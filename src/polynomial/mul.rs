@@ -3,6 +3,7 @@
 
 use crate::polynomial::Polynomial;
 use crate::polynomial::PolynomialCoefficient;
+use num_traits::CheckedMul;
 use num_traits::{One, Zero};
 use std::borrow::Cow;
 use std::ops::{AddAssign, Mul, MulAssign};
@@ -63,6 +64,12 @@ impl<T: PolynomialCoefficient> MulAssign for Polynomial<T> {
 impl<'a, T: PolynomialCoefficient> MulAssign<&'a Polynomial<T>> for Polynomial<T> {
     fn mul_assign(&mut self, rhs: &Polynomial<T>) {
         *self = &*self * rhs;
+    }
+}
+
+impl<T: PolynomialCoefficient> CheckedMul for Polynomial<T> {
+    fn checked_mul(&self, rhs: &Self) -> Option<Self> {
+        Some(self * rhs)
     }
 }
 
