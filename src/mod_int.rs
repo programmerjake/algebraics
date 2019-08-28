@@ -354,6 +354,12 @@ impl<V, M> ModularInteger<V, M> {
     }
 }
 
+impl<V: fmt::Display, M: fmt::Display> fmt::Display for ModularInteger<V, M> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "mod_int({}, {})", self.value, self.modulus)
+    }
+}
+
 impl<V, M: PartialEq> ModularInteger<V, M> {
     pub fn has_matching_moduli(&self, rhs: &Self) -> bool {
         self.modulus == rhs.modulus
