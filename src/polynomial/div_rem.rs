@@ -466,7 +466,7 @@ impl<'a, T: PolynomialCoefficient + for<'b> ExactDiv<&'b T, Output = T>> ExactDi
 }
 
 impl<T: PolynomialDivSupported> Polynomial<T> {
-    pub fn checked_modpow<E: Clone + Integer>(&self, exponent: E, modulus: &Self) -> Option<Self> {
+    pub fn checked_powmod<E: Clone + Integer>(&self, exponent: E, modulus: &Self) -> Option<Self> {
         if exponent < Zero::zero() {
             return None;
         }
@@ -495,9 +495,9 @@ impl<T: PolynomialDivSupported> Polynomial<T> {
         }
         retval
     }
-    pub fn modpow<E: Clone + Integer>(&self, exponent: E, modulus: &Self) -> Self {
-        self.checked_modpow(exponent, modulus)
-            .expect("checked_modpow failed")
+    pub fn powmod<E: Clone + Integer>(&self, exponent: E, modulus: &Self) -> Self {
+        self.checked_powmod(exponent, modulus)
+            .expect("checked_powmod failed")
     }
 }
 
@@ -680,7 +680,7 @@ mod tests {
     }
 
     #[test]
-    fn test_modpow() {
+    fn test_powmod() {
         fn test(
             base: Polynomial<Ratio<BigInt>>,
             exponent: usize,
@@ -697,7 +697,7 @@ mod tests {
             println!("exponent: {}", exponent);
             println!("modulus: {}", modulus);
             println!("expected: {}", display_opt(&expected));
-            let result = base.checked_modpow(exponent, &modulus);
+            let result = base.checked_powmod(exponent, &modulus);
             println!("result: {}", display_opt(&result));
             assert!(expected == result);
         }
