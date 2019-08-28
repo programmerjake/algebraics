@@ -655,8 +655,8 @@ impl fmt::Display for NotAPseudoPrimePower {
 
 #[derive(Copy, Clone, Hash, Eq, PartialEq, Debug)]
 pub struct BaseAndExponent<T> {
-    base: T,
-    exponent: usize,
+    pub base: T,
+    pub exponent: usize,
 }
 
 pub trait IsPseudoPrimePower: IsPseudoPrime + FloorLog2 {
