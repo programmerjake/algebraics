@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // See Notices.txt for copyright information
-use std::iter::FromIterator;
 use crate::traits::AlwaysExactDivAssign;
 use crate::traits::CharacteristicZero;
 use crate::traits::ExactDiv;
@@ -18,6 +17,7 @@ use std::borrow::Cow;
 use std::error::Error;
 use std::fmt;
 use std::hash;
+use std::iter::FromIterator;
 use std::mem;
 use std::ops::Deref;
 use std::ops::Div;
@@ -208,7 +208,7 @@ pub trait PolynomialCoefficient:
         }
         retval.unwrap_or_else(|| unreachable!())
     }
-    fn from_iterator<I: Iterator<Item=Self>>(iter: I) -> Polynomial<Self> {
+    fn from_iterator<I: Iterator<Item = Self>>(iter: I) -> Polynomial<Self> {
         Self::coefficients_to_elements(Cow::Owned(iter.collect())).into()
     }
 }
@@ -675,7 +675,7 @@ pub struct Polynomial<T: PolynomialCoefficient> {
 }
 
 impl<T: PolynomialCoefficient> FromIterator<T> for Polynomial<T> {
-    fn from_iter<I: IntoIterator<Item=T>>(iter: I) -> Self {
+    fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
         T::from_iterator(iter.into_iter())
     }
 }
