@@ -587,7 +587,7 @@ pub trait IsPseudoPrime:
     + Shr<usize, Output = Self>
     + MulAssign
     + TrailingZeros
-    + Modulus<Value = Self>
+    + Modulus<Self>
     + Roots
     + RingCharacteristic<Type = CharacteristicZero>
 {

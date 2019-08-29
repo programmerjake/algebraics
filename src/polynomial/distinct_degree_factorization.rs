@@ -15,7 +15,7 @@ use std::hash::Hash;
 impl<V, M> Polynomial<ModularInteger<V, M>>
 where
     V: ModularReducePow<usize> + Integer + GCD<Output = V> + ExtendedGCD + fmt::Debug + Hash,
-    M: Modulus<Value = V> + PrimeModulus + fmt::Debug + Hash,
+    M: PrimeModulus<V> + fmt::Debug + Hash,
 {
     pub(crate) fn distinct_degree_factorization(mut self) -> Vec<Polynomial<ModularInteger<V, M>>> {
         let nonzero_highest_power_coefficient = match self.nonzero_highest_power_coefficient() {
