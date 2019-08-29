@@ -42,111 +42,143 @@ use std::ops::SubAssign;
 
 pub trait ModularReduce: Clone + Eq {
     fn modular_reduce_assign<M: Modulus<Self>>(&mut self, modulus: M);
+    #[inline]
     fn modular_reduce<M: Modulus<Self>>(mut self, modulus: M) -> Self {
         self.modular_reduce_assign(modulus);
         self
     }
     fn modular_add_ref_assign<M: Modulus<Self>>(&mut self, rhs: &Self, modulus: M);
+    #[inline]
     fn modular_add_move_assign<M: Modulus<Self>>(&mut self, rhs: Self, modulus: M) {
         self.modular_add_ref_assign(&rhs, modulus);
     }
+    #[inline]
     fn modular_add_ref_ref<M: Modulus<Self>>(&self, rhs: &Self, modulus: M) -> Self {
         self.clone().modular_add_move_ref(rhs, modulus)
     }
+    #[inline]
     fn modular_add_move_ref<M: Modulus<Self>>(mut self, rhs: &Self, modulus: M) -> Self {
         self.modular_add_ref_assign(rhs, modulus);
         self
     }
+    #[inline]
     fn modular_add_ref_move<M: Modulus<Self>>(&self, rhs: Self, modulus: M) -> Self {
         self.clone().modular_add_move_move(rhs, modulus)
     }
+    #[inline]
     fn modular_add_move_move<M: Modulus<Self>>(mut self, rhs: Self, modulus: M) -> Self {
         self.modular_add_move_assign(rhs, modulus);
         self
     }
     fn modular_neg_assign<M: Modulus<Self>>(&mut self, modulus: M);
+    #[inline]
     fn modular_neg_ref<M: Modulus<Self>>(&self, modulus: M) -> Self {
         self.clone().modular_neg_move(modulus)
     }
+    #[inline]
     fn modular_neg_move<M: Modulus<Self>>(mut self, modulus: M) -> Self {
         self.modular_neg_assign(modulus);
         self
     }
+    #[inline]
     fn modular_sub_ref_assign<M: Modulus<Self>>(&mut self, rhs: &Self, modulus: M) {
         self.modular_add_move_assign(rhs.modular_neg_ref(&modulus), modulus);
     }
+    #[inline]
     fn modular_sub_move_assign<M: Modulus<Self>>(&mut self, rhs: Self, modulus: M) {
         self.modular_sub_ref_assign(&rhs, modulus);
     }
+    #[inline]
     fn modular_sub_ref_ref<M: Modulus<Self>>(&self, rhs: &Self, modulus: M) -> Self {
         self.clone().modular_sub_move_ref(rhs, modulus)
     }
+    #[inline]
     fn modular_sub_move_ref<M: Modulus<Self>>(mut self, rhs: &Self, modulus: M) -> Self {
         self.modular_sub_ref_assign(rhs, modulus);
         self
     }
+    #[inline]
     fn modular_sub_ref_move<M: Modulus<Self>>(&self, rhs: Self, modulus: M) -> Self {
         self.clone().modular_sub_move_move(rhs, modulus)
     }
+    #[inline]
     fn modular_sub_move_move<M: Modulus<Self>>(mut self, rhs: Self, modulus: M) -> Self {
         self.modular_sub_move_assign(rhs, modulus);
         self
     }
     fn modular_mul_ref_assign<M: Modulus<Self>>(&mut self, rhs: &Self, modulus: M);
+    #[inline]
     fn modular_mul_move_assign<M: Modulus<Self>>(&mut self, rhs: Self, modulus: M) {
         self.modular_mul_ref_assign(&rhs, modulus);
     }
+    #[inline]
     fn modular_mul_ref_ref<M: Modulus<Self>>(&self, rhs: &Self, modulus: M) -> Self {
         self.clone().modular_mul_move_ref(rhs, modulus)
     }
+    #[inline]
     fn modular_mul_move_ref<M: Modulus<Self>>(mut self, rhs: &Self, modulus: M) -> Self {
         self.modular_mul_ref_assign(rhs, modulus);
         self
     }
+    #[inline]
     fn modular_mul_ref_move<M: Modulus<Self>>(&self, rhs: Self, modulus: M) -> Self {
         self.clone().modular_mul_move_move(rhs, modulus)
     }
+    #[inline]
     fn modular_mul_move_move<M: Modulus<Self>>(mut self, rhs: Self, modulus: M) -> Self {
         self.modular_mul_move_assign(rhs, modulus);
         self
     }
     fn modular_reduce_from_bigint<M: Modulus<Self>>(v: BigInt, modulus: M) -> Self;
+    #[inline]
     fn modular_reduce_from_biguint<M: Modulus<Self>>(v: BigUint, modulus: M) -> Self {
         Self::modular_reduce_from_bigint(v.into(), modulus)
     }
+    #[inline]
     fn modular_reduce_from_u8<M: Modulus<Self>>(v: u8, modulus: M) -> Self {
         Self::modular_reduce_from_u16(v.into(), modulus)
     }
+    #[inline]
     fn modular_reduce_from_u16<M: Modulus<Self>>(v: u16, modulus: M) -> Self {
         Self::modular_reduce_from_u32(v.into(), modulus)
     }
+    #[inline]
     fn modular_reduce_from_u32<M: Modulus<Self>>(v: u32, modulus: M) -> Self {
         Self::modular_reduce_from_u64(v.into(), modulus)
     }
+    #[inline]
     fn modular_reduce_from_u64<M: Modulus<Self>>(v: u64, modulus: M) -> Self {
         Self::modular_reduce_from_u128(v.into(), modulus)
     }
+    #[inline]
     fn modular_reduce_from_u128<M: Modulus<Self>>(v: u128, modulus: M) -> Self {
         Self::modular_reduce_from_biguint(v.into(), modulus)
     }
+    #[inline]
     fn modular_reduce_from_usize<M: Modulus<Self>>(v: usize, modulus: M) -> Self {
         Self::modular_reduce_from_u128(v as _, modulus)
     }
+    #[inline]
     fn modular_reduce_from_i8<M: Modulus<Self>>(v: i8, modulus: M) -> Self {
         Self::modular_reduce_from_i16(v.into(), modulus)
     }
+    #[inline]
     fn modular_reduce_from_i16<M: Modulus<Self>>(v: i16, modulus: M) -> Self {
         Self::modular_reduce_from_i32(v.into(), modulus)
     }
+    #[inline]
     fn modular_reduce_from_i32<M: Modulus<Self>>(v: i32, modulus: M) -> Self {
         Self::modular_reduce_from_i64(v.into(), modulus)
     }
+    #[inline]
     fn modular_reduce_from_i64<M: Modulus<Self>>(v: i64, modulus: M) -> Self {
         Self::modular_reduce_from_i128(v.into(), modulus)
     }
+    #[inline]
     fn modular_reduce_from_i128<M: Modulus<Self>>(v: i128, modulus: M) -> Self {
         Self::modular_reduce_from_bigint(v.into(), modulus)
     }
+    #[inline]
     fn modular_reduce_from_isize<M: Modulus<Self>>(v: isize, modulus: M) -> Self {
         Self::modular_reduce_from_i128(v as _, modulus)
     }
@@ -158,29 +190,51 @@ pub trait ModularReducePow<E = Self>: ModularReduce {
 
 pub trait Modulus<Value: Clone + Eq>: Clone + Eq {
     fn to_modulus(&self) -> Cow<Value>;
+    #[inline]
     fn into_modulus(self) -> Value {
         self.to_modulus().into_owned()
     }
 }
 
 impl<T: Modulus<Value>, Value: Clone + Eq> Modulus<Value> for &'_ T {
+    #[inline]
     fn to_modulus(&self) -> Cow<Value> {
         (**self).to_modulus()
     }
 }
 
 pub trait StaticModulus<Value: Clone + Eq>: Modulus<Value> + 'static + Copy + Default {
+    #[inline]
     fn get_modulus() -> Value {
         Self::default().into_modulus()
     }
 }
 
-pub trait PrimePowerModulus<Value: Integer + Clone>: Modulus<Value>
-{
+pub trait PrimePowerModulus<Value: Integer + Clone>: Modulus<Value> {
     fn base_and_exponent(&self) -> BaseAndExponent<Value>;
 }
 
-pub trait PrimeModulus<Value: Integer + Clone>: PrimePowerModulus<Value>
+pub trait PrimeModulus<Value: Integer + Clone>: PrimePowerModulus<Value> {}
+
+pub trait OddModulus<Value: Integer + Clone>: Modulus<Value> {}
+
+pub trait OddPrimePowerModulus<Value: Integer + Clone>:
+    PrimePowerModulus<Value> + OddModulus<Value>
+{
+}
+
+impl<T: PrimePowerModulus<Value> + OddModulus<Value>, Value: Integer + Clone>
+    OddPrimePowerModulus<Value> for T
+{
+}
+
+pub trait OddPrimeModulus<Value: Integer + Clone>:
+    PrimeModulus<Value> + OddPrimePowerModulus<Value>
+{
+}
+
+impl<T: PrimeModulus<Value> + OddPrimePowerModulus<Value>, Value: Integer + Clone>
+    OddPrimeModulus<Value> for T
 {
 }
 
@@ -188,9 +242,11 @@ pub trait PrimeModulus<Value: Integer + Clone>: PrimePowerModulus<Value>
 pub struct KnownPrime<T>(T);
 
 impl<T> KnownPrime<T> {
+    #[inline]
     pub fn new_unsafe(prime: T) -> Self {
         KnownPrime(prime)
     }
+    #[inline]
     pub fn unwrap(self) -> T {
         self.0
     }
@@ -198,22 +254,25 @@ impl<T> KnownPrime<T> {
 
 impl<T> Deref for KnownPrime<T> {
     type Target = T;
+    #[inline]
     fn deref(&self) -> &T {
         &self.0
     }
 }
 
 impl<T: Modulus<Value>, Value: Eq + Clone> Modulus<Value> for KnownPrime<T> {
+    #[inline]
     fn to_modulus(&self) -> Cow<Value> {
         self.0.to_modulus()
     }
+    #[inline]
     fn into_modulus(self) -> Value {
         self.0.into_modulus()
     }
 }
 
-impl<T: Modulus<Value>, Value: Integer + Clone> PrimePowerModulus<Value> for KnownPrime<T>
-{
+impl<T: Modulus<Value>, Value: Integer + Clone> PrimePowerModulus<Value> for KnownPrime<T> {
+    #[inline]
     fn base_and_exponent(&self) -> BaseAndExponent<Value> {
         BaseAndExponent {
             base: self.clone().into_modulus(),
@@ -224,7 +283,8 @@ impl<T: Modulus<Value>, Value: Integer + Clone> PrimePowerModulus<Value> for Kno
 
 impl<T: Modulus<Value>, Value: Integer + Clone> PrimeModulus<Value> for KnownPrime<T> {}
 
-impl<T: StaticModulus<Value>, Value: Integer+Clone> StaticModulus<Value> for KnownPrime<T> {
+impl<T: StaticModulus<Value>, Value: Integer + Clone> StaticModulus<Value> for KnownPrime<T> {
+    #[inline]
     fn get_modulus() -> Value {
         T::get_modulus()
     }
@@ -239,21 +299,25 @@ impl<T: fmt::Display> fmt::Display for KnownPrime<T> {
 macro_rules! impl_int_modulus {
     ($t:ty, $wide:ty, $to_wide:expr, $from_wide:expr, $from_bigint:ident) => {
         impl Modulus<Self> for $t {
+            #[inline]
             fn to_modulus(&self) -> Cow<Self> {
                 Cow::Borrowed(self)
             }
+            #[inline]
             fn into_modulus(self) -> Self {
                 self
             }
         }
 
         impl ModularReduce for $t {
+            #[inline]
             fn modular_reduce_assign<M: Modulus<Self>>(&mut self, modulus: M) {
                 let modulus = modulus.to_modulus();
                 if !modulus.is_zero() {
                     *self = self.mod_floor(&modulus);
                 }
             }
+            #[inline]
             fn modular_reduce<M: Modulus<Self>>(self, modulus: M) -> Self {
                 let modulus = modulus.to_modulus();
                 if !modulus.is_zero() {
@@ -262,12 +326,14 @@ macro_rules! impl_int_modulus {
                     self
                 }
             }
+            #[inline]
             fn modular_add_ref_assign<M: Modulus<Self>>(&mut self, rhs: &Self, modulus: M) {
                 let mut wide = $to_wide(self.clone());
                 wide += $to_wide(rhs.clone());
                 wide %= $to_wide(modulus.to_modulus().into_owned());
                 *self = $from_wide(wide);
             }
+            #[inline]
             fn modular_neg_assign<M: Modulus<Self>>(&mut self, modulus: M) {
                 let modulus = modulus.to_modulus();
                 *self = &*modulus.to_modulus() - self.clone();
@@ -275,12 +341,14 @@ macro_rules! impl_int_modulus {
                     self.set_zero();
                 }
             }
+            #[inline]
             fn modular_mul_ref_assign<M: Modulus<Self>>(&mut self, rhs: &Self, modulus: M) {
                 let mut wide = $to_wide(self.clone());
                 wide *= $to_wide(rhs.clone());
                 wide %= $to_wide(modulus.to_modulus().into_owned());
                 *self = $from_wide(wide);
             }
+            #[inline]
             fn modular_reduce_from_bigint<M: Modulus<Self>>(v: BigInt, modulus: M) -> Self {
                 v.mod_floor(&modulus.into_modulus().into())
                     .$from_bigint()
@@ -295,11 +363,7 @@ macro_rules! impl_prim_int_modulus {
         impl_int_modulus!($t, $wide, $to_wide, $from_wide, $from_bigint);
 
         impl<E: Integer + Clone + FromPrimitive> ModularReducePow<E> for $t {
-            fn pow_modular_reduce<M: Modulus<Self>>(
-                &self,
-                exponent: &E,
-                modulus: M,
-            ) -> Self {
+            fn pow_modular_reduce<M: Modulus<Self>>(&self, exponent: &E, modulus: M) -> Self {
                 if exponent.is_zero() {
                     return One::one();
                 }
@@ -337,17 +401,15 @@ macro_rules! impl_bigint_modulus {
         impl_int_modulus!($t, $t, identity, identity, $from_bigint);
 
         impl<E: Clone + Into<$t>> ModularReducePow<E> for $t {
-            fn pow_modular_reduce<M: Modulus<Self>>(
-                &self,
-                exponent: &E,
-                modulus: M,
-            ) -> Self {
+            #[inline]
+            fn pow_modular_reduce<M: Modulus<Self>>(&self, exponent: &E, modulus: M) -> Self {
                 self.modpow(&exponent.clone().into(), &modulus.to_modulus())
             }
         }
     };
 }
 
+#[inline]
 fn convert_to<I: TryInto<O>, O>(v: I) -> O
 where
     I::Error: fmt::Debug,
@@ -355,16 +417,19 @@ where
     v.try_into().unwrap()
 }
 
+#[inline]
 fn convert_to_i128(v: BigInt) -> i128 {
     v.to_i128().expect("can't convert to i128")
 }
 
+#[inline]
 fn convert_to_u128(v: BigUint) -> u128 {
     v.to_u128().expect("can't convert to u128")
 }
 
 /// helper trait for impl_bigint_modulus!
 trait BigIntToOptionBigInt: Sized {
+    #[inline]
     fn bigint_to_option_bigint(self) -> Option<Self> {
         Some(self)
     }
@@ -386,6 +451,138 @@ impl_prim_int_modulus!(isize, i128, convert_to::<isize, i128>, convert_to, to_is
 impl_prim_int_modulus!(usize, u128, convert_to::<usize, u128>, convert_to, to_usize);
 impl_bigint_modulus!(BigInt, bigint_to_option_bigint);
 impl_bigint_modulus!(BigUint, to_biguint);
+
+macro_rules! impl_static_modulus {
+    ($n:ident, $v:expr, [$($t:ty),+], []) => {
+        #[derive(Copy, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Debug, Default)]
+        struct $n;
+
+        impl fmt::Display for $n {
+            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                fmt::Display::fmt(&$v, f)
+            }
+        }
+
+        $(
+            impl Modulus<$t> for $n {
+                #[inline]
+                fn to_modulus(&self) -> Cow<$t> {
+                    Cow::Owned($n.into_modulus())
+                }
+                #[inline]
+                fn into_modulus(self) -> $t {
+                    <$t>::from_u128($v).expect(concat!("can't convert ", stringify!($v), " to ", stringify!($t)))
+                }
+            }
+
+            impl StaticModulus<$t> for $n {}
+        )+
+    };
+    ($n:ident, $v:expr, [$($t:ty),+], [prime_power($base:expr, $exponent:expr)]) => {
+        impl_static_modulus!($n, $v, [$($t),+], []);
+
+        $(
+            impl PrimePowerModulus<$t> for $n {
+                #[inline]
+                fn base_and_exponent(&self) -> BaseAndExponent<$t> {
+                    BaseAndExponent {
+                        base: <$t>::from_u128($base).expect(concat!("can't convert ", stringify!($v), " to ", stringify!($t))),
+                        exponent: $exponent,
+                    }
+                }
+            }
+        )+
+    };
+    ($n:ident, $v:expr, [$($t:ty),+], [prime]) => {
+        impl_static_modulus!($n, $v, [$($t),+], [prime_power($v, 1)]);
+
+        $(
+            impl PrimeModulus<$t> for $n {}
+        )+
+    };
+    ($n:ident, $v:expr, [$($t:ty),+], [odd]) => {
+        impl_static_modulus!($n, $v, [$($t),+], []);
+
+        $(
+            impl OddModulus<$t> for $n {}
+        )+
+    };
+    ($n:ident, $v:expr, [$($t:ty),+], [odd, $($opts:tt)*]) => {
+        impl_static_modulus!($n, $v, [$($t),+], [$($opts)*]);
+
+        $(
+            impl OddModulus<$t> for $n {}
+        )+
+    };
+    ($n:ident, $v:expr, .., $opts:tt) => {
+        impl_static_modulus!($n, $v, [i8, u8, i16, u16, i32, u32, i64, u64, i128, u128, isize, usize, BigInt, BigUint], $opts);
+    };
+}
+
+impl_static_modulus!(Mod1, 1, .., [odd]);
+impl_static_modulus!(Mod2, 2, .., [prime]);
+impl_static_modulus!(Mod3, 3, .., [odd, prime]);
+impl_static_modulus!(Mod4, 4, .., [prime_power(2, 2)]);
+impl_static_modulus!(Mod5, 5, .., [odd, prime]);
+impl_static_modulus!(Mod6, 6, .., []);
+impl_static_modulus!(Mod7, 7, .., [odd, prime]);
+impl_static_modulus!(Mod8, 8, .., [prime_power(2, 3)]);
+impl_static_modulus!(Mod9, 9, .., [odd, prime_power(3, 2)]);
+impl_static_modulus!(Mod10, 10, .., []);
+impl_static_modulus!(Mod11, 11, .., [odd, prime]);
+impl_static_modulus!(Mod12, 12, .., []);
+impl_static_modulus!(Mod13, 13, .., [odd, prime]);
+impl_static_modulus!(Mod14, 14, .., []);
+impl_static_modulus!(Mod15, 15, .., [odd]);
+impl_static_modulus!(Mod16, 16, .., [prime_power(2, 4)]);
+// impl_static_modulus!(Mod17, 17, .., [odd, prime]);
+// impl_static_modulus!(Mod18, 18, .., []);
+// impl_static_modulus!(Mod19, 19, .., [odd, prime]);
+// impl_static_modulus!(Mod20, 20, .., []);
+// impl_static_modulus!(Mod21, 21, .., [odd]);
+// impl_static_modulus!(Mod22, 22, .., []);
+// impl_static_modulus!(Mod23, 23, .., [odd, prime]);
+// impl_static_modulus!(Mod24, 24, .., []);
+// impl_static_modulus!(Mod25, 25, .., [odd, prime_power(5, 2)]);
+// impl_static_modulus!(Mod26, 26, .., []);
+// impl_static_modulus!(Mod27, 27, .., [odd, prime_power(3, 3)]);
+// impl_static_modulus!(Mod28, 28, .., []);
+// impl_static_modulus!(Mod29, 29, .., [odd, prime]);
+// impl_static_modulus!(Mod30, 30, .., []);
+// impl_static_modulus!(Mod31, 31, .., [odd, prime]);
+// impl_static_modulus!(Mod32, 32, .., [prime_power(2, 5)]);
+// impl_static_modulus!(Mod33, 33, .., [odd]);
+// impl_static_modulus!(Mod34, 34, .., []);
+// impl_static_modulus!(Mod35, 35, .., [odd]);
+// impl_static_modulus!(Mod36, 36, .., []);
+// impl_static_modulus!(Mod37, 37, .., [odd, prime]);
+// impl_static_modulus!(Mod38, 38, .., []);
+// impl_static_modulus!(Mod39, 39, .., [odd]);
+// impl_static_modulus!(Mod40, 40, .., []);
+// impl_static_modulus!(Mod41, 41, .., [odd, prime]);
+// impl_static_modulus!(Mod42, 42, .., []);
+// impl_static_modulus!(Mod43, 43, .., [odd, prime]);
+// impl_static_modulus!(Mod44, 44, .., []);
+// impl_static_modulus!(Mod45, 45, .., [odd]);
+// impl_static_modulus!(Mod46, 46, .., []);
+// impl_static_modulus!(Mod47, 47, .., [odd, prime]);
+// impl_static_modulus!(Mod48, 48, .., []);
+// impl_static_modulus!(Mod49, 49, .., [odd, prime_power(7, 2)]);
+// impl_static_modulus!(Mod50, 50, .., []);
+// impl_static_modulus!(Mod51, 51, .., [odd]);
+// impl_static_modulus!(Mod52, 52, .., []);
+// impl_static_modulus!(Mod53, 53, .., [odd, prime]);
+// impl_static_modulus!(Mod54, 54, .., []);
+// impl_static_modulus!(Mod55, 55, .., [odd]);
+// impl_static_modulus!(Mod56, 56, .., []);
+// impl_static_modulus!(Mod57, 57, .., [odd]);
+// impl_static_modulus!(Mod58, 58, .., []);
+// impl_static_modulus!(Mod59, 59, .., [odd, prime]);
+// impl_static_modulus!(Mod60, 60, .., []);
+// impl_static_modulus!(Mod61, 61, .., [odd, prime]);
+// impl_static_modulus!(Mod62, 62, .., []);
+// impl_static_modulus!(Mod63, 63, .., [odd]);
+// impl_static_modulus!(Mod64, 64, .., [prime_power(2, 6)]);
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub struct ModularInteger<V, M> {
@@ -537,9 +734,7 @@ impl<'a, V: ModularReduce + Eq, M: Modulus<V>> Neg for &'a ModularInteger<V, M> 
     }
 }
 
-impl<V: ModularReduce + Eq, M: Modulus<V>> Sub<ModularInteger<V, M>>
-    for ModularInteger<V, M>
-{
+impl<V: ModularReduce + Eq, M: Modulus<V>> Sub<ModularInteger<V, M>> for ModularInteger<V, M> {
     type Output = ModularInteger<V, M>;
     fn sub(self, rhs: ModularInteger<V, M>) -> Self::Output {
         self.require_matching_moduli(&rhs);
@@ -717,8 +912,8 @@ impl<V: ModularReduce + Eq + One + Zero + GCD<Output = V> + ExtendedGCD, M: Modu
     }
 }
 
-impl<V: ModularReduce + Eq + One + Zero + GCD<Output = V> + ExtendedGCD, M: Modulus<V>>
-    DivAssign for ModularInteger<V, M>
+impl<V: ModularReduce + Eq + One + Zero + GCD<Output = V> + ExtendedGCD, M: Modulus<V>> DivAssign
+    for ModularInteger<V, M>
 {
     fn div_assign(&mut self, rhs: ModularInteger<V, M>) {
         self.mul_assign(rhs.inverse())
@@ -760,12 +955,8 @@ impl<V: ModularReduce + Eq + One + Zero + GCD<Output = V> + ExtendedGCD, M: Modu
     }
 }
 
-impl<
-        'a,
-        'b,
-        V: ModularReduce + Eq + One + Zero + GCD<Output = V> + ExtendedGCD,
-        M: Modulus<V>,
-    > Div<&'a ModularInteger<V, M>> for &'b ModularInteger<V, M>
+impl<'a, 'b, V: ModularReduce + Eq + One + Zero + GCD<Output = V> + ExtendedGCD, M: Modulus<V>>
+    Div<&'a ModularInteger<V, M>> for &'b ModularInteger<V, M>
 {
     type Output = ModularInteger<V, M>;
     fn div(self, rhs: &ModularInteger<V, M>) -> ModularInteger<V, M> {
@@ -773,8 +964,8 @@ impl<
     }
 }
 
-impl<V: ModularReduce + Eq + One + Zero + GCD<Output = V> + ExtendedGCD, M: Modulus<V>>
-    CheckedDiv for ModularInteger<V, M>
+impl<V: ModularReduce + Eq + One + Zero + GCD<Output = V> + ExtendedGCD, M: Modulus<V>> CheckedDiv
+    for ModularInteger<V, M>
 {
     fn checked_div(&self, rhs: &Self) -> Option<Self> {
         self.checked_mul(&rhs.checked_inverse()?)
