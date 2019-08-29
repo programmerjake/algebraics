@@ -455,7 +455,7 @@ impl_bigint_modulus!(BigUint, to_biguint);
 macro_rules! impl_static_modulus {
     ($n:ident, $v:expr, [$($t:ty),+], []) => {
         #[derive(Copy, Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Debug, Default)]
-        struct $n;
+        pub struct $n;
 
         impl fmt::Display for $n {
             fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
