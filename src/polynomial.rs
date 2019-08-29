@@ -891,6 +891,9 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
     pub fn is_empty(&self) -> bool {
         self.elements.is_empty()
     }
+    pub fn degree(&self) -> Option<usize> {
+        self.len().checked_sub(1)
+    }
     fn normalize(&mut self) {
         while let Some(last) = self.elements.last() {
             if !T::is_element_zero(last) {
