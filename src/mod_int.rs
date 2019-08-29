@@ -158,15 +158,15 @@ pub trait ModularReducePow<E = Self>: ModularReduce {
 
 pub trait Modulus: Clone + Eq {
     type Value: Clone + Eq;
-    fn to_modulus(&self) -> &Self::Value;
+    fn to_modulus(&self) -> Cow<Self::Value>;
     fn into_modulus(self) -> Self::Value {
-        self.to_modulus().clone()
+        self.to_modulus().into_owned()
     }
 }
 
 impl<T: Modulus> Modulus for &'_ T {
     type Value = T::Value;
-    fn to_modulus(&self) -> &Self::Value {
+    fn to_modulus(&self) -> Cow<Self::Value> {
         (**self).to_modulus()
     }
 }
@@ -209,7 +209,7 @@ impl<T: Modulus> Deref for KnownPrime<T> {
 
 impl<T: Modulus> Modulus for KnownPrime<T> {
     type Value = T::Value;
-    fn to_modulus(&self) -> &Self::Value {
+    fn to_modulus(&self) -> Cow<Self::Value> {
         self.0.to_modulus()
     }
     fn into_modulus(self) -> Self::Value {
@@ -247,8 +247,8 @@ macro_rules! impl_int_modulus {
     ($t:ty, $wide:ty, $to_wide:expr, $from_wide:expr, $from_bigint:ident) => {
         impl Modulus for $t {
             type Value = Self;
-            fn to_modulus(&self) -> &Self::Value {
-                self
+            fn to_modulus(&self) -> Cow<Self::Value> {
+                Cow::Borrowed(self)
             }
             fn into_modulus(self) -> Self::Value {
                 self
@@ -259,13 +259,13 @@ macro_rules! impl_int_modulus {
             fn modular_reduce_assign<M: Modulus<Value = Self>>(&mut self, modulus: M) {
                 let modulus = modulus.to_modulus();
                 if !modulus.is_zero() {
-                    *self = self.mod_floor(modulus);
+                    *self = self.mod_floor(&modulus);
                 }
             }
             fn modular_reduce<M: Modulus<Value = Self>>(self, modulus: M) -> Self {
                 let modulus = modulus.to_modulus();
                 if !modulus.is_zero() {
-                    self.mod_floor(modulus)
+                    self.mod_floor(&modulus)
                 } else {
                     self
                 }
@@ -273,12 +273,12 @@ macro_rules! impl_int_modulus {
             fn modular_add_ref_assign<M: Modulus<Value = Self>>(&mut self, rhs: &Self, modulus: M) {
                 let mut wide = $to_wide(self.clone());
                 wide += $to_wide(rhs.clone());
-                wide %= $to_wide(modulus.to_modulus().clone());
+                wide %= $to_wide(modulus.to_modulus().into_owned());
                 *self = $from_wide(wide);
             }
             fn modular_neg_assign<M: Modulus<Value = Self>>(&mut self, modulus: M) {
                 let modulus = modulus.to_modulus();
-                *self = modulus.to_modulus() - self.clone();
+                *self = &*modulus.to_modulus() - self.clone();
                 if *self == *modulus {
                     self.set_zero();
                 }
@@ -286,7 +286,7 @@ macro_rules! impl_int_modulus {
             fn modular_mul_ref_assign<M: Modulus<Value = Self>>(&mut self, rhs: &Self, modulus: M) {
                 let mut wide = $to_wide(self.clone());
                 wide *= $to_wide(rhs.clone());
-                wide %= $to_wide(modulus.to_modulus().clone());
+                wide %= $to_wide(modulus.to_modulus().into_owned());
                 *self = $from_wide(wide);
             }
             fn modular_reduce_from_bigint<M: Modulus<Value = Self>>(v: BigInt, modulus: M) -> Self {
@@ -350,7 +350,7 @@ macro_rules! impl_bigint_modulus {
                 exponent: &E,
                 modulus: M,
             ) -> Self {
-                self.modpow(&exponent.clone().into(), modulus.to_modulus())
+                self.modpow(&exponent.clone().into(), &modulus.to_modulus())
             }
         }
     };
@@ -712,7 +712,7 @@ impl<V: ModularReduce + Eq + One + Zero + GCD<Output = V> + ExtendedGCD, M: Modu
         if self.value.is_zero() {
             return None;
         }
-        let ExtendedGCDResult { gcd, x, .. } = self.value.extended_gcd(self.modulus.to_modulus());
+        let ExtendedGCDResult { gcd, x, .. } = self.value.extended_gcd(&*self.modulus.to_modulus());
         if gcd.is_one() {
             Some(ModularInteger::new(x, self.modulus.clone()))
         } else {
