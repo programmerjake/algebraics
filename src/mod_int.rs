@@ -283,6 +283,8 @@ impl<T: Modulus<Value>, Value: Integer + Clone> PrimePowerModulus<Value> for Kno
 
 impl<T: Modulus<Value>, Value: Integer + Clone> PrimeModulus<Value> for KnownPrime<T> {}
 
+impl<T: OddModulus<Value>, Value: Integer + Clone> OddModulus<Value> for KnownPrime<T> {}
+
 impl<T: StaticModulus<Value>, Value: Integer + Clone> StaticModulus<Value> for KnownPrime<T> {
     #[inline]
     fn get_modulus() -> Value {
@@ -291,6 +293,72 @@ impl<T: StaticModulus<Value>, Value: Integer + Clone> StaticModulus<Value> for K
 }
 
 impl<T: fmt::Display> fmt::Display for KnownPrime<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+pub type KnownOddPrime<T> = KnownOdd<KnownPrime<T>>;
+
+impl<T> KnownOddPrime<T> {
+    #[inline]
+    pub fn new_odd_prime_unsafe(value: T) -> Self {
+        KnownOdd::new_unsafe(KnownPrime::new_unsafe(value))
+    }
+}
+
+#[derive(Copy, Clone, Hash, Eq, PartialEq, Debug, Default)]
+pub struct KnownOdd<T>(T);
+
+impl<T> KnownOdd<T> {
+    #[inline]
+    pub fn new_unsafe(odd: T) -> Self {
+        KnownOdd(odd)
+    }
+    #[inline]
+    pub fn unwrap(self) -> T {
+        self.0
+    }
+}
+
+impl<T> Deref for KnownOdd<T> {
+    type Target = T;
+    #[inline]
+    fn deref(&self) -> &T {
+        &self.0
+    }
+}
+
+impl<T: Modulus<Value>, Value: Eq + Clone> Modulus<Value> for KnownOdd<T> {
+    #[inline]
+    fn to_modulus(&self) -> Cow<Value> {
+        self.0.to_modulus()
+    }
+    #[inline]
+    fn into_modulus(self) -> Value {
+        self.0.into_modulus()
+    }
+}
+
+impl<T: PrimePowerModulus<Value>, Value: Integer + Clone> PrimePowerModulus<Value> for KnownOdd<T> {
+    #[inline]
+    fn base_and_exponent(&self) -> BaseAndExponent<Value> {
+        self.0.base_and_exponent()
+    }
+}
+
+impl<T: PrimeModulus<Value>, Value: Integer + Clone> PrimeModulus<Value> for KnownOdd<T> {}
+
+impl<T: Modulus<Value>, Value: Integer + Clone> OddModulus<Value> for KnownOdd<T> {}
+
+impl<T: StaticModulus<Value>, Value: Integer + Clone> StaticModulus<Value> for KnownOdd<T> {
+    #[inline]
+    fn get_modulus() -> Value {
+        T::get_modulus()
+    }
+}
+
+impl<T: fmt::Display> fmt::Display for KnownOdd<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         self.0.fmt(f)
     }
