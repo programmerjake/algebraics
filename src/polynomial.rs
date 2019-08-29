@@ -33,6 +33,7 @@ mod distinct_degree_factorization;
 mod div_rem;
 mod gcd;
 mod mul;
+mod same_degree_factorization;
 
 pub trait PolynomialCoefficientElement:
     PolynomialCoefficient<Divisor = DivisorIsOne>
