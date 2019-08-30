@@ -129,10 +129,10 @@ pub trait ModularReduce: Clone + Eq {
         self.modular_mul_move_assign(rhs, modulus);
         self
     }
-    fn modular_reduce_from_bigint<M: Modulus<Self>>(v: BigInt, modulus: M) -> Self;
+    fn modular_reduce_from_bigint<M: Modulus<Self>>(v: &BigInt, modulus: M) -> Self;
     #[inline]
-    fn modular_reduce_from_biguint<M: Modulus<Self>>(v: BigUint, modulus: M) -> Self {
-        Self::modular_reduce_from_bigint(v.into(), modulus)
+    fn modular_reduce_from_biguint<M: Modulus<Self>>(v: &BigUint, modulus: M) -> Self {
+        Self::modular_reduce_from_bigint(&v.clone().into(), modulus)
     }
     #[inline]
     fn modular_reduce_from_u8<M: Modulus<Self>>(v: u8, modulus: M) -> Self {
@@ -152,7 +152,7 @@ pub trait ModularReduce: Clone + Eq {
     }
     #[inline]
     fn modular_reduce_from_u128<M: Modulus<Self>>(v: u128, modulus: M) -> Self {
-        Self::modular_reduce_from_biguint(v.into(), modulus)
+        Self::modular_reduce_from_biguint(&v.into(), modulus)
     }
     #[inline]
     fn modular_reduce_from_usize<M: Modulus<Self>>(v: usize, modulus: M) -> Self {
@@ -176,7 +176,7 @@ pub trait ModularReduce: Clone + Eq {
     }
     #[inline]
     fn modular_reduce_from_i128<M: Modulus<Self>>(v: i128, modulus: M) -> Self {
-        Self::modular_reduce_from_bigint(v.into(), modulus)
+        Self::modular_reduce_from_bigint(&v.into(), modulus)
     }
     #[inline]
     fn modular_reduce_from_isize<M: Modulus<Self>>(v: isize, modulus: M) -> Self {
@@ -417,7 +417,7 @@ macro_rules! impl_int_modulus {
                 *self = $from_wide(wide);
             }
             #[inline]
-            fn modular_reduce_from_bigint<M: Modulus<Self>>(v: BigInt, modulus: M) -> Self {
+            fn modular_reduce_from_bigint<M: Modulus<Self>>(v: &BigInt, modulus: M) -> Self {
                 v.mod_floor(&modulus.into_modulus().into())
                     .$from_bigint()
                     .expect(concat!(stringify!($from_bigint), " failed"))
@@ -696,6 +696,62 @@ impl<V: ModularReduce + Eq, M: Modulus<V>> ModularInteger<V, M> {
     /// `*self = -*self`
     pub fn neg_assign(&mut self) {
         V::modular_neg_assign(&mut self.value, &self.modulus);
+    }
+    pub fn from_u8(value: u8, modulus: M) -> Self {
+        let value = V::modular_reduce_from_u8(value, &modulus);
+        Self { value, modulus }
+    }
+    pub fn from_i8(value: i8, modulus: M) -> Self {
+        let value = V::modular_reduce_from_i8(value, &modulus);
+        Self { value, modulus }
+    }
+    pub fn from_u16(value: u16, modulus: M) -> Self {
+        let value = V::modular_reduce_from_u16(value, &modulus);
+        Self { value, modulus }
+    }
+    pub fn from_i16(value: i16, modulus: M) -> Self {
+        let value = V::modular_reduce_from_i16(value, &modulus);
+        Self { value, modulus }
+    }
+    pub fn from_u32(value: u32, modulus: M) -> Self {
+        let value = V::modular_reduce_from_u32(value, &modulus);
+        Self { value, modulus }
+    }
+    pub fn from_i32(value: i32, modulus: M) -> Self {
+        let value = V::modular_reduce_from_i32(value, &modulus);
+        Self { value, modulus }
+    }
+    pub fn from_u64(value: u64, modulus: M) -> Self {
+        let value = V::modular_reduce_from_u64(value, &modulus);
+        Self { value, modulus }
+    }
+    pub fn from_i64(value: i64, modulus: M) -> Self {
+        let value = V::modular_reduce_from_i64(value, &modulus);
+        Self { value, modulus }
+    }
+    pub fn from_u128(value: u128, modulus: M) -> Self {
+        let value = V::modular_reduce_from_u128(value, &modulus);
+        Self { value, modulus }
+    }
+    pub fn from_i128(value: i128, modulus: M) -> Self {
+        let value = V::modular_reduce_from_i128(value, &modulus);
+        Self { value, modulus }
+    }
+    pub fn from_usize(value: usize, modulus: M) -> Self {
+        let value = V::modular_reduce_from_usize(value, &modulus);
+        Self { value, modulus }
+    }
+    pub fn from_isize(value: isize, modulus: M) -> Self {
+        let value = V::modular_reduce_from_isize(value, &modulus);
+        Self { value, modulus }
+    }
+    pub fn from_bigint(value: &BigInt, modulus: M) -> Self {
+        let value = V::modular_reduce_from_bigint(value, &modulus);
+        Self { value, modulus }
+    }
+    pub fn from_biguint(value: &BigUint, modulus: M) -> Self {
+        let value = V::modular_reduce_from_biguint(value, &modulus);
+        Self { value, modulus }
     }
 }
 

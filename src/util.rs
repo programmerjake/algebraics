@@ -541,6 +541,42 @@ pub fn prev_prime_u32(mut v: u32) -> Option<u32> {
     Some(v)
 }
 
+pub fn prev_prime_i32(v: i32) -> Option<i32> {
+    if v < 0 {
+        None
+    } else {
+        prev_prime_u32(v as u32).map(|v| v as i32)
+    }
+}
+
+pub fn next_prime_u32(mut v: u32) -> Option<u32> {
+    if v < 3 {
+        return Some(3);
+    }
+    if v >= 4_294_967_291 {
+        return None;
+    }
+    if v % 2 == 0 {
+        v += 1;
+    } else {
+        v += 2;
+    }
+    while !is_prime_u32(v) {
+        v += 2;
+    }
+    Some(v)
+}
+
+pub fn next_prime_i32(v: i32) -> Option<i32> {
+    #![allow(clippy::absurd_extreme_comparisons)]
+    const BIGGEST_PRIME_I32: i32 = 2_147_483_647;
+    if v >= BIGGEST_PRIME_I32 {
+        None
+    } else {
+        next_prime_u32(v.max(0) as u32).map(|v| v as i32)
+    }
+}
+
 fn is_prime_check_small_divisors(v: u128) -> Option<bool> {
     if v <= 1 {
         return Some(false);

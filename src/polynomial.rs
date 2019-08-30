@@ -31,6 +31,7 @@ use std::vec;
 mod add_sub;
 mod distinct_degree_factorization;
 mod div_rem;
+mod factorization_over_integers;
 mod gcd;
 mod mul;
 mod same_degree_factorization;
@@ -941,19 +942,13 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
     }
     pub fn primitive_part_assign(&mut self)
     where
-        T: GCD<Output = T> + PartialOrd,
-        for<'a> T::Element: ExactDivAssign<&'a T::Element>,
+        T: GCD<Output = T> + PartialOrd + for<'a> ExactDiv<&'a T, Output = T>,
     {
         let content = match self.nonzero_content() {
             Some(v) => v,
             None => return,
         };
-        let (content_numerator, content_divisor) = T::coefficient_to_element(Cow::Owned(content));
-        DivAssign::<T::Divisor>::div_assign(&mut self.divisor, content_divisor);
-        for element in &mut self.elements {
-            element.exact_div_assign(&content_numerator);
-        }
-        self.normalize();
+        self.exact_div_assign(content);
         debug_assert!(self
             .nonzero_highest_power_coefficient()
             .map(|v| v >= T::make_zero_coefficient_from_coefficient(Cow::Borrowed(&v)))
@@ -961,16 +956,14 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
     }
     pub fn into_primitive_part(mut self) -> Self
     where
-        T: GCD<Output = T> + PartialOrd,
-        for<'a> T::Element: ExactDivAssign<&'a T::Element>,
+        T: GCD<Output = T> + PartialOrd + for<'a> ExactDiv<&'a T, Output = T>,
     {
         self.primitive_part_assign();
         self
     }
     pub fn primitive_part(&self) -> Self
     where
-        T: GCD<Output = T> + PartialOrd,
-        for<'a> T::Element: ExactDivAssign<&'a T::Element>,
+        T: GCD<Output = T> + PartialOrd + for<'a> ExactDiv<&'a T, Output = T>,
     {
         self.clone().into_primitive_part()
     }
@@ -1146,10 +1139,16 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
 }
 
 #[derive(Clone, Eq, Hash, PartialEq, Debug)]
+pub struct PolynomialFactor<T: PolynomialCoefficient> {
+    polynomial: Polynomial<T>,
+    power: usize,
+}
+
+#[derive(Clone, Eq, Hash, PartialEq, Debug)]
 pub struct PolynomialFactors<T: PolynomialCoefficient> {
     constant_factor: T,
     // irreducible polynomials
-    polynomial_factors: Vec<Polynomial<T>>,
+    polynomial_factors: Vec<PolynomialFactor<T>>,
 }
 
 #[derive(Clone, Eq, Hash, PartialEq, Debug)]
@@ -1166,17 +1165,18 @@ where
         + PolynomialReducingFactorSupported
         + GCD<Output = T>
         + PartialOrd,
-    for<'a> T::Element: ExactDivAssign<&'a T::Element>,
 {
     /// splits `self` into square-free factors using Yun's algorithm
     ///
     /// Note that the returned factors are not necessarily irreducible.
     pub fn square_free_factorization_using_yuns_algorithm(&self) -> SquareFreePolynomialFactors<T> {
         #![allow(clippy::many_single_char_names)]
-        if self.is_zero() {
+        if self.degree().unwrap_or(0) == 0 {
             return SquareFreePolynomialFactors {
-                constant_factor: One::one(),
-                polynomial_factors: vec![self.clone()],
+                constant_factor: self
+                    .nonzero_highest_power_coefficient()
+                    .unwrap_or_else(Zero::zero),
+                polynomial_factors: Vec::new(),
             };
         }
         // algorithm derived from https://en.wikipedia.org/wiki/Square-free_polynomial#Yun's_algorithm
@@ -1204,6 +1204,12 @@ where
             constant_factor: content,
             polynomial_factors: a,
         }
+    }
+}
+
+impl<T: PolynomialDivSupported + PolynomialReducingFactorSupported> Polynomial<T> {
+    pub fn is_square_free(&self) -> bool {
+        GCD::gcd(self, &self.derivative()).degree().unwrap_or(0) == 0
     }
 }
 
@@ -1476,15 +1482,15 @@ mod tests {
         test(
             Zero::zero(),
             SquareFreePolynomialFactors {
-                constant_factor: ri(1),
-                polynomial_factors: vec![Zero::zero()],
+                constant_factor: Zero::zero(),
+                polynomial_factors: vec![],
             },
         );
         test(
             ri(123).into(),
             SquareFreePolynomialFactors {
                 constant_factor: ri(123),
-                polynomial_factors: vec![ri(1).into()],
+                polynomial_factors: vec![],
             },
         );
         test(
