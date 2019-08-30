@@ -75,6 +75,7 @@ impl Polynomial<BigInt> {
         for factor in &modular_factors {
             println!("    {}", factor);
         }
+        // factor using last portion of Berlekamp-Zassenhaus algorithm
         unimplemented!()
     }
     pub fn factor_with_rng<R: Rng + ?Sized>(&self, rng: &mut R) -> PolynomialFactors<BigInt> {
