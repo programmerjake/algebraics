@@ -920,6 +920,61 @@ impl Ord for Sign {
     }
 }
 
+#[derive(Copy, Clone, Debug)]
+pub(crate) enum LeafOrNodePair<Leaf, Node, NodeData=()> {
+    Leaf(Leaf),
+    NodePair(Node, NodeData, Node),
+}
+
+pub(crate) trait PrintTreeData<'a> {
+    type Leaf: 'a + fmt::Display;
+    type NodeData: 'a + fmt::Display;
+}
+
+pub(crate) trait PrintTree: for<'a> PrintTreeData<'a> {
+    fn to_leaf_or_node_pair<'a>(&'a self) -> LeafOrNodePair<<Self as PrintTreeData<'a>>::Leaf, &Self, <Self as PrintTreeData<'a>>::NodeData>;
+    fn print_tree(&self) {
+        fn print_tree_helper<T: PrintTree + ?Sized>(
+            tree: &T,
+            above_prefix: String,
+            center_prefix: String,
+            below_prefix: String,
+        ) {
+            match tree.to_leaf_or_node_pair() {
+                LeafOrNodePair::Leaf(leaf) => {
+                    println!("{}:{}", center_prefix, leaf);
+                }
+                LeafOrNodePair::NodePair(node1, node_data, node2) => {
+                    let line1_1 = above_prefix.clone();
+                    let line1_2 = above_prefix.clone();
+                    let line1_3 = above_prefix.clone();
+                    let line1_4 = above_prefix;
+                    let line2_1 = center_prefix;
+                    let line3_1 = below_prefix.clone();
+                    let line3_2 = below_prefix.clone();
+                    let line3_3 = below_prefix.clone();
+                    let line3_4 = below_prefix;
+                    let new_line1 = line1_1 + "    ";
+                    let new_line2 = line1_2 + " +--";
+                    let new_line3 = line1_3 + " |  ";
+                    let new_line4 = line1_4 + " |";
+                    let new_line5 = line2_1 + "-+:";
+                    let new_line6 = line3_1 + " |";
+                    let new_line7 = line3_2 + " |  ";
+                    let new_line8 = line3_3 + " +--";
+                    let new_line9 = line3_4 + "    ";
+                    print_tree_helper(node1, new_line1, new_line2, new_line3);
+                    println!("{}", new_line4);
+                    println!("{}{}", new_line5, node_data);
+                    println!("{}", new_line6);
+                    print_tree_helper(node2, new_line7, new_line8, new_line9);
+                }
+            }
+        }
+        print_tree_helper(self, "".into(), "".into(), "".into());
+    }
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     use std::fmt;
