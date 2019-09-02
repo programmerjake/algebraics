@@ -47,8 +47,6 @@ where
 impl<T> ExtendedGCD for Polynomial<T>
 where
     T: PolynomialCoefficient + PolynomialDivSupported + PolynomialReducingFactorSupported,
-    // FIXME: remove
-    T: fmt::Display,
 {
     fn extended_gcd(&self, rhs: &Self) -> ExtendedGCDResult<Self> {
         let lhs = self;
@@ -75,19 +73,6 @@ where
             x: Polynomial<T>,
             y: Polynomial<T>,
         }
-        macro_rules! validate_state {
-            ($state:ident) => {
-                dbg!();
-                println!("{}.v: ({})", stringify!($state), $state.v);
-                println!("{}.x: ({})", stringify!($state), $state.x);
-                println!("{}.y: ({})", stringify!($state), $state.y);
-                let product = &$state.x * lhs + &$state.y * rhs;
-                println!("lhs: ({})", lhs);
-                println!("rhs: ({})", rhs);
-                println!("product: ({})", product);
-                assert!($state.v == product);
-            };
-        }
         let mut lhs_state = StateSet {
             v: lhs.exact_div(&lhs_reducing_factor),
             x: lhs
@@ -96,7 +81,6 @@ where
                 .exact_div(lhs_reducing_factor),
             y: Self::zero(),
         };
-        validate_state!(lhs_state);
         let rhs_reducing_factor = if let Some(v) = rhs.nonzero_reducing_factor() {
             v
         } else {
@@ -114,25 +98,19 @@ where
                 .expect("known to be nonzero")
                 .exact_div(rhs_reducing_factor),
         };
-        validate_state!(rhs_state);
 
         while !rhs_state.v.is_zero() {
             let (quotient, remainder) = lhs_state.v.clone().div_rem(&rhs_state.v);
-            println!("quotient = ({})", quotient);
-            println!("remainder = ({})", remainder);
-            assert!(&lhs_state.v - &rhs_state.v * &quotient == remainder);
             let mut new_state = StateSet {
-                v: &lhs_state.v - &rhs_state.v * &quotient, // TODO: switch back to remainder
-                x: dbg!(&lhs_state.x - dbg!(&rhs_state.x * &quotient)),
-                y: &lhs_state.y - &rhs_state.y * &quotient,
+                v: remainder,
+                x: lhs_state.x - &rhs_state.x * &quotient,
+                y: lhs_state.y - &rhs_state.y * &quotient,
             };
-            validate_state!(new_state);
             if let Some(reducing_factor) = new_state.v.nonzero_reducing_factor() {
                 new_state.v.exact_div_assign(&reducing_factor);
                 new_state.x.exact_div_assign(&reducing_factor);
                 new_state.y.exact_div_assign(reducing_factor);
             }
-            validate_state!(new_state);
             lhs_state = rhs_state;
             rhs_state = new_state;
         }
