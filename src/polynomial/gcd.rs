@@ -13,7 +13,6 @@ use crate::traits::ExtendedGCDResult;
 use crate::traits::GCDAndLCM;
 use crate::traits::GCD;
 use num_traits::Zero;
-use std::fmt;
 
 impl<T> GCD for Polynomial<T>
 where
