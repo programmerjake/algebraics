@@ -10,6 +10,7 @@ use crate::traits::GCD;
 use num_bigint::BigInt;
 use num_integer::Integer;
 use num_rational::Ratio;
+use num_traits::NumAssign;
 use num_traits::One;
 use num_traits::Zero;
 use num_traits::{FromPrimitive, ToPrimitive};
@@ -20,10 +21,7 @@ use std::hash;
 use std::iter::FromIterator;
 use std::mem;
 use std::ops::Deref;
-use std::ops::Div;
-use std::ops::DivAssign;
 use std::ops::Neg;
-use std::ops::RemAssign;
 use std::ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign};
 use std::slice;
 use std::vec;
@@ -101,10 +99,10 @@ pub trait PolynomialCoefficient:
         + MulAssign
         + for<'a> Mul<&'a Self::Divisor, Output = Self::Divisor>
         + for<'a> MulAssign<&'a Self::Divisor>
-        + Div<Output = Self::Divisor>
-        + DivAssign
-        + for<'a> Div<&'a Self::Divisor, Output = Self::Divisor>
-        + for<'a> DivAssign<&'a Self::Divisor>
+        + ExactDiv<Output = Self::Divisor>
+        + ExactDivAssign
+        + for<'a> ExactDiv<&'a Self::Divisor, Output = Self::Divisor>
+        + for<'a> ExactDivAssign<&'a Self::Divisor>
         + GCD<Output = Self::Divisor>
         + One;
     fn is_element_zero(element: &Self::Element) -> bool;
@@ -226,12 +224,11 @@ pub trait PolynomialReducingFactorSupported: PolynomialCoefficient {
 impl<
         T: PolynomialCoefficientElement
             + Integer
-            + for<'a> DivAssign<&'a T>
-            + for<'a> Div<&'a T, Output = T>
-            + DivAssign
-            + RemAssign
+            + NumAssign
             + FromPrimitive
-            + GCD<Output = T>,
+            + GCD<Output = T>
+            + ExactDivAssign
+            + for<'a> ExactDivAssign<&'a T>,
     > PolynomialReducingFactorSupported for Ratio<T>
 {
     fn get_nonzero_reducing_factor(
@@ -245,10 +242,9 @@ impl<
 impl<
         T: PolynomialCoefficientElement
             + Integer
-            + for<'a> DivAssign<&'a T>
-            + for<'a> Div<&'a T, Output = T>
-            + DivAssign
-            + RemAssign
+            + for<'a> ExactDivAssign<&'a T>
+            + ExactDivAssign
+            + NumAssign
             + FromPrimitive
             + GCD<Output = T>,
     > PolynomialCoefficient for Ratio<T>
@@ -399,7 +395,9 @@ impl<
         if gcd.is_one() {
             return;
         }
-        elements.iter_mut().for_each(|element| *element /= &gcd);
+        elements
+            .iter_mut()
+            .for_each(|element| element.exact_div_assign(&gcd));
         *divisor /= gcd;
     }
     fn get_reduced_divisor(
@@ -418,11 +416,7 @@ impl<
         });
         let elements = elements
             .iter()
-            .map(|element| {
-                let mut element = element.clone();
-                element /= &gcd;
-                element
-            })
+            .map(|element| element.clone().exact_div(&gcd))
             .collect();
         let mut divisor = divisor.clone();
         divisor /= gcd;
@@ -472,38 +466,56 @@ impl<'a, 'b> Mul<&'a DivisorIsOne> for &'b DivisorIsOne {
     }
 }
 
-impl DivAssign for DivisorIsOne {
-    fn div_assign(&mut self, _rhs: DivisorIsOne) {}
+impl ExactDivAssign for DivisorIsOne {
+    fn checked_exact_div_assign(&mut self, _rhs: DivisorIsOne) -> Result<(), ()> {
+        Ok(())
+    }
+    fn exact_div_assign(&mut self, _rhs: DivisorIsOne) {}
 }
 
-impl DivAssign<&DivisorIsOne> for DivisorIsOne {
-    fn div_assign(&mut self, _rhs: &DivisorIsOne) {}
+impl ExactDivAssign<&DivisorIsOne> for DivisorIsOne {
+    fn checked_exact_div_assign(&mut self, _rhs: &DivisorIsOne) -> Result<(), ()> {
+        Ok(())
+    }
+    fn exact_div_assign(&mut self, _rhs: &DivisorIsOne) {}
 }
 
-impl Div for DivisorIsOne {
+impl ExactDiv for DivisorIsOne {
     type Output = DivisorIsOne;
-    fn div(self, _rhs: DivisorIsOne) -> DivisorIsOne {
+    fn checked_exact_div(self, _rhs: DivisorIsOne) -> Option<DivisorIsOne> {
+        Some(DivisorIsOne)
+    }
+    fn exact_div(self, _rhs: DivisorIsOne) -> DivisorIsOne {
         DivisorIsOne
     }
 }
 
-impl Div<&DivisorIsOne> for DivisorIsOne {
+impl ExactDiv<&DivisorIsOne> for DivisorIsOne {
     type Output = DivisorIsOne;
-    fn div(self, _rhs: &DivisorIsOne) -> DivisorIsOne {
+    fn checked_exact_div(self, _rhs: &DivisorIsOne) -> Option<DivisorIsOne> {
+        Some(DivisorIsOne)
+    }
+    fn exact_div(self, _rhs: &DivisorIsOne) -> DivisorIsOne {
         DivisorIsOne
     }
 }
 
-impl Div<DivisorIsOne> for &DivisorIsOne {
+impl ExactDiv<DivisorIsOne> for &DivisorIsOne {
     type Output = DivisorIsOne;
-    fn div(self, _rhs: DivisorIsOne) -> DivisorIsOne {
+    fn checked_exact_div(self, _rhs: DivisorIsOne) -> Option<DivisorIsOne> {
+        Some(DivisorIsOne)
+    }
+    fn exact_div(self, _rhs: DivisorIsOne) -> DivisorIsOne {
         DivisorIsOne
     }
 }
 
-impl<'a, 'b> Div<&'a DivisorIsOne> for &'b DivisorIsOne {
+impl<'a, 'b> ExactDiv<&'a DivisorIsOne> for &'b DivisorIsOne {
     type Output = DivisorIsOne;
-    fn div(self, _rhs: &DivisorIsOne) -> DivisorIsOne {
+    fn checked_exact_div(self, _rhs: &DivisorIsOne) -> Option<DivisorIsOne> {
+        Some(DivisorIsOne)
+    }
+    fn exact_div(self, _rhs: &DivisorIsOne) -> DivisorIsOne {
         DivisorIsOne
     }
 }
