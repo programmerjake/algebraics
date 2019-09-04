@@ -147,6 +147,13 @@ impl<'a, T: PolynomialCoefficient> MulAssign<&'a T> for Polynomial<T> {
     }
 }
 
+impl<T: PolynomialCoefficient> Polynomial<T> {
+    #[inline]
+    pub fn is_one(&self) -> bool {
+        self.len() == 1 && self.divisor.is_one() && T::is_element_one(&self.elements[0])
+    }
+}
+
 impl<T: PolynomialCoefficient> One for Polynomial<T>
 where
     T::Element: One,
