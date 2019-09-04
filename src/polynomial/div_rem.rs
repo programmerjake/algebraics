@@ -139,7 +139,7 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
     }
 }
 
-impl<T: PolynomialDivSupported> Polynomial<T> {
+impl<T: PolynomialCoefficient + for<'a> ExactDiv<&'a T, Output = T>> Polynomial<T> {
     pub fn checked_div_rem(self, rhs: &Self) -> Option<(Self, Self)> {
         let PseudoDivRem {
             quotient,
