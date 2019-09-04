@@ -9,6 +9,7 @@ use crate::polynomial::Polynomial;
 use crate::traits::ExtendedGCD;
 use crate::traits::GCD;
 use num_integer::Integer;
+use num_traits::Zero;
 use std::fmt;
 use std::hash::Hash;
 
@@ -19,7 +20,7 @@ where
 {
     pub(crate) fn distinct_degree_factorization(mut self) -> Vec<Polynomial<ModularInteger<V, M>>> {
         let nonzero_highest_power_coefficient = match self.nonzero_highest_power_coefficient() {
-            None => return Vec::new(),
+            None => return vec![Polynomial::zero()],
             Some(v) => v,
         };
         let one_coefficient = ModularInteger::new(
