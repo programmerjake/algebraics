@@ -132,9 +132,9 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
             factor,
         } = self.checked_pseudo_div_rem(rhs)?;
         if remainder.is_zero() {
-            None
-        } else {
             Some((quotient, factor))
+        } else {
+            None
         }
     }
 }
@@ -505,6 +505,7 @@ impl<T: PolynomialDivSupported> Polynomial<T> {
 mod tests {
     use super::*;
     use crate::util::tests::test_op_helper;
+    use crate::util::tests::DebugAsDisplay;
     use num_bigint::BigInt;
     use num_integer::Integer;
     use num_rational::Ratio;
@@ -546,17 +547,41 @@ mod tests {
             println!("expected_quotient=({})", expected_quotient);
             println!("expected_remainder=({})", expected_remainder);
             println!("expected_factor=({})", expected_factor);
+            let (expected_exact_quotient, expected_exact_factor) = if expected_remainder.is_zero() {
+                (Some(expected_quotient.clone()), Some(expected_factor))
+            } else {
+                (None, None)
+            };
+            fn format_opt<T: std::fmt::Display>(v: &Option<T>) -> String {
+                format!("{:?}", v.as_ref().map(DebugAsDisplay))
+            }
+            println!(
+                "expected_exact_quotient={}",
+                format_opt(&expected_exact_quotient)
+            );
+            println!(
+                "expected_exact_factor={}",
+                format_opt(&expected_exact_factor)
+            );
             let PseudoDivRem {
                 quotient,
                 remainder,
                 factor,
-            } = dividend.pseudo_div_rem(&divisor);
+            } = dividend.clone().pseudo_div_rem(&divisor);
+            let (exact_quotient, exact_factor) = match dividend.checked_exact_pseudo_div(&divisor) {
+                None => (None, None),
+                Some((a, b)) => (Some(a), Some(b)),
+            };
             println!("quotient=({})", quotient);
             println!("remainder=({})", remainder);
             println!("factor=({})", factor);
+            println!("exact_quotient={}", format_opt(&exact_quotient));
+            println!("exact_factor={}", format_opt(&exact_factor));
             assert_eq!(factor, expected_factor);
             assert_eq!(quotient, expected_quotient);
             assert_eq!(remainder, expected_remainder);
+            assert_eq!(exact_quotient, expected_exact_quotient);
+            assert_eq!(exact_factor, expected_exact_factor);
         };
         test(
             vec![r(1, 2), r(5, 2), r(5, 2)].into(),
