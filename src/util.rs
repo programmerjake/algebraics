@@ -16,6 +16,7 @@ use num_traits::Zero;
 use std::cmp::Ordering;
 use std::fmt;
 use std::ops::MulAssign;
+use std::ops::Range;
 use std::ops::Shr;
 use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Neg, Not};
 
@@ -921,7 +922,7 @@ impl Ord for Sign {
 }
 
 #[derive(Copy, Clone, Debug)]
-pub(crate) enum LeafOrNodePair<Leaf, Node, NodeData=()> {
+pub(crate) enum LeafOrNodePair<Leaf, Node, NodeData = ()> {
     Leaf(Leaf),
     NodePair(Node, NodeData, Node),
 }
@@ -932,7 +933,13 @@ pub(crate) trait PrintTreeData<'a> {
 }
 
 pub(crate) trait PrintTree: for<'a> PrintTreeData<'a> {
-    fn to_leaf_or_node_pair<'a>(&'a self) -> LeafOrNodePair<<Self as PrintTreeData<'a>>::Leaf, &Self, <Self as PrintTreeData<'a>>::NodeData>;
+    fn to_leaf_or_node_pair<'a>(
+        &'a self,
+    ) -> LeafOrNodePair<
+        <Self as PrintTreeData<'a>>::Leaf,
+        &Self,
+        <Self as PrintTreeData<'a>>::NodeData,
+    >;
     fn print_tree(&self) {
         fn print_tree_helper<T: PrintTree + ?Sized>(
             tree: &T,
@@ -975,9 +982,82 @@ pub(crate) trait PrintTree: for<'a> PrintTreeData<'a> {
     }
 }
 
+pub(crate) enum ContinueBreak<T = ()> {
+    Continue,
+    Break(T),
+}
+
+impl From<()> for ContinueBreak<()> {
+    fn from(_: ()) -> ContinueBreak<()> {
+        ContinueBreak::Continue
+    }
+}
+
+pub(crate) fn for_subsets_of_size<F: FnMut(&[usize]) -> R, R: Into<ContinueBreak<T>>, T>(
+    mut callback: F,
+    subset_size: usize,
+    index_range: Range<usize>,
+) -> ContinueBreak<T> {
+    if index_range.end <= index_range.start || index_range.end - index_range.start < subset_size {
+        return ContinueBreak::Continue;
+    }
+    fn helper<F: FnMut(&[usize]) -> R, R: Into<ContinueBreak<T>>, T>(
+        callback: &mut F,
+        subset_indexes_index: usize,
+        index_range: Range<usize>,
+        subset_indexes: &mut [usize],
+    ) -> ContinueBreak<T> {
+        if subset_indexes_index < subset_indexes.len() {
+            if let Some(last_index) = index_range
+                .end
+                .checked_sub(subset_indexes.len() - subset_indexes_index)
+            {
+                for index in index_range.start..=last_index {
+                    subset_indexes[subset_indexes_index] = index;
+                    match helper(
+                        callback,
+                        subset_indexes_index + 1,
+                        (index + 1)..index_range.end,
+                        subset_indexes,
+                    ) {
+                        ContinueBreak::Continue => {}
+                        retval @ ContinueBreak::Break(_) => return retval,
+                    }
+                }
+            }
+            ContinueBreak::Continue
+        } else {
+            callback(subset_indexes).into()
+        }
+    }
+    helper(&mut callback, 0, index_range, &mut vec![0; subset_size])
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     use std::fmt;
+
+    #[test]
+    fn test_for_subsets_of_size() {
+        use super::*;
+        let mut subset_indexes = Vec::new();
+        for_subsets_of_size(|v| subset_indexes.push(v.to_vec()), 2, 0..5);
+        assert_eq!(
+            subset_indexes,
+            vec![
+                vec![0, 1],
+                vec![0, 2],
+                vec![0, 3],
+                vec![0, 4],
+                vec![1, 2],
+                vec![1, 3],
+                vec![1, 4],
+                vec![2, 3],
+                vec![2, 4],
+                vec![3, 4],
+            ]
+        );
+    }
 
     pub(crate) struct DebugAsDisplay<T>(pub T);
 

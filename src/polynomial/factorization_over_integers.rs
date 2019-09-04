@@ -13,7 +13,9 @@ use crate::polynomial::PolynomialReducingFactorSupported;
 use crate::traits::ExactDiv;
 use crate::traits::ExtendedGCD;
 use crate::traits::ExtendedGCDResult;
+use crate::util::for_subsets_of_size;
 use crate::util::next_prime_i32;
+use crate::util::ContinueBreak;
 use crate::util::LeafOrNodePair;
 use crate::util::PrintTree;
 use crate::util::PrintTreeData;
@@ -23,6 +25,7 @@ use num_integer::Roots;
 use num_rational::Ratio;
 use num_traits::One;
 use num_traits::Signed;
+use num_traits::Zero;
 use rand::Rng;
 use rand::SeedableRng;
 use rand_pcg::Pcg64Mcg;
@@ -145,16 +148,33 @@ impl<T: PolynomialCoefficient> FactorTreeNode<T> {
 
 impl<T: PolynomialCoefficient + fmt::Display> fmt::Display for FactorTreeLeafNode<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "({})", self.factor)
+        let FactorTreeLeafNode { factor } = self;
+        write!(f, "({})", factor)
     }
 }
 
 impl<T: PolynomialCoefficient + fmt::Display> fmt::Display for FactorTreeInteriorNode<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let FactorTreeInteriorNode {
+            left: _left,
+            right: _right,
+            total_degree,
+            product,
+            left_bezout_coefficient,
+            right_bezout_coefficient,
+        } = self;
         write!(
             f,
-            "FactorTreeInteriorNode{{left:.., right:.., total_degree:{}}}",
-            self.total_degree
+            "FactorTreeInteriorNode{{\
+             left:.., right:.., \
+             total_degree:{total_degree}, \
+             product:({product}), \
+             left_bezout_coefficient:({left_bezout_coefficient}), \
+             right_bezout_coefficient:({right_bezout_coefficient})}}",
+            total_degree = total_degree,
+            product = product,
+            left_bezout_coefficient = left_bezout_coefficient,
+            right_bezout_coefficient = right_bezout_coefficient,
         )
     }
 }
@@ -198,6 +218,7 @@ impl<T: PolynomialCoefficient> Ord for FactorTreeNode<T> {
 impl FactorTreeLeafNode<ModularInteger<BigInt, BigInt>> {
     fn hensel_lift_step(
         &mut self,
+        _old_modulus: &BigInt,
         _new_modulus: &BigInt,
         new_product: Polynomial<ModularInteger<BigInt, BigInt>>,
     ) {
@@ -208,6 +229,7 @@ impl FactorTreeLeafNode<ModularInteger<BigInt, BigInt>> {
 impl FactorTreeInteriorNode<ModularInteger<BigInt, BigInt>> {
     fn hensel_lift_step(
         &mut self,
+        old_modulus: &BigInt,
         new_modulus: &BigInt,
         new_product: Polynomial<ModularInteger<BigInt, BigInt>>,
     ) {
@@ -221,7 +243,6 @@ impl FactorTreeInteriorNode<ModularInteger<BigInt, BigInt>> {
                 .map(|(value, _modulus)| ModularInteger::new(value, new_modulus.clone()))
                 .collect()
         }
-        let f = new_product;
         let g = set_modulus(self.left.product(), new_modulus);
         let h = set_modulus(self.right.product(), new_modulus);
         let s = set_modulus(
@@ -232,7 +253,7 @@ impl FactorTreeInteriorNode<ModularInteger<BigInt, BigInt>> {
             mem::replace(&mut self.right_bezout_coefficient, Default::default()),
             new_modulus,
         );
-        let e = &f - &g * &h;
+        let e = &new_product - &g * &h;
         let (q, r) = (&s * &e).div_rem(&h);
         let g_star = &g + &t * e + q * g;
         let h_star = h + r;
@@ -242,11 +263,28 @@ impl FactorTreeInteriorNode<ModularInteger<BigInt, BigInt>> {
         let s_star = s - d;
         let t_mul_b = &t * b;
         let t_star = t - t_mul_b - c * &g_star;
-        self.product = f;
+        let left_product = g_star;
+        let right_product = h_star;
+        println!("left_product: ({})", left_product);
+        println!("right_product: ({})", right_product);
+        println!("self.left.product(): ({})", self.left.product());
+        println!("self.right.product(): ({})", self.right.product());
+        debug_assert!(&set_modulus(left_product.iter(), old_modulus) == self.left.product());
+        debug_assert!(&set_modulus(right_product.iter(), old_modulus) == self.right.product());
+        let check_bezout_coefficients = || {
+            let bezout_identity = &s_star * &left_product + &t_star * &right_product;
+            println!("bezout_identity: ({})", bezout_identity);
+            bezout_identity.is_one()
+        };
+        debug_assert!(check_bezout_coefficients());
+        debug_assert!(&left_product * &right_product == new_product);
+        self.product = new_product;
         self.left_bezout_coefficient = s_star;
         self.right_bezout_coefficient = t_star;
-        self.left.hensel_lift_step(new_modulus, g_star);
-        self.right.hensel_lift_step(new_modulus, h_star);
+        self.left
+            .hensel_lift_step(old_modulus, new_modulus, left_product);
+        self.right
+            .hensel_lift_step(old_modulus, new_modulus, right_product);
         self.total_degree = self.left.total_degree() + self.right.total_degree();
     }
 }
@@ -254,12 +292,13 @@ impl FactorTreeInteriorNode<ModularInteger<BigInt, BigInt>> {
 impl FactorTreeNode<ModularInteger<BigInt, BigInt>> {
     fn hensel_lift_step(
         &mut self,
+        old_modulus: &BigInt,
         new_modulus: &BigInt,
         new_product: Polynomial<ModularInteger<BigInt, BigInt>>,
     ) {
         match self {
-            Self::Leaf(node) => node.hensel_lift_step(new_modulus, new_product),
-            Self::Interior(node) => node.hensel_lift_step(new_modulus, new_product),
+            Self::Leaf(node) => node.hensel_lift_step(old_modulus, new_modulus, new_product),
+            Self::Interior(node) => node.hensel_lift_step(old_modulus, new_modulus, new_product),
         }
     }
 }
@@ -354,29 +393,34 @@ impl Polynomial<BigInt> {
             )
         });
 
-        factor_tree.print_tree();
-        println!();
+        // factor_limit from (2) in http://web.archive.org/web/20161221120512/https://dms.umontreal.ca/~andrew/PDF/BoundCoeff.pdf
+        // original formula:
+        // define norm_2(p) = sqrt(sum(p[i]^2, 0 <= i <= n))
+        // where p == p[0] + p[1]*x + p[2]*x^2 + ... + p[n]*x^n
+        // where n is the degree of p
+        //
+        // for all polynomials g, p in Z[x] if g divides p then norm_2(g) <= 2^degree(g) * norm_2(p)
 
-        let inf_norm = self
+        let max_coefficient = self
             .iter()
             .map(|v| v.abs())
             .max()
             .expect("known to not be empty");
-        let mut ceil_sqrt_degree_plus_one = (degree + 1).sqrt();
-        if ceil_sqrt_degree_plus_one * ceil_sqrt_degree_plus_one < degree + 1 {
-            ceil_sqrt_degree_plus_one += 1;
-        }
-        let factor_coefficient_limit = (BigInt::from(ceil_sqrt_degree_plus_one) << degree)
-            * inf_norm
-            * self.highest_power_coefficient();
-        let needed_modulus = factor_coefficient_limit * 2i32 + 1i32;
+
+        let factor_limit = (max_coefficient.clone() * max_coefficient * degree) << degree;
+        let needed_modulus = factor_limit * 2i32 + 1i32;
+        println!("needed_modulus: {}", needed_modulus);
+        println!();
+        factor_tree.print_tree();
+        println!();
         while modulus < needed_modulus {
-            modulus = &modulus * &modulus;
+            let new_modulus = &modulus * &modulus;
             let expected_product: Polynomial<_> = self
                 .iter()
-                .map(|coefficient| ModularInteger::new(coefficient, modulus.clone()))
+                .map(|coefficient| ModularInteger::new(coefficient, new_modulus.clone()))
                 .collect();
-            factor_tree.hensel_lift_step(&modulus, expected_product);
+            factor_tree.hensel_lift_step(&modulus, &new_modulus, expected_product);
+            modulus = new_modulus;
 
             factor_tree.print_tree();
             println!();
@@ -385,13 +429,96 @@ impl Polynomial<BigInt> {
         let mut modular_factors = Vec::with_capacity(modular_factors_len);
         factor_tree.into_leaves(&mut modular_factors);
 
+        let constant_factor_index = modular_factors
+            .iter()
+            .position(|factor| factor.degree() == Some(0))
+            .expect("distinct_degree_factorization is known to return a constant factor");
+        let constant_factor = modular_factors.remove(constant_factor_index);
+        println!("constant_factor: {}", constant_factor);
+        let constant_factor = constant_factor
+            .nonzero_highest_power_coefficient()
+            .expect("known to be non-zero");
+        let inverse_constant_factor = constant_factor.inverse();
+        println!("inverse_constant_factor: {}", inverse_constant_factor);
+
+        debug_assert!(modular_factors
+            .iter()
+            .position(|factor| match factor.degree() {
+                None | Some(0) => true,
+                _ => false,
+            })
+            .is_none());
+
         println!("modular_factors:");
         for factor in &modular_factors {
             println!("    {}", factor);
         }
 
-        // factor using last portion of Berlekamp-Zassenhaus algorithm
-        unimplemented!()
+        let mut factors = Vec::with_capacity(modular_factors.len());
+
+        let half_modulus = &modulus / 2i32;
+
+        let mut input_polynomial = self.clone();
+
+        let mut subset_size = 0;
+        let mut found_factors = false;
+        loop {
+            if found_factors {
+                found_factors = false;
+            } else {
+                subset_size += 1;
+                if subset_size * 2 > modular_factors.len() {
+                    break;
+                }
+            }
+            let range = 0..modular_factors.len();
+            for_subsets_of_size(
+                |subset_indexes: &[usize]| {
+                    println!("subset_indexes: {:?}", subset_indexes);
+                    let mut potential_factor = Polynomial::from(inverse_constant_factor.clone());
+                    for &index in subset_indexes {
+                        potential_factor *= &modular_factors[index];
+                    }
+                    let mut potential_factor: Polynomial<_> = potential_factor
+                        .into_iter()
+                        .map(Into::into)
+                        .map(|(coefficient, _modulus)| {
+                            assert!(!coefficient.is_negative());
+                            assert!(coefficient < modulus);
+                            if coefficient > half_modulus {
+                                coefficient - &modulus
+                            } else {
+                                coefficient
+                            }
+                        })
+                        .collect();
+                    potential_factor.primitive_part_assign();
+                    println!("potential_factor: {}", potential_factor);
+                    println!("input_polynomial: {}", input_polynomial);
+                    if let Some((mut quotient, _)) = input_polynomial
+                        .clone()
+                        .checked_exact_pseudo_div(&potential_factor)
+                    {
+                        factors.push(potential_factor);
+                        println!("found factor");
+                        quotient.primitive_part_assign();
+                        println!("quotient: {}", quotient);
+                        input_polynomial = quotient;
+                        found_factors = true;
+                        for &index in subset_indexes.iter().rev() {
+                            modular_factors.remove(index);
+                        }
+                        ContinueBreak::Break(())
+                    } else {
+                        ContinueBreak::Continue
+                    }
+                },
+                subset_size,
+                range,
+            );
+        }
+        factors.push(input_polynomial);
+        factors
     }
     pub fn factor_with_rng<R: Rng + ?Sized>(&self, rng: &mut R) -> PolynomialFactors<BigInt> {
         let content = self.content();
