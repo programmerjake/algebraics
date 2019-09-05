@@ -505,7 +505,7 @@ impl<T: PolynomialDivSupported> Polynomial<T> {
 mod tests {
     use super::*;
     use crate::util::tests::test_op_helper;
-    use crate::util::tests::DebugAsDisplay;
+    use crate::util::DebugAsDisplay;
     use num_bigint::BigInt;
     use num_integer::Integer;
     use num_rational::Ratio;

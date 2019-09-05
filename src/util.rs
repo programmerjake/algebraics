@@ -1079,6 +1079,14 @@ pub(crate) fn for_subsets_of_size<F: FnMut(&[usize]) -> R, R: Into<ContinueBreak
     helper(&mut callback, 0, index_range, &mut vec![0; subset_size])
 }
 
+pub(crate) struct DebugAsDisplay<T>(pub T);
+
+impl<T: fmt::Display> fmt::Debug for DebugAsDisplay<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     use std::fmt;
@@ -1103,14 +1111,6 @@ pub(crate) mod tests {
                 vec![3, 4],
             ]
         );
-    }
-
-    pub(crate) struct DebugAsDisplay<T>(pub T);
-
-    impl<T: fmt::Display> fmt::Debug for DebugAsDisplay<T> {
-        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            self.0.fmt(f)
-        }
     }
 
     #[allow(clippy::too_many_arguments)]
