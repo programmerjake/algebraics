@@ -24,6 +24,7 @@ use num_integer::Integer;
 use num_integer::Roots;
 use num_rational::Ratio;
 use num_traits::One;
+use num_traits::Pow;
 use num_traits::Signed;
 use num_traits::Zero;
 use rand::Rng;
@@ -33,6 +34,8 @@ use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::fmt;
 use std::mem;
+use std::ops::Add;
+use std::ops::AddAssign;
 
 struct FactorTreeInteriorNode<T: PolynomialCoefficient> {
     left: FactorTreeNode<T>,
@@ -165,12 +168,13 @@ impl<T: PolynomialCoefficient + fmt::Display> fmt::Display for FactorTreeInterio
         } = self;
         write!(
             f,
-            "FactorTreeInteriorNode{{\
-             left:.., right:.., \
-             total_degree:{total_degree}, \
-             product:({product}), \
-             left_bezout_coefficient:({left_bezout_coefficient}), \
-             right_bezout_coefficient:({right_bezout_coefficient})}}",
+            r"FactorTreeInteriorNode {{
+    left:.., right:..,
+    total_degree:{total_degree},
+    product:({product}),
+    left_bezout_coefficient:({left_bezout_coefficient}),
+    right_bezout_coefficient:({right_bezout_coefficient})
+}}",
             total_degree = total_degree,
             product = product,
             left_bezout_coefficient = left_bezout_coefficient,
@@ -303,6 +307,109 @@ impl FactorTreeNode<ModularInteger<BigInt, BigInt>> {
     }
 }
 
+#[derive(Clone, Debug)]
+enum ExactInexactInt {
+    Exact {
+        value: BigInt,
+    },
+
+    /// represents the range lower_bound < x < lower_bound + 1
+    Inexact {
+        lower_bound: BigInt,
+    },
+}
+
+impl ExactInexactInt {
+    fn new(value: BigInt) -> Self {
+        Self::Exact { value }
+    }
+    fn sqrt(&self) -> Self {
+        match self {
+            Self::Exact { value } => {
+                let sqrt = value.sqrt();
+                if &sqrt * &sqrt == *value {
+                    Self::Exact { value: sqrt }
+                } else {
+                    Self::Inexact { lower_bound: sqrt }
+                }
+            }
+            Self::Inexact { lower_bound } => Self::Inexact {
+                lower_bound: lower_bound.sqrt(),
+            },
+        }
+    }
+}
+
+impl AddAssign<i32> for ExactInexactInt {
+    fn add_assign(&mut self, rhs: i32) {
+        match self {
+            Self::Exact { value } => *value += rhs,
+            Self::Inexact { lower_bound } => *lower_bound += rhs,
+        }
+    }
+}
+
+impl Add<i32> for ExactInexactInt {
+    type Output = ExactInexactInt;
+    fn add(mut self, rhs: i32) -> Self::Output {
+        self += rhs;
+        self
+    }
+}
+
+impl Add<i32> for &'_ ExactInexactInt {
+    type Output = ExactInexactInt;
+    fn add(self, rhs: i32) -> Self::Output {
+        let mut retval = self.clone();
+        retval += rhs;
+        retval
+    }
+}
+
+impl PartialEq<BigInt> for ExactInexactInt {
+    fn eq(&self, rhs: &BigInt) -> bool {
+        self.partial_cmp(rhs) == Some(Ordering::Equal)
+    }
+}
+
+impl PartialEq<ExactInexactInt> for BigInt {
+    fn eq(&self, rhs: &ExactInexactInt) -> bool {
+        self.partial_cmp(rhs) == Some(Ordering::Equal)
+    }
+}
+
+impl PartialOrd<BigInt> for ExactInexactInt {
+    fn partial_cmp(&self, rhs: &BigInt) -> Option<Ordering> {
+        match self {
+            Self::Exact { value } => Some(value.cmp(rhs)),
+            Self::Inexact { lower_bound } => {
+                if *lower_bound >= *rhs {
+                    Some(Ordering::Greater)
+                } else {
+                    Some(Ordering::Less)
+                }
+            }
+        }
+    }
+}
+
+impl PartialOrd<ExactInexactInt> for BigInt {
+    fn partial_cmp(&self, rhs: &ExactInexactInt) -> Option<Ordering> {
+        rhs.partial_cmp(self).map(Ordering::reverse)
+    }
+}
+
+impl fmt::Display for ExactInexactInt {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ExactInexactInt::Exact { value } => write!(f, "{}", value),
+            ExactInexactInt::Inexact { lower_bound } => {
+                write!(f, "({}, {})", lower_bound, lower_bound + 1i32)
+            }
+        }
+    }
+}
+
 impl Polynomial<BigInt> {
     pub(crate) fn factor_square_free_polynomial_with_rng<R: Rng + ?Sized>(
         &self,
@@ -312,6 +419,7 @@ impl Polynomial<BigInt> {
             None | Some(0) | Some(1) => return vec![self.clone()],
             Some(degree) => degree,
         };
+        let content = self.content();
         let mut prime = 2;
         let (modular_polynomial, modulus) = loop {
             prime =
@@ -344,7 +452,9 @@ impl Polynomial<BigInt> {
             .into_iter()
             .enumerate()
             .flat_map(|(factor_degree, poly)| {
-                if factor_degree == 0 {
+                if poly.is_one() {
+                    vec![]
+                } else if factor_degree == 0 {
                     vec![poly]
                 } else {
                     poly.same_degree_factorization(factor_degree, rng)
@@ -369,7 +479,13 @@ impl Polynomial<BigInt> {
 
         let factor_tree = loop {
             let smallest_factor_tree = match factor_tree_heap.pop() {
-                None => return vec![],
+                None => {
+                    if content.is_one() {
+                        return vec![];
+                    } else {
+                        return vec![content.into()];
+                    }
+                }
                 Some(v) => v,
             };
             let second_smallest_factor_tree = match factor_tree_heap.pop() {
@@ -401,14 +517,17 @@ impl Polynomial<BigInt> {
         //
         // for all polynomials g, p in Z[x] if g divides p then norm_2(g) <= 2^degree(g) * norm_2(p)
 
-        let max_coefficient = self
-            .iter()
-            .map(|v| v.abs())
-            .max()
-            .expect("known to not be empty");
+        let max_norm = self.max_norm();
+        let max_norm_squared = &max_norm * &max_norm;
+        let highest_power_coefficient = self.highest_power_coefficient();
+        let highest_power_coefficient_squared =
+            &highest_power_coefficient * &highest_power_coefficient;
 
-        let factor_limit = (max_coefficient.clone() * max_coefficient * degree) << degree;
-        let needed_modulus = factor_limit * 2i32 + 1i32;
+        let factor_limit_squared =
+            ((max_norm_squared * highest_power_coefficient_squared) << (degree * 2)) * (degree + 1);
+        let factor_limit = ExactInexactInt::new(factor_limit_squared.clone()).sqrt();
+        println!("factor_limit: {}", factor_limit);
+        let needed_modulus = ExactInexactInt::new(factor_limit_squared * 4i32).sqrt() + 1i32;
         println!("needed_modulus: {}", needed_modulus);
         println!();
         factor_tree.print_tree();
@@ -422,24 +541,17 @@ impl Polynomial<BigInt> {
             factor_tree.hensel_lift_step(&modulus, &new_modulus, expected_product);
             modulus = new_modulus;
 
-            factor_tree.print_tree();
-            println!();
+            //factor_tree.print_tree();
+            //println!();
         }
+        println!();
+        factor_tree.print_tree();
+        println!();
 
         let mut modular_factors = Vec::with_capacity(modular_factors_len);
         factor_tree.into_leaves(&mut modular_factors);
 
-        let constant_factor_index = modular_factors
-            .iter()
-            .position(|factor| factor.degree() == Some(0))
-            .expect("distinct_degree_factorization is known to return a constant factor");
-        let constant_factor = modular_factors.remove(constant_factor_index);
-        println!("constant_factor: {}", constant_factor);
-        let constant_factor = constant_factor
-            .nonzero_highest_power_coefficient()
-            .expect("known to be non-zero");
-        let inverse_constant_factor = constant_factor.inverse();
-        println!("inverse_constant_factor: {}", inverse_constant_factor);
+        modular_factors.retain(|factor| factor.degree() != Some(0));
 
         debug_assert!(modular_factors
             .iter()
@@ -456,6 +568,10 @@ impl Polynomial<BigInt> {
 
         let mut factors = Vec::with_capacity(modular_factors.len());
 
+        if !content.is_one() {
+            factors.push(content.into());
+        }
+
         let half_modulus = &modulus / 2i32;
 
         let mut input_polynomial = self.clone();
@@ -467,18 +583,22 @@ impl Polynomial<BigInt> {
                 found_factors = false;
             } else {
                 subset_size += 1;
-                if subset_size * 2 > modular_factors.len() {
-                    break;
-                }
+            }
+            if subset_size * 2 > modular_factors.len() {
+                break;
             }
             let range = 0..modular_factors.len();
             for_subsets_of_size(
                 |subset_indexes: &[usize]| {
                     println!("subset_indexes: {:?}", subset_indexes);
-                    let mut potential_factor = Polynomial::from(inverse_constant_factor.clone());
+                    let mut potential_factor = Polynomial::from(ModularInteger::new(
+                        input_polynomial.highest_power_coefficient(),
+                        modulus.clone(),
+                    ));
                     for &index in subset_indexes {
                         potential_factor *= &modular_factors[index];
                     }
+                    println!("potential_factor: {}", potential_factor);
                     let mut potential_factor: Polynomial<_> = potential_factor
                         .into_iter()
                         .map(Into::into)
@@ -492,6 +612,7 @@ impl Polynomial<BigInt> {
                             }
                         })
                         .collect();
+                    println!("potential_factor: {}", potential_factor);
                     potential_factor.primitive_part_assign();
                     println!("potential_factor: {}", potential_factor);
                     println!("input_polynomial: {}", input_polynomial);
@@ -587,6 +708,60 @@ mod tests {
             p(vec![2, 0, 3, 3]),
             p(vec![4, 3, 1, 1, 2]),
             p(vec![4, 0, 2, 3, 3]),
-        ])
+        ]);
+        test_case(vec![
+            p(vec![-1]),
+            p(vec![-0, 1]),
+            p(vec![-4, 4, -1, 3]),
+            p(vec![-2, 0, -3, 3]),
+            p(vec![4, -3, 1, -1, 2]),
+            p(vec![4, -0, 2, -3, 3]),
+        ]);
+        test_case(vec![
+            p(vec![12]),
+            p(vec![29, 19]),
+            p(vec![185, 174]),
+            p(vec![189, 135, 97]),
+            p(vec![171, 134, 40, 122, 46]),
+            p(vec![118, 103, 175, 39, 172]),
+            p(vec![101, 149, 70, 56, 68, 79]),
+            p(vec![186, 77, 5, 168, 148, 70, 82, 158]),
+            p(vec![171, 146, 23, 181, 116, 106, 74, 168]),
+            p(vec![181, 16, 97, 169, 189, 142, 69, 168, 133, 87]),
+            p(vec![130, 82, 85, 16, 87, 165, 168, -6, 106, 89]),
+            p(vec![152, 23, 189, 50, 21, 142, 43, 146, 106, -5, 106]),
+        ]);
+        test_case(vec![
+            p(vec![36, 97, 177, 78]),
+            p(vec![190, 184, 24, 141]),
+            p(vec![105, 57, 21, 161]),
+            p(vec![136, 159, 47, 45, 20]),
+            p(vec![28, 80, 84, 27, 56]),
+            p(vec![173, 118, 123, 108, 118, 36]),
+            p(vec![48, -4, 120, 156, 81, 76]),
+            p(vec![98, 179, 179, -3, 176, 100]),
+            p(vec![104, 83, 68, 123, 166, 125, 62]),
+            p(vec![17, 176, 132, 115, 1, 182, 95, 105, 11]),
+            p(vec![73, 70, 12, 57, 122, 23, 23, 146, 28]),
+        ]);
+        test_case(vec![
+            p(vec![286]),
+            p(vec![94, 61]),
+            p(vec![-37, 13, 16]),
+            p(vec![-57, 75, 20]),
+            p(vec![98, -43, 27]),
+            p(vec![43, -77, -75, 98]),
+            p(vec![43, 16, -94, -84, -67, 20]),
+            p(vec![-65, -2, -49, -61, -57, 80]),
+            p(vec![-30, -52, 54, 21, 21, -56, 3]),
+            p(vec![94, 50, 97, -83, 97, -3, -51, -86, 38]),
+            p(vec![2, -16, 50, -67, 63, -69, -31, 25, 83]),
+            p(vec![-69, 28, -25, -25, 57, -10, -65, -19, 3, -66, 38]),
+        ]);
+        test_case(vec![p(vec![
+            -69, 28, -25, -25, 57, -10, -65, -19, 3, -66, 38,
+        ])]);
+        test_case(vec![p(vec![1234])]);
+        test_case(vec![p(vec![3, 1234])]);
     }
 }

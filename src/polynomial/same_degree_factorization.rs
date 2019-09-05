@@ -26,10 +26,11 @@ where
         + GCD<Output = V>
         + ExtendedGCD
         + fmt::Debug
+        + fmt::Display
         + Hash
         + SampleUniform
         + ToBigInt,
-    M: OddPrimeModulus<V> + fmt::Debug + Hash,
+    M: OddPrimeModulus<V> + fmt::Debug + fmt::Display + Hash,
 {
     pub(crate) fn same_degree_factorization<R: Rng + ?Sized>(
         self,
@@ -37,6 +38,7 @@ where
         rng: &mut R,
     ) -> Vec<Polynomial<ModularInteger<V, M>>> {
         assert!(factor_degree >= 1);
+        assert!(self.len() > 1);
         if self.degree() == Some(factor_degree) {
             return vec![self];
         }
@@ -54,9 +56,13 @@ where
         let polynomial_exponent = (bigint_characteristic.pow(factor_degree) - 1u32) / 2u32;
         let coefficient_uniform = Uniform::new(V::zero(), characteristic.clone());
         let mut retval = Vec::new();
-        let mut factoring_stack = vec![self];
+        let mut factoring_stack = vec![self.clone()];
         while let Some(mut polynomial) = factoring_stack.pop() {
-            assert!(polynomial.degree().unwrap_or(0) >= factor_degree);
+            assert!(
+                polynomial.degree().unwrap_or(0) >= factor_degree,
+                "factoring failed: {}",
+                self
+            );
             if polynomial.degree() == Some(factor_degree) {
                 retval.push(polynomial);
                 continue;
@@ -86,16 +92,6 @@ where
 }
 
 // TODO: implement same_degree_factorization for modulus 2 (needs different algorithm)
-
-#[allow(dead_code)]
-fn fake_use_for_same_degree_factorization<R: Rng + ?Sized>(rng: &mut R) {
-    use crate::mod_int::Mod3;
-    Polynomial::from(vec![
-        ModularInteger::new(1i32, Mod3),
-        ModularInteger::new(1, Mod3),
-    ])
-    .same_degree_factorization(2, rng);
-}
 
 #[cfg(test)]
 mod tests {
