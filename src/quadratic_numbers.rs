@@ -142,7 +142,7 @@ impl One for RealQuadraticNumber {
         Self::from_integer(1.into())
     }
     fn is_one(&self) -> bool {
-        *self.constant_term() == (-1).into()
+        *self.constant_term() == BigInt::from(-1)
             && self.linear_term().is_one()
             && self.quadratic_term().is_zero()
     }
@@ -813,26 +813,26 @@ mod tests {
     #[test]
     fn test_real_quadratic_number_default_zero() {
         let v = RealQuadraticNumber::default();
-        assert_eq!(v.constant_term(), &0.into());
-        assert_eq!(v.linear_term(), &1.into());
-        assert_eq!(v.quadratic_term(), &0.into());
+        assert_eq!(v.constant_term(), &BigInt::zero());
+        assert_eq!(v.linear_term(), &BigInt::one());
+        assert_eq!(v.quadratic_term(), &BigInt::zero());
         assert_eq!(v, RealQuadraticNumber::from(0));
         assert_eq!(v, RealQuadraticNumber::zero());
     }
     #[test]
     fn test_real_quadratic_number_one() {
         let v = RealQuadraticNumber::one();
-        assert_eq!(v.constant_term(), &(-1).into());
-        assert_eq!(v.linear_term(), &1.into());
-        assert_eq!(v.quadratic_term(), &0.into());
+        assert_eq!(v.constant_term(), &-BigInt::one());
+        assert_eq!(v.linear_term(), &BigInt::one());
+        assert_eq!(v.quadratic_term(), &BigInt::zero());
         assert_eq!(v, RealQuadraticNumber::from(1));
     }
     #[test]
     fn test_real_quadratic_number_from_ratio() {
         let v = RealQuadraticNumber::from(Ratio::new(2, 3));
-        assert_eq!(v.constant_term(), &(-2).into());
-        assert_eq!(v.linear_term(), &3.into());
-        assert_eq!(v.quadratic_term(), &0.into());
+        assert_eq!(v.constant_term(), &BigInt::from(-2));
+        assert_eq!(v.linear_term(), &BigInt::from(3));
+        assert_eq!(v.quadratic_term(), &BigInt::zero());
         assert_eq!(v, RealQuadraticNumber::from_ratio(4.into(), 6.into()));
         assert!(RealQuadraticNumber::from_ratio_checked(1.into(), 0.into()).is_err());
     }
@@ -903,9 +903,9 @@ mod tests {
             if let Some((reduced_a, reduced_b, reduced_c)) = reduced {
                 assert!(num.is_some());
                 let num = num.unwrap();
-                assert_eq!(num.constant_term(), &reduced_c.into());
-                assert_eq!(num.linear_term(), &reduced_b.into());
-                assert_eq!(num.quadratic_term(), &reduced_a.into());
+                assert_eq!(num.constant_term(), &BigInt::from(reduced_c));
+                assert_eq!(num.linear_term(), &BigInt::from(reduced_b));
+                assert_eq!(num.quadratic_term(), &BigInt::from(reduced_a));
             } else {
                 assert!(num.is_none());
             }
