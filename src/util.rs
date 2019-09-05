@@ -15,6 +15,7 @@ use num_traits::ToPrimitive;
 use num_traits::Zero;
 use std::cmp::Ordering;
 use std::fmt;
+use std::iter;
 use std::ops::MulAssign;
 use std::ops::Range;
 use std::ops::Shr;
@@ -940,16 +941,37 @@ pub(crate) trait PrintTree: for<'a> PrintTreeData<'a> {
         &Self,
         <Self as PrintTreeData<'a>>::NodeData,
     >;
-    fn print_tree(&self) {
-        fn print_tree_helper<T: PrintTree + ?Sized>(
+    fn write_or_print_tree<WriteLnFn: FnMut(fmt::Arguments) -> Result<(), E>, E>(
+        &self,
+        mut write_ln_fn: WriteLnFn,
+    ) -> Result<(), E> {
+        fn helper<T: PrintTree + ?Sized, WriteLnFn: FnMut(fmt::Arguments) -> Result<(), E>, E>(
             tree: &T,
+            write_ln_fn: &mut WriteLnFn,
             above_prefix: String,
             center_prefix: String,
             below_prefix: String,
-        ) {
+        ) -> Result<(), E> {
             match tree.to_leaf_or_node_pair() {
                 LeafOrNodePair::Leaf(leaf) => {
-                    println!("{}:{}", center_prefix, leaf);
+                    let leaf = format!("{}", leaf);
+                    let mut lines: Vec<_> = leaf.lines().collect();
+                    if lines.is_empty() {
+                        lines.push("");
+                    }
+                    for (index, line) in lines.iter().enumerate() {
+                        match index.cmp(&(lines.len() / 2)) {
+                            Ordering::Less => {
+                                write_ln_fn(format_args!("{} {}", above_prefix, line))?
+                            }
+                            Ordering::Equal => {
+                                write_ln_fn(format_args!("{}:{}", center_prefix, line))?
+                            }
+                            Ordering::Greater => {
+                                write_ln_fn(format_args!("{} {}", below_prefix, line))?
+                            }
+                        }
+                    }
                 }
                 LeafOrNodePair::NodePair(node1, node_data, node2) => {
                     let line1_1 = above_prefix.clone();
@@ -964,21 +986,43 @@ pub(crate) trait PrintTree: for<'a> PrintTreeData<'a> {
                     let new_line1 = line1_1 + "    ";
                     let new_line2 = line1_2 + " +--";
                     let new_line3 = line1_3 + " |  ";
-                    let new_line4 = line1_4 + " |";
+                    let new_line4 = line1_4 + " | ";
                     let new_line5 = line2_1 + "-+:";
-                    let new_line6 = line3_1 + " |";
+                    let new_line6 = line3_1 + " | ";
                     let new_line7 = line3_2 + " |  ";
                     let new_line8 = line3_3 + " +--";
                     let new_line9 = line3_4 + "    ";
-                    print_tree_helper(node1, new_line1, new_line2, new_line3);
-                    println!("{}", new_line4);
-                    println!("{}{}", new_line5, node_data);
-                    println!("{}", new_line6);
-                    print_tree_helper(node2, new_line7, new_line8, new_line9);
+                    helper(node1, write_ln_fn, new_line1, new_line2, new_line3)?;
+                    let node_data = format!("{}", node_data);
+                    let lines: Vec<_> = iter::once("")
+                        .chain(node_data.lines())
+                        .chain(iter::once(""))
+                        .collect();
+                    for (index, line) in lines.iter().enumerate() {
+                        match index.cmp(&(lines.len() / 2)) {
+                            Ordering::Less => write_ln_fn(format_args!("{}{}", new_line4, line))?,
+                            Ordering::Equal => write_ln_fn(format_args!("{}{}", new_line5, line))?,
+                            Ordering::Greater => {
+                                write_ln_fn(format_args!("{}{}", new_line6, line))?
+                            }
+                        }
+                    }
+                    helper(node2, write_ln_fn, new_line7, new_line8, new_line9)?;
                 }
             }
+            Ok(())
         }
-        print_tree_helper(self, "".into(), "".into(), "".into());
+        helper(self, &mut write_ln_fn, "".into(), "".into(), "".into())
+    }
+    fn write_tree<W: std::io::Write>(&self, mut output: W) -> std::io::Result<()> {
+        self.write_or_print_tree(|arguments| writeln!(output, "{}", arguments))
+    }
+    fn print_tree(&self) {
+        self.write_or_print_tree(|arguments| {
+            println!("{}", arguments);
+            Ok::<(), ()>(())
+        })
+        .unwrap();
     }
 }
 
