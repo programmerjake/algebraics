@@ -10,10 +10,12 @@ use crate::traits::GCD;
 use num_bigint::BigInt;
 use num_integer::Integer;
 use num_rational::Ratio;
+use num_traits::FromPrimitive;
 use num_traits::NumAssign;
 use num_traits::One;
+use num_traits::Signed;
+use num_traits::ToPrimitive;
 use num_traits::Zero;
-use num_traits::{FromPrimitive, ToPrimitive};
 use std::borrow::Cow;
 use std::error::Error;
 use std::fmt;
@@ -210,6 +212,27 @@ pub trait PolynomialCoefficient:
     }
     fn from_iterator<I: Iterator<Item = Self>>(iter: I) -> Polynomial<Self> {
         Self::coefficients_to_elements(Cow::Owned(iter.collect())).into()
+    }
+}
+
+pub trait PolynomialCoefficientAbsSupported: PolynomialCoefficient {
+    fn coefficient_abs(coefficient: Self) -> Self;
+}
+
+impl<
+        T: PolynomialCoefficientElement
+            + Integer
+            + NumAssign
+            + FromPrimitive
+            + GCD<Output = T>
+            + ExactDivAssign
+            + for<'a> ExactDivAssign<&'a T>
+            + PolynomialCoefficientAbsSupported,
+    > PolynomialCoefficientAbsSupported for Ratio<T>
+{
+    fn coefficient_abs(coefficient: Self) -> Self {
+        let (numer, denom) = coefficient.into();
+        Ratio::new(T::coefficient_abs(numer), denom)
     }
 }
 
@@ -638,6 +661,12 @@ macro_rules! impl_polynomial_coefficient_for_int {
                 } else {
                     None
                 }
+            }
+        }
+
+        impl PolynomialCoefficientAbsSupported for $t {
+            fn coefficient_abs(coefficient: Self) -> Self {
+                coefficient.abs()
             }
         }
     };
@@ -1147,6 +1176,37 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
             elements: vec![T::make_one_element(Cow::Borrowed(first_element))],
             divisor: One::one(),
         })
+    }
+    #[must_use]
+    pub fn nonzero_max_norm(&self) -> Option<T>
+    where
+        T: Ord + PolynomialCoefficientAbsSupported,
+    {
+        self.iter().map(T::coefficient_abs).max()
+    }
+    #[must_use]
+    pub fn max_norm(&self) -> T
+    where
+        T: Ord + PolynomialCoefficientAbsSupported + Zero,
+    {
+        self.nonzero_max_norm().unwrap_or_else(T::zero)
+    }
+    #[must_use]
+    pub fn nonzero_manhattan_norm(&self) -> Option<T>
+    where
+        T: PolynomialCoefficientAbsSupported,
+    {
+        self.iter().fold(None, |sum, coefficient| match sum {
+            None => Some(T::coefficient_abs(coefficient)),
+            Some(sum) => Some(sum + T::coefficient_abs(coefficient)),
+        })
+    }
+    #[must_use]
+    pub fn manhattan_norm(&self) -> T
+    where
+        T: PolynomialCoefficientAbsSupported + Zero,
+    {
+        self.nonzero_manhattan_norm().unwrap_or_else(T::zero)
     }
 }
 
