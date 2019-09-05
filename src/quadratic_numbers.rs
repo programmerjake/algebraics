@@ -1062,6 +1062,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "slow"]
     fn test_real_quadratic_number_cmp() {
         for (a1, b1, c1, f1) in get_float_test_cases_big() {
             let poly1 = QuadraticPolynomial {
