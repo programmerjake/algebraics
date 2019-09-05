@@ -678,38 +678,46 @@ mod tests {
     use std::collections::HashSet;
     use std::ops::Mul;
 
+    fn p(coefficients: Vec<i128>) -> Polynomial<BigInt> {
+        coefficients.into_iter().map(BigInt::from).collect()
+    }
+
+    fn test_factor_square_free_polynomial_with_rng_test_case(
+        expected_factors: Vec<Polynomial<BigInt>>,
+    ) {
+        let mut rng = Pcg64Mcg::seed_from_u64(0);
+        let expected_factors: HashSet<_> = expected_factors.into_iter().collect();
+        let poly = expected_factors
+            .iter()
+            .fold(Polynomial::<BigInt>::one(), Mul::mul);
+        println!("poly: {}", poly);
+        println!("expected_factors:");
+        for factor in &expected_factors {
+            println!("    {}", factor);
+        }
+        let factors = poly.factor_square_free_polynomial_with_rng(&mut rng);
+        let factors: HashSet<_> = factors.into_iter().collect();
+        println!("factors:");
+        for factor in &factors {
+            println!("    {}", factor);
+        }
+        assert!(expected_factors == factors);
+    }
+
     #[test]
-    fn test_factor_square_free_polynomial_with_rng() {
-        fn p(coefficients: Vec<i128>) -> Polynomial<BigInt> {
-            coefficients.into_iter().map(BigInt::from).collect()
-        }
-        fn test_case(expected_factors: Vec<Polynomial<BigInt>>) {
-            let mut rng = Pcg64Mcg::seed_from_u64(0);
-            let expected_factors: HashSet<_> = expected_factors.into_iter().collect();
-            let poly = expected_factors
-                .iter()
-                .fold(Polynomial::<BigInt>::one(), Mul::mul);
-            println!("poly: {}", poly);
-            println!("expected_factors:");
-            for factor in &expected_factors {
-                println!("    {}", factor);
-            }
-            let factors = poly.factor_square_free_polynomial_with_rng(&mut rng);
-            let factors: HashSet<_> = factors.into_iter().collect();
-            println!("factors:");
-            for factor in &factors {
-                println!("    {}", factor);
-            }
-            assert!(expected_factors == factors);
-        }
-        test_case(vec![
+    fn test_factor_square_free_polynomial_with_rng_0() {
+        test_factor_square_free_polynomial_with_rng_test_case(vec![
             p(vec![0, 1]),
             p(vec![4, 4, 1, 3]),
             p(vec![2, 0, 3, 3]),
             p(vec![4, 3, 1, 1, 2]),
             p(vec![4, 0, 2, 3, 3]),
         ]);
-        test_case(vec![
+    }
+
+    #[test]
+    fn test_factor_square_free_polynomial_with_rng_1() {
+        test_factor_square_free_polynomial_with_rng_test_case(vec![
             p(vec![-1]),
             p(vec![-0, 1]),
             p(vec![-4, 4, -1, 3]),
@@ -717,7 +725,12 @@ mod tests {
             p(vec![4, -3, 1, -1, 2]),
             p(vec![4, -0, 2, -3, 3]),
         ]);
-        test_case(vec![
+    }
+
+    #[test]
+    #[ignore = "slow"]
+    fn test_factor_square_free_polynomial_with_rng_2() {
+        test_factor_square_free_polynomial_with_rng_test_case(vec![
             p(vec![12]),
             p(vec![29, 19]),
             p(vec![185, 174]),
@@ -731,7 +744,12 @@ mod tests {
             p(vec![130, 82, 85, 16, 87, 165, 168, -6, 106, 89]),
             p(vec![152, 23, 189, 50, 21, 142, 43, 146, 106, -5, 106]),
         ]);
-        test_case(vec![
+    }
+
+    #[test]
+    #[ignore = "slow"]
+    fn test_factor_square_free_polynomial_with_rng_3() {
+        test_factor_square_free_polynomial_with_rng_test_case(vec![
             p(vec![36, 97, 177, 78]),
             p(vec![190, 184, 24, 141]),
             p(vec![105, 57, 21, 161]),
@@ -744,7 +762,12 @@ mod tests {
             p(vec![17, 176, 132, 115, 1, 182, 95, 105, 11]),
             p(vec![73, 70, 12, 57, 122, 23, 23, 146, 28]),
         ]);
-        test_case(vec![
+    }
+
+    #[test]
+    #[ignore = "slow"]
+    fn test_factor_square_free_polynomial_with_rng_4() {
+        test_factor_square_free_polynomial_with_rng_test_case(vec![
             p(vec![286]),
             p(vec![94, 61]),
             p(vec![-37, 13, 16]),
@@ -758,10 +781,22 @@ mod tests {
             p(vec![2, -16, 50, -67, 63, -69, -31, 25, 83]),
             p(vec![-69, 28, -25, -25, 57, -10, -65, -19, 3, -66, 38]),
         ]);
-        test_case(vec![p(vec![
+    }
+
+    #[test]
+    fn test_factor_square_free_polynomial_with_rng_5() {
+        test_factor_square_free_polynomial_with_rng_test_case(vec![p(vec![
             -69, 28, -25, -25, 57, -10, -65, -19, 3, -66, 38,
         ])]);
-        test_case(vec![p(vec![1234])]);
-        test_case(vec![p(vec![3, 1234])]);
+    }
+
+    #[test]
+    fn test_factor_square_free_polynomial_with_rng_6() {
+        test_factor_square_free_polynomial_with_rng_test_case(vec![p(vec![1234])]);
+    }
+
+    #[test]
+    fn test_factor_square_free_polynomial_with_rng_7() {
+        test_factor_square_free_polynomial_with_rng_test_case(vec![p(vec![3, 1234])]);
     }
 }
