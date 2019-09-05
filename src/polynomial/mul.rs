@@ -3,7 +3,9 @@
 
 use crate::polynomial::Polynomial;
 use crate::polynomial::PolynomialCoefficient;
+use num_integer::Integer;
 use num_traits::CheckedMul;
+use num_traits::Pow;
 use num_traits::{One, Zero};
 use std::borrow::Cow;
 use std::ops::{AddAssign, Mul, MulAssign};
@@ -179,6 +181,52 @@ where
             [element] => element.is_one() && self.divisor.is_one(),
             _ => false,
         }
+    }
+}
+
+impl<T: PolynomialCoefficient> Polynomial<T> {
+    fn checked_pow<E: Integer + Clone>(&self, exponent: E) -> Option<Self> {
+        if exponent < Zero::zero() {
+            return None;
+        }
+        if exponent.is_zero() {
+            return self.to_one_if_nonzero();
+        }
+        let mut base = self.clone();
+        if exponent.is_one() {
+            return Some(base);
+        }
+        let mut exponent = exponent.clone();
+        let mut retval: Option<Self> = None;
+        loop {
+            if exponent.is_odd() {
+                retval = Some(match retval.take() {
+                    None => base.clone(),
+                    Some(retval) => retval * &base,
+                });
+            }
+            let two = E::one() + E::one();
+            exponent = exponent / two;
+            if exponent.is_zero() {
+                break;
+            }
+            base = &base * &base;
+        }
+        retval
+    }
+}
+
+impl<T: PolynomialCoefficient, E: Integer + Clone> Pow<E> for &'_ Polynomial<T> {
+    type Output = Polynomial<T>;
+    fn pow(self, exponent: E) -> Polynomial<T> {
+        self.checked_pow(exponent).expect("checked_pow failed")
+    }
+}
+
+impl<T: PolynomialCoefficient, E: Integer + Clone> Pow<E> for Polynomial<T> {
+    type Output = Polynomial<T>;
+    fn pow(self, exponent: E) -> Polynomial<T> {
+        self.checked_pow(exponent).expect("checked_pow failed")
     }
 }
 

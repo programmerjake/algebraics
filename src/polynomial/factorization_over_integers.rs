@@ -657,6 +657,7 @@ impl Polynomial<BigInt> {
                 Polynomial::<BigInt>::from(square_free_factor.split_out_divisor().0)
                     .factor_square_free_polynomial_with_rng(rng)
                     .into_iter()
+                    .filter(|polynomial| !polynomial.is_one())
                     .map(|polynomial| PolynomialFactor { polynomial, power }),
             );
         }
@@ -798,5 +799,108 @@ mod tests {
     #[test]
     fn test_factor_square_free_polynomial_with_rng_7() {
         test_factor_square_free_polynomial_with_rng_test_case(vec![p(vec![3, 1234])]);
+    }
+
+    fn test_factor_test_case(expected: PolynomialFactors<i128>) {
+        let expected = PolynomialFactors {
+            constant_factor: BigInt::from(expected.constant_factor),
+            polynomial_factors: expected
+                .polynomial_factors
+                .into_iter()
+                .map(|PolynomialFactor { polynomial, power }| PolynomialFactor {
+                    polynomial: p(polynomial.into_coefficients()),
+                    power,
+                })
+                .collect(),
+        };
+        let expected_factors: HashSet<_> = expected.polynomial_factors.into_iter().collect();
+        let poly = expected_factors.iter().fold(
+            Polynomial::from(expected.constant_factor.clone()),
+            |poly, PolynomialFactor { polynomial, power }| poly * polynomial.pow(*power),
+        );
+        println!("poly: {}", poly);
+        println!("expected_factors:");
+        println!("    {}", expected.constant_factor);
+        for factor in &expected_factors {
+            println!("    {}", factor);
+        }
+        let PolynomialFactors {
+            constant_factor,
+            polynomial_factors,
+        } = poly.factor();
+        let factors: HashSet<_> = polynomial_factors.into_iter().collect();
+        println!("factors:");
+        println!("    {}", constant_factor);
+        for factor in &factors {
+            println!("    {}", factor);
+        }
+        assert!(expected.constant_factor == constant_factor);
+        assert!(expected_factors == factors);
+    }
+
+    #[test]
+    fn test_factor_0() {
+        test_factor_test_case(PolynomialFactors {
+            constant_factor: -6,
+            polynomial_factors: vec![
+                PolynomialFactor {
+                    polynomial: vec![-9, 13].into(),
+                    power: 1,
+                },
+                PolynomialFactor {
+                    polynomial: vec![-88, -53, 55].into(),
+                    power: 4,
+                },
+                PolynomialFactor {
+                    polynomial: vec![-39, -7, 62].into(),
+                    power: 5,
+                },
+                PolynomialFactor {
+                    polynomial: vec![-4, 26, -72, 91].into(),
+                    power: 1,
+                },
+                PolynomialFactor {
+                    polynomial: vec![-74, 9, -68, 92].into(),
+                    power: 1,
+                },
+                PolynomialFactor {
+                    polynomial: vec![-74, 5, -46, 82, -19, 63].into(),
+                    power: 6,
+                },
+            ],
+        });
+    }
+
+    #[test]
+    fn test_factor_1() {
+        test_factor_test_case(PolynomialFactors {
+            constant_factor: -128,
+            polynomial_factors: vec![
+                PolynomialFactor {
+                    polynomial: vec![-1, 25].into(),
+                    power: 3,
+                },
+                PolynomialFactor {
+                    polynomial: vec![2, 37].into(),
+                    power: 1,
+                },
+                PolynomialFactor {
+                    polynomial: vec![99, -19, 76, 3].into(),
+                    power: 5,
+                },
+                PolynomialFactor {
+                    polynomial: vec![-43, 82, -13, 35, -22, 18].into(),
+                    power: 7,
+                },
+                PolynomialFactor {
+                    polynomial: vec![100, -26, 9, -24, 32, 32].into(),
+                    power: 2,
+                },
+                PolynomialFactor {
+                    polynomial: vec![57, 92, 28, -26, 10, 95].into(),
+                    power: 2,
+                },
+            ],
+        });
     }
 }

@@ -1216,6 +1216,12 @@ pub struct PolynomialFactor<T: PolynomialCoefficient> {
     power: usize,
 }
 
+impl<T: fmt::Display + PolynomialCoefficient> fmt::Display for PolynomialFactor<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "({})^{}", self.polynomial, self.power)
+    }
+}
+
 #[derive(Clone, Eq, Hash, PartialEq, Debug)]
 pub struct PolynomialFactors<T: PolynomialCoefficient> {
     constant_factor: T,
