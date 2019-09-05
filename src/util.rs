@@ -770,6 +770,7 @@ pub trait IsPseudoPrimePower: IsPseudoPrime + FloorLog2 {
         let last_checked_small_prime = PRIMES_THAT_FIT_IN_U16[prime_count - 1];
         let last_checked_small_prime =
             Self::from_u16(last_checked_small_prime).expect("can't convert small prime to T");
+        let _ = last_checked_small_prime;
         unimplemented!("FIXME: implement")
     }
 }
@@ -933,6 +934,7 @@ pub(crate) trait PrintTreeData<'a> {
     type NodeData: 'a + fmt::Display;
 }
 
+#[allow(dead_code)]
 pub(crate) trait PrintTree: for<'a> PrintTreeData<'a> {
     fn to_leaf_or_node_pair<'a>(
         &'a self,

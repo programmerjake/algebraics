@@ -21,12 +21,9 @@ use crate::util::PrintTree;
 use crate::util::PrintTreeData;
 use num_bigint::BigInt;
 use num_integer::Integer;
-use num_integer::Roots;
 use num_rational::Ratio;
 use num_traits::One;
-use num_traits::Pow;
 use num_traits::Signed;
-use num_traits::Zero;
 use rand::Rng;
 use rand::SeedableRng;
 use rand_pcg::Pcg64Mcg;
@@ -247,44 +244,48 @@ impl FactorTreeInteriorNode<ModularInteger<BigInt, BigInt>> {
                 .map(|(value, _modulus)| ModularInteger::new(value, new_modulus.clone()))
                 .collect()
         }
-        let g = set_modulus(self.left.product(), new_modulus);
-        let h = set_modulus(self.right.product(), new_modulus);
-        let s = set_modulus(
+        let old_left_product = set_modulus(self.left.product(), new_modulus);
+        let old_right_product = set_modulus(self.right.product(), new_modulus);
+        let old_left_bezout_coefficient = set_modulus(
             mem::replace(&mut self.left_bezout_coefficient, Default::default()),
             new_modulus,
         );
-        let t = set_modulus(
+        let old_right_bezout_coefficient = set_modulus(
             mem::replace(&mut self.right_bezout_coefficient, Default::default()),
             new_modulus,
         );
-        let e = &new_product - &g * &h;
-        let (q, r) = (&s * &e).div_rem(&h);
-        let g_star = &g + &t * e + q * g;
-        let h_star = h + r;
-        let b =
-            &s * &g_star + &t * &h_star - ModularInteger::new(BigInt::one(), new_modulus.clone());
-        let (c, d) = (&s * &b).div_rem(&h_star);
-        let s_star = s - d;
-        let t_mul_b = &t * b;
-        let t_star = t - t_mul_b - c * &g_star;
-        let left_product = g_star;
-        let right_product = h_star;
-        println!("left_product: ({})", left_product);
-        println!("right_product: ({})", right_product);
-        println!("self.left.product(): ({})", self.left.product());
-        println!("self.right.product(): ({})", self.right.product());
+        let error = &new_product - &old_left_product * &old_right_product;
+        let (quotient, remainder) =
+            (&old_left_bezout_coefficient * &error).div_rem(&old_right_product);
+        let left_product =
+            &old_left_product + &old_right_bezout_coefficient * error + quotient * old_left_product;
+        let right_product = old_right_product + remainder;
+        let bezout_error = &old_left_bezout_coefficient * &left_product
+            + &old_right_bezout_coefficient * &right_product
+            - ModularInteger::new(BigInt::one(), new_modulus.clone());
+        let (quotient, remainder) =
+            (&old_left_bezout_coefficient * &bezout_error).div_rem(&right_product);
+        let new_left_bezout_coefficient = old_left_bezout_coefficient - remainder;
+        let orbc_mul_bezout_error = &old_right_bezout_coefficient * bezout_error;
+        let new_right_bezout_coefficient =
+            old_right_bezout_coefficient - orbc_mul_bezout_error - quotient * &left_product;
+        // println!("left_product: ({})", left_product);
+        // println!("right_product: ({})", right_product);
+        // println!("self.left.product(): ({})", self.left.product());
+        // println!("self.right.product(): ({})", self.right.product());
         debug_assert!(&set_modulus(left_product.iter(), old_modulus) == self.left.product());
         debug_assert!(&set_modulus(right_product.iter(), old_modulus) == self.right.product());
         let check_bezout_coefficients = || {
-            let bezout_identity = &s_star * &left_product + &t_star * &right_product;
-            println!("bezout_identity: ({})", bezout_identity);
+            let bezout_identity = &new_left_bezout_coefficient * &left_product
+                + &new_right_bezout_coefficient * &right_product;
+            // println!("bezout_identity: ({})", bezout_identity);
             bezout_identity.is_one()
         };
         debug_assert!(check_bezout_coefficients());
         debug_assert!(&left_product * &right_product == new_product);
         self.product = new_product;
-        self.left_bezout_coefficient = s_star;
-        self.right_bezout_coefficient = t_star;
+        self.left_bezout_coefficient = new_left_bezout_coefficient;
+        self.right_bezout_coefficient = new_right_bezout_coefficient;
         self.left
             .hensel_lift_step(old_modulus, new_modulus, left_product);
         self.right
@@ -445,8 +446,8 @@ impl Polynomial<BigInt> {
                 break (converted_polynomial, modulus);
             }
         };
-        println!("modulus: {}", modulus);
-        println!("modular_polynomial: {}", modular_polynomial);
+        // println!("modulus: {}", modulus);
+        // println!("modular_polynomial: {}", modular_polynomial);
         let modular_factors: Vec<_> = modular_polynomial
             .distinct_degree_factorization()
             .into_iter()
@@ -463,14 +464,14 @@ impl Polynomial<BigInt> {
             .map(|factor| FactorTreeNode::Leaf(FactorTreeLeafNode { factor }))
             .collect();
 
-        println!("modular_factors:");
-        for factor in &modular_factors {
-            if let FactorTreeNode::Leaf(leaf) = factor {
-                println!("    {}", leaf.factor);
-            } else {
-                unreachable!("known to be all leaf nodes");
-            }
-        }
+        // println!("modular_factors:");
+        // for factor in &modular_factors {
+        //     if let FactorTreeNode::Leaf(leaf) = factor {
+        //         println!("    {}", leaf.factor);
+        //     } else {
+        //         unreachable!("known to be all leaf nodes");
+        //     }
+        // }
 
         let modular_factors_len = modular_factors.len();
 
@@ -525,13 +526,13 @@ impl Polynomial<BigInt> {
 
         let factor_limit_squared =
             ((max_norm_squared * highest_power_coefficient_squared) << (degree * 2)) * (degree + 1);
-        let factor_limit = ExactInexactInt::new(factor_limit_squared.clone()).sqrt();
-        println!("factor_limit: {}", factor_limit);
+        // let factor_limit = ExactInexactInt::new(factor_limit_squared.clone()).sqrt();
+        // println!("factor_limit: {}", factor_limit);
         let needed_modulus = ExactInexactInt::new(factor_limit_squared * 4i32).sqrt() + 1i32;
-        println!("needed_modulus: {}", needed_modulus);
-        println!();
-        factor_tree.print_tree();
-        println!();
+        // println!("needed_modulus: {}", needed_modulus);
+        // println!();
+        // factor_tree.print_tree();
+        // println!();
         while modulus < needed_modulus {
             let new_modulus = &modulus * &modulus;
             let expected_product: Polynomial<_> = self
@@ -541,12 +542,12 @@ impl Polynomial<BigInt> {
             factor_tree.hensel_lift_step(&modulus, &new_modulus, expected_product);
             modulus = new_modulus;
 
-            //factor_tree.print_tree();
-            //println!();
+            // factor_tree.print_tree();
+            // println!();
         }
-        println!();
-        factor_tree.print_tree();
-        println!();
+        // println!();
+        // factor_tree.print_tree();
+        // println!();
 
         let mut modular_factors = Vec::with_capacity(modular_factors_len);
         factor_tree.into_leaves(&mut modular_factors);
@@ -561,10 +562,10 @@ impl Polynomial<BigInt> {
             })
             .is_none());
 
-        println!("modular_factors:");
-        for factor in &modular_factors {
-            println!("    {}", factor);
-        }
+        // println!("modular_factors:");
+        // for factor in &modular_factors {
+        //     println!("    {}", factor);
+        // }
 
         let mut factors = Vec::with_capacity(modular_factors.len());
 
@@ -590,7 +591,7 @@ impl Polynomial<BigInt> {
             let range = 0..modular_factors.len();
             for_subsets_of_size(
                 |subset_indexes: &[usize]| {
-                    println!("subset_indexes: {:?}", subset_indexes);
+                    // println!("subset_indexes: {:?}", subset_indexes);
                     let mut potential_factor = Polynomial::from(ModularInteger::new(
                         input_polynomial.highest_power_coefficient(),
                         modulus.clone(),
@@ -598,7 +599,7 @@ impl Polynomial<BigInt> {
                     for &index in subset_indexes {
                         potential_factor *= &modular_factors[index];
                     }
-                    println!("potential_factor: {}", potential_factor);
+                    // println!("potential_factor: {}", potential_factor);
                     let mut potential_factor: Polynomial<_> = potential_factor
                         .into_iter()
                         .map(Into::into)
@@ -612,18 +613,18 @@ impl Polynomial<BigInt> {
                             }
                         })
                         .collect();
-                    println!("potential_factor: {}", potential_factor);
+                    // println!("potential_factor: {}", potential_factor);
                     potential_factor.primitive_part_assign();
-                    println!("potential_factor: {}", potential_factor);
-                    println!("input_polynomial: {}", input_polynomial);
+                    // println!("potential_factor: {}", potential_factor);
+                    // println!("input_polynomial: {}", input_polynomial);
                     if let Some((mut quotient, _)) = input_polynomial
                         .clone()
                         .checked_exact_pseudo_div(&potential_factor)
                     {
                         factors.push(potential_factor);
-                        println!("found factor");
+                        // println!("found factor");
                         quotient.primitive_part_assign();
-                        println!("quotient: {}", quotient);
+                        // println!("quotient: {}", quotient);
                         input_polynomial = quotient;
                         found_factors = true;
                         for &index in subset_indexes.iter().rev() {
@@ -676,6 +677,7 @@ impl Polynomial<BigInt> {
 mod tests {
     use super::*;
     use num_traits::One;
+    use num_traits::Pow;
     use std::collections::HashSet;
     use std::ops::Mul;
 
