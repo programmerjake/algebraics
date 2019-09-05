@@ -577,6 +577,8 @@ impl Polynomial<BigInt> {
 
         let mut input_polynomial = self.clone();
 
+        // FIXME: replace exponential subset search with LLL reduction
+
         let mut subset_size = 0;
         let mut found_factors = false;
         loop {
