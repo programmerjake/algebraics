@@ -763,6 +763,144 @@ impl<T: PolynomialCoefficient> From<Vec<T>> for Polynomial<T> {
     }
 }
 
+macro_rules! from_array {
+    ($n:expr, [$($v:ident),*]) => {
+        impl<T: PolynomialCoefficient> From<[T; $n]> for Polynomial<T> {
+            fn from(coefficients: [T; $n]) -> Self {
+                let [$($v),*] = coefficients;
+                Self::from(Cow::Owned(vec![$($v),*]))
+            }
+        }
+    };
+}
+
+from_array!(0, []);
+from_array!(1, [c0]);
+from_array!(2, [c0, c1]);
+from_array!(3, [c0, c1, c2]);
+from_array!(4, [c0, c1, c2, c3]);
+from_array!(5, [c0, c1, c2, c3, c4]);
+from_array!(6, [c0, c1, c2, c3, c4, c5]);
+from_array!(7, [c0, c1, c2, c3, c4, c5, c6]);
+from_array!(8, [c0, c1, c2, c3, c4, c5, c6, c7]);
+from_array!(9, [c0, c1, c2, c3, c4, c5, c6, c7, c8]);
+from_array!(10, [c0, c1, c2, c3, c4, c5, c6, c7, c8, c9]);
+from_array!(11, [c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10]);
+from_array!(12, [c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11]);
+from_array!(13, [c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12]);
+from_array!(
+    14,
+    [c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13]
+);
+from_array!(
+    15,
+    [c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14]
+);
+from_array!(
+    16,
+    [c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15]
+);
+from_array!(
+    17,
+    [c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15, c16]
+);
+from_array!(
+    18,
+    [c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15, c16, c17]
+);
+from_array!(
+    19,
+    [c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15, c16, c17, c18]
+);
+from_array!(
+    20,
+    [c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15, c16, c17, c18, c19]
+);
+from_array!(
+    21,
+    [
+        c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15, c16, c17, c18, c19,
+        c20
+    ]
+);
+from_array!(
+    22,
+    [
+        c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15, c16, c17, c18, c19,
+        c20, c21
+    ]
+);
+from_array!(
+    23,
+    [
+        c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15, c16, c17, c18, c19,
+        c20, c21, c22
+    ]
+);
+from_array!(
+    24,
+    [
+        c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15, c16, c17, c18, c19,
+        c20, c21, c22, c23
+    ]
+);
+from_array!(
+    25,
+    [
+        c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15, c16, c17, c18, c19,
+        c20, c21, c22, c23, c24
+    ]
+);
+from_array!(
+    26,
+    [
+        c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15, c16, c17, c18, c19,
+        c20, c21, c22, c23, c24, c25
+    ]
+);
+from_array!(
+    27,
+    [
+        c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15, c16, c17, c18, c19,
+        c20, c21, c22, c23, c24, c25, c26
+    ]
+);
+from_array!(
+    28,
+    [
+        c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15, c16, c17, c18, c19,
+        c20, c21, c22, c23, c24, c25, c26, c27
+    ]
+);
+from_array!(
+    29,
+    [
+        c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15, c16, c17, c18, c19,
+        c20, c21, c22, c23, c24, c25, c26, c27, c28
+    ]
+);
+from_array!(
+    30,
+    [
+        c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15, c16, c17, c18, c19,
+        c20, c21, c22, c23, c24, c25, c26, c27, c28, c29
+    ]
+);
+from_array!(
+    31,
+    [
+        c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15, c16, c17, c18, c19,
+        c20, c21, c22, c23, c24, c25, c26, c27, c28, c29, c30
+    ]
+);
+from_array!(
+    32,
+    [
+        c0, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15, c16, c17, c18, c19,
+        c20, c21, c22, c23, c24, c25, c26, c27, c28, c29, c30, c31
+    ]
+);
+
 impl<T: PolynomialCoefficient> From<&'_ [T]> for Polynomial<T> {
     fn from(coefficients: &[T]) -> Self {
         Self::from(Cow::Borrowed(coefficients))
