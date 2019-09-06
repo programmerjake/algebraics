@@ -1349,6 +1349,12 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
 }
 
 #[derive(Clone, Eq, Hash, PartialEq, Debug)]
+pub enum GCDOrResultant<T: PolynomialCoefficient> {
+    GCD(Polynomial<T>),
+    Resultant(T),
+}
+
+#[derive(Clone, Eq, Hash, PartialEq, Debug)]
 pub struct PolynomialFactor<T: PolynomialCoefficient> {
     polynomial: Polynomial<T>,
     power: usize,

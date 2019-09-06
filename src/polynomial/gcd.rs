@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // See Notices.txt for copyright information
+use crate::polynomial::GCDOrResultant;
 use crate::polynomial::Polynomial;
 use crate::polynomial::PolynomialCoefficient;
 use crate::polynomial::PolynomialDivSupported;
@@ -13,6 +14,25 @@ use crate::traits::ExtendedGCDResult;
 use crate::traits::GCDAndLCM;
 use crate::traits::GCD;
 use num_traits::Zero;
+
+// FIXME: finish
+// impl<T: PolynomialCoefficient> Polynomial<T> {
+//     pub fn gcd_or_resultant(self, rhs: Self) -> GCDOrResultant<T> {
+//         if self.is_zero() {
+//             return GCDOrResultant::GCD(rhs);
+//         }
+//         // algorithm from https://en.wikipedia.org/wiki/Polynomial_greatest_common_divisor#Subresultant_pseudo-remainder_sequence
+//         let mut r_i_minus_1 = self;
+//         let mut r_i = rhs;
+//         for i in 1usize.. {
+//             if r_i.is_zero() {
+//                 break;
+//             }
+//             let d_i = r_i_minus_1.degree().expect("msg: &str") - r_i.degree()
+//         }
+//         unimplemented!()
+//     }
+// }
 
 impl<T> GCD for Polynomial<T>
 where
