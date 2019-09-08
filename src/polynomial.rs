@@ -1372,7 +1372,7 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
 pub struct ResultantNotDefined;
 
 impl fmt::Display for ResultantNotDefined {
-    fn fmt(&self, f: &mut fmt::Formatter)->fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "resultant not defined")
     }
 }
