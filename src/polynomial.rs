@@ -210,6 +210,26 @@ pub trait PolynomialCoefficient:
         }
         retval.unwrap_or_else(|| unreachable!())
     }
+    fn coefficient_pow_usize(mut base: Self, mut exponent: usize) -> Self {
+        if exponent == 0 {
+            return Self::make_one_coefficient_from_coefficient(Cow::Owned(base));
+        }
+        let mut retval = None;
+        loop {
+            if exponent % 2 != 0 {
+                match &mut retval {
+                    None => retval = Some(base.clone()),
+                    Some(retval) => *retval *= &base,
+                }
+            }
+            exponent /= 2;
+            if exponent == 0 {
+                break;
+            }
+            base *= base.clone();
+        }
+        retval.unwrap_or_else(|| unreachable!())
+    }
     fn from_iterator<I: Iterator<Item = Self>>(iter: I) -> Polynomial<Self> {
         Self::coefficients_to_elements(Cow::Owned(iter.collect())).into()
     }
@@ -1348,11 +1368,16 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
     }
 }
 
-#[derive(Clone, Eq, Hash, PartialEq, Debug)]
-pub enum GCDOrResultant<T: PolynomialCoefficient> {
-    GCD(Polynomial<T>),
-    Resultant(T),
+#[derive(Copy, Clone, Debug)]
+pub struct ResultantNotDefined;
+
+impl fmt::Display for ResultantNotDefined {
+    fn fmt(&self, f: &mut fmt::Formatter)->fmt::Result {
+        write!(f, "resultant not defined")
+    }
 }
+
+impl Error for ResultantNotDefined {}
 
 #[derive(Clone, Eq, Hash, PartialEq, Debug)]
 pub struct PolynomialFactor<T: PolynomialCoefficient> {
