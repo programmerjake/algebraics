@@ -1368,17 +1368,6 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
-pub struct ResultantNotDefined;
-
-impl fmt::Display for ResultantNotDefined {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "resultant not defined")
-    }
-}
-
-impl Error for ResultantNotDefined {}
-
 #[derive(Clone, Eq, Hash, PartialEq, Debug)]
 pub struct PolynomialFactor<T: PolynomialCoefficient> {
     polynomial: Polynomial<T>,
