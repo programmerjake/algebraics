@@ -38,13 +38,7 @@ impl<T: PolynomialCoefficient + for<'a> ExactDiv<&'a T, Output = T>> Polynomial<
     /// returns the non-reduced GCD computed from the subresultant remainder sequence.
     ///
     /// The algorithm used is derived from the one given in http://web.archive.org/web/20190221040758/https://pdfs.semanticscholar.org/2e6b/95ba84e2160748ba8fc310cdc408fc9bbade.pdf
-    pub fn subresultant_gcd<DPP: Fn(&Polynomial<T>) -> String, DPC: Fn(&T) -> String>(
-        mut self,
-        mut rhs: Self,
-        debug_print_poly: DPP, // FIXME: remove debug print arguments
-        debug_print_coeff: DPC,
-    ) -> Polynomial<T> {
-        // FIXME: still causes resultant() to fail
+    pub fn subresultant_gcd(mut self, mut rhs: Self) -> Polynomial<T> {
         let need_negate = if self.len() < rhs.len() {
             mem::swap(&mut self, &mut rhs);
             self.degree().unwrap_or(0).is_odd() && rhs.degree().unwrap_or(0).is_odd()
@@ -55,54 +49,25 @@ impl<T: PolynomialCoefficient + for<'a> ExactDiv<&'a T, Output = T>> Polynomial<
         if rhs.is_zero() {
             return self;
         }
-        println!("need_negate = {}", need_negate);
 
         assert!(!self.is_zero());
         let one = T::make_one_coefficient_from_element(Cow::Borrowed(&self.elements[0]));
 
-        macro_rules! print_var {
-            ($var:ident[$i:expr] = poly $value:ident) => {
-                println!(
-                    concat!(stringify!($var), "[{}] = {}"),
-                    $i,
-                    debug_print_poly(&$value)
-                );
-            };
-            ($var:ident[$i:expr] = coeff $value:ident) => {
-                println!(
-                    concat!(stringify!($var), "[{}] = {}"),
-                    $i,
-                    debug_print_coeff(&$value)
-                );
-            };
-            ($var:ident[$i:expr] = scalar $value:ident) => {
-                println!(concat!(stringify!($var), "[{}] = {}"), $i, $value);
-            };
-        }
-
         #[allow(unused_variables)]
         let mut i = 3usize;
-        println!("i = {}", i);
 
         let mut f_i_2 = self; // f[i-2]
-        print_var!(f[i - 2] = poly f_i_2);
         let mut n_i_2 = f_i_2.degree().expect("f_i_2 is known to be non-zero");
-        print_var!(n[i - 2] = scalar n_i_2);
         let mut a_i_2 = one.clone();
-        print_var!(a[i - 2] = coeff a_i_2);
         let mut c_i_2 = one;
-        print_var!(c[i - 2] = coeff c_i_2);
 
         let mut f_i_1 = rhs; // f[i-1]
-        print_var!(f[i - 1] = poly f_i_1);
         let mut n_i_1 = f_i_1.degree().expect("f_i_1 is known to be non-zero");
-        print_var!(n[i - 1] = scalar n_i_1);
 
         loop {
             let PseudoDivRem { remainder, .. } = f_i_2.pseudo_div_rem(&f_i_1);
             let divisor = -a_i_2 * T::coefficient_pow_usize(-c_i_2.clone(), n_i_2 - n_i_1);
             let f_i = remainder.exact_div(divisor); // f[i]
-            print_var!(f[i] = poly f_i);
 
             let n_i = if let Some(v) = f_i.degree() {
                 v
@@ -110,12 +75,10 @@ impl<T: PolynomialCoefficient + for<'a> ExactDiv<&'a T, Output = T>> Polynomial<
                 // f_i is zero
                 break;
             };
-            print_var!(n[i] = scalar n_i);
 
             let a_i_1 = f_i_1
                 .nonzero_highest_power_coefficient()
                 .expect("f_i_1 is known to be non-zero");
-            print_var!(a[i - 1] = coeff a_i_1);
 
             let c_i_1 = exact_mul_by_signed_power(
                 T::coefficient_pow_usize(a_i_1.clone(), n_i_2 - n_i_1),
@@ -123,11 +86,9 @@ impl<T: PolynomialCoefficient + for<'a> ExactDiv<&'a T, Output = T>> Polynomial<
                 n_i_1 + 1,
                 n_i_2,
             );
-            print_var!(c[i - 1] = coeff c_i_1);
 
             // step to next iteration
             i += 1;
-            println!("i = {}", i);
             f_i_2 = f_i_1;
             f_i_1 = f_i;
             n_i_2 = n_i_1;
@@ -141,36 +102,89 @@ impl<T: PolynomialCoefficient + for<'a> ExactDiv<&'a T, Output = T>> Polynomial<
             f_i_1
         }
     }
-    pub fn nonzero_resultant(self, rhs: Self) -> Option<T>
-    where
-        T: std::fmt::Display, // FIXME: remove Display bound
-    {
-        let self_degree = self.degree()?;
-        let rhs_degree = rhs.degree()?;
-        if self_degree == 0 {
-            Some(T::coefficient_pow_usize(
-                self.into_iter().next().expect("known to be non-zero"),
-                rhs_degree,
-            ))
-        } else if rhs_degree == 0 {
-            Some(T::coefficient_pow_usize(
-                rhs.into_iter().next().expect("known to be non-zero"),
-                self_degree,
-            ))
-        } else {
-            let subresultant_gcd =
-                self.subresultant_gcd(rhs, |v| format!("{}", v), |v| format!("{}", v));
-            if subresultant_gcd.degree() == Some(0) {
-                Some(subresultant_gcd.coefficient(0))
+    pub fn nonzero_resultant(self, rhs: Self) -> Option<T> {
+        #![allow(clippy::many_single_char_names)]
+        // based on algorithm from Computer Algebra and Symbolic Computation: Mathematical Methods by Joel S. Cohen
+
+        // TODO: switch to sharing implementation with subresultant_gcd
+        fn recursive_resultant<T: PolynomialCoefficient + for<'a> ExactDiv<&'a T, Output = T>>(
+            u: Polynomial<T>,
+            v: Polynomial<T>,
+            i: usize,
+            delta_p: usize,
+            psi_p: T,
+        ) -> Option<T> {
+            let m = u.degree().expect("known to be non-zero");
+            let n = v.degree().expect("known to be non-zero");
+            if m < n {
+                let retval = recursive_resultant(v, u, i, delta_p, psi_p)?;
+                if m.is_odd() && n.is_odd() {
+                    Some(-retval)
+                } else {
+                    Some(retval)
+                }
+            } else if n == 0 {
+                Some(T::coefficient_pow_usize(
+                    v.into_iter().next().expect("known to be non-zero"),
+                    m,
+                ))
             } else {
-                None
+                let r = u.clone().pseudo_div_rem(&v).remainder;
+                if r.is_zero() {
+                    None
+                } else {
+                    let delta = m + 1 - n;
+                    debug_assert!(delta >= 1);
+                    let psi;
+                    let beta;
+                    if i == 1 {
+                        let one =
+                            T::make_one_coefficient_from_element(Cow::Borrowed(&v.elements[0]));
+                        psi = -one.clone();
+                        beta = if delta.is_odd() { -one } else { one };
+                    } else if i > 1 {
+                        let f = u
+                            .nonzero_highest_power_coefficient()
+                            .expect("known to be non-zero");
+                        psi = match delta_p {
+                            0 => unreachable!(),
+                            1 => psi_p,
+                            _ => T::coefficient_pow_usize(-f.clone(), delta_p - 1)
+                                .exact_div(&T::coefficient_pow_usize(psi_p, delta_p - 2)),
+                        };
+                        beta = f
+                            .neg()
+                            .mul(T::coefficient_pow_usize(psi.clone(), delta - 1));
+                    } else {
+                        unreachable!()
+                    }
+                    let r = r.exact_div(&beta);
+                    let l = v
+                        .nonzero_highest_power_coefficient()
+                        .expect("known to be non-zero");
+                    let s = r.degree().expect("known to be non-zero");
+                    let mut w = T::coefficient_pow_usize(beta, n);
+                    if m.is_odd() && n.is_odd() {
+                        w = -w;
+                    }
+                    w *= recursive_resultant(v, r, i + 1, delta, psi)?;
+                    let k = n * delta + s - m;
+                    let f = T::coefficient_pow_usize(l, k);
+                    Some(w.exact_div(&f))
+                }
             }
+        }
+
+        if self.is_zero() || rhs.is_zero() {
+            None
+        } else {
+            let zero = T::make_zero_coefficient_from_element(Cow::Borrowed(&self.elements[0]));
+            recursive_resultant(self, rhs, 1, 0, zero)
         }
     }
     pub fn resultant(self, rhs: Self) -> T
     where
         T: Zero,
-        T: std::fmt::Display, // FIXME: remove Display bound
     {
         self.nonzero_resultant(rhs).unwrap_or_else(T::zero)
     }
@@ -183,7 +197,7 @@ where
     type Output = Self;
     fn gcd(&self, rhs: &Self) -> Self {
         self.to_reduced()
-            .subresultant_gcd(rhs.to_reduced(), |_| String::new(), |_| String::new())
+            .subresultant_gcd(rhs.to_reduced())
             .into_reduced()
     }
     fn gcd_lcm(&self, rhs: &Self) -> GCDAndLCM<Self> {
