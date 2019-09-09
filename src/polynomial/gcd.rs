@@ -301,7 +301,6 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::util::DebugAsDisplay;
     use num_bigint::BigInt;
     use num_rational::Ratio;
 
