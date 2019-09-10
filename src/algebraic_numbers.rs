@@ -539,6 +539,9 @@ impl fmt::Debug for ResultFactor {
 impl AddAssign for RealAlgebraicNumber {
     fn add_assign(&mut self, mut rhs: RealAlgebraicNumber) {
         #![allow(clippy::suspicious_op_assign_impl)] // we need to use other operators
+        println!("add_assign:");
+        dbg!(&self);
+        dbg!(&rhs);
         if self.is_rational() && rhs.is_rational() {
             *self = (self.to_rational().expect("known to be rational")
                 + rhs.to_rational().expect("known to be rational"))
@@ -579,6 +582,7 @@ impl AddAssign for RealAlgebraicNumber {
             println!("upper_bound: {}", upper_bound);
             mem::swap(&mut factors, &mut factors_temp);
             factors.clear();
+            let mut roots_left = 0;
             for factor in factors_temp.drain(..) {
                 dbg!(&factor);
                 let lower_bound_sign_changes = sign_changes_at(
@@ -601,12 +605,17 @@ impl AddAssign for RealAlgebraicNumber {
                     != upper_bound_sign_changes.sign_change_count
                 {
                     println!("retained: {:?}", factor);
+                    let num_roots = distance(
+                        lower_bound_sign_changes.sign_change_count,
+                        upper_bound_sign_changes.sign_change_count,
+                    );
+                    roots_left += dbg!(num_roots);
                     factors.push(factor);
                 } else {
                     println!("discarded: {:?}", factor);
                 }
             }
-            if factors.len() <= 1 {
+            if roots_left <= 1 {
                 break RealAlgebraicNumber::new_unchecked(
                     factors.remove(0).into_factor(),
                     lower_bound,
@@ -952,6 +961,48 @@ mod tests {
             // sqrt(3) - sqrt(5) + 1 / 2
             RealAlgebraicNumber::new_unchecked(p(&[1, 248, -232, -32, 16]), ri(-1), ri(0)),
             r(3, 2),
+        );
+    }
+
+    #[test]
+    fn test_sub() {
+        fn test_case<
+            A: Into<RealAlgebraicNumber>,
+            B: Into<RealAlgebraicNumber>,
+            E: Into<RealAlgebraicNumber>,
+        >(
+            a: A,
+            b: B,
+            expected: E,
+        ) {
+            let a = a.into();
+            println!("a: {:?}", a);
+            let b = b.into();
+            println!("b: {:?}", b);
+            let expected = expected.into();
+            println!("expected: {:?}", expected);
+            test_op_helper(
+                a,
+                b,
+                &expected,
+                |l, r| *l -= r,
+                |l, r| *l -= r,
+                |l, r| l - r,
+                |l, r| l - r,
+                |l, r| l - r,
+                |l, r| l - r,
+            );
+        }
+        test_case(1, 2, 1 - 2);
+        test_case(
+            make_sqrt(2, ri(1), ri(2)),
+            make_sqrt(2, ri(-2), ri(-1)),
+            make_sqrt(8, ri(1), ri(3)),
+        );
+        test_case(
+            make_sqrt(2, ri(1), ri(2)),
+            make_sqrt(3, ri(1), ri(2)),
+            RealAlgebraicNumber::new_unchecked(p(&[1, 0, -10, 0, 1]), ri(-1), ri(0)),
         );
     }
 }
