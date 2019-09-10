@@ -23,7 +23,6 @@ use std::fmt;
 use std::hash;
 use std::iter::FromIterator;
 use std::mem;
-use std::ops::Deref;
 use std::ops::Neg;
 use std::ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign};
 use std::slice;
@@ -1155,17 +1154,20 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
         elements.push(element);
         Self { elements, divisor }
     }
-    pub fn coefficient(&self, index: usize) -> T {
-        T::make_coefficient(
-            Cow::Borrowed(&self.elements[index]),
+    pub fn nonzero_coefficient(&self, index: usize) -> Option<T> {
+        Some(T::make_coefficient(
+            Cow::Borrowed(self.elements.get(index)?),
             Cow::Borrowed(&self.divisor),
-        )
+        ))
+    }
+    pub fn coefficient(&self, index: usize) -> T where T: Zero {
+        self.nonzero_coefficient(index).unwrap_or_else(T::zero)
     }
     pub fn nonzero_highest_power_coefficient(&self) -> Option<T> {
         if self.is_empty() {
             None
         } else {
-            Some(self.coefficient(self.len() - 1))
+            self.nonzero_coefficient(self.len() - 1)
         }
     }
     pub fn highest_power_coefficient(&self) -> T
@@ -1325,39 +1327,89 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
     {
         self.clone().into_reduced()
     }
-    pub fn to_sturm_sequence(&self) -> SturmSequence<T>
-    where
-        T: PolynomialDivSupported,
-    {
-        self.clone().into_sturm_sequence()
-    }
-    pub fn into_sturm_sequence(self) -> SturmSequence<T>
-    where
-        T: PolynomialDivSupported,
-    {
+    fn into_generic_sturm_sequence<R: Fn(&Self, &Self) -> Self, D: Fn(&Self) -> Self>(
+        self,
+        derivative: D,
+        remainder: R,
+    ) -> Vec<Polynomial<T>> {
         let self_len = self.len();
         match self_len {
-            0 => return SturmSequence(vec![]),
-            1 => return SturmSequence(vec![self.clone()]),
+            0 => return vec![],
+            1 => return vec![self],
             _ => {}
         }
         let mut sturm_sequence = Vec::with_capacity(self_len);
         sturm_sequence.push(self);
-        sturm_sequence.push(sturm_sequence[0].derivative());
+        sturm_sequence.push(derivative(&sturm_sequence[0]));
         for _ in 2..self_len {
             match sturm_sequence.rchunks_exact(2).next() {
                 Some([next_to_last, last]) => {
                     if last.is_zero() {
                         break;
                     } else {
-                        let next = -(next_to_last % last);
+                        let next = -remainder(next_to_last, last);
                         sturm_sequence.push(next);
                     }
                 }
                 _ => unreachable!(),
             }
         }
-        SturmSequence(sturm_sequence)
+        sturm_sequence
+    }
+    pub fn to_sturm_sequence(&self) -> Vec<Polynomial<T>>
+    where
+        T: PolynomialDivSupported,
+    {
+        self.clone().into_sturm_sequence()
+    }
+    pub fn into_sturm_sequence(self) -> Vec<Polynomial<T>>
+    where
+        T: PolynomialDivSupported,
+    {
+        self.into_generic_sturm_sequence(Self::derivative, |a, b| a % b)
+    }
+    pub fn to_primitive_sturm_sequence(&self) -> Vec<Polynomial<T>>
+    where
+        T: GCD<Output = T> + PartialOrd + for<'a> ExactDiv<&'a T, Output = T>,
+    {
+        self.clone().into_primitive_sturm_sequence()
+    }
+    pub fn into_primitive_sturm_sequence(self) -> Vec<Polynomial<T>>
+    where
+        T: GCD<Output = T> + PartialOrd + for<'a> ExactDiv<&'a T, Output = T>,
+    {
+        self.into_generic_sturm_sequence(
+            |v| {
+                let result = v.derivative();
+                if let Some(content) = result.nonzero_content() {
+                    if content < T::make_zero_coefficient_from_coefficient(Cow::Borrowed(&content))
+                    {
+                        result.exact_div(-content)
+                    } else {
+                        result.exact_div(content)
+                    }
+                } else {
+                    result
+                }
+            },
+            |a, b| {
+                let PseudoDivRem {
+                    remainder, factor, ..
+                } = a.clone().pseudo_div_rem(b);
+                if let Some(content) = remainder.nonzero_content() {
+                    let zero = T::make_zero_coefficient_from_coefficient(Cow::Borrowed(&factor));
+                    let content_is_negative = content < zero;
+                    let mut result = remainder.exact_div(content);
+                    if (factor < zero) != content_is_negative {
+                        result = -result;
+                    }
+                    result
+                } else {
+                    // remainder is zero
+                    remainder
+                }
+            },
+        )
     }
     pub fn reduce_multiple_roots(&mut self)
     where
@@ -1397,24 +1449,46 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
         }
         .into_normalized()
     }
-    fn eval_helper<I: DoubleEndedIterator + Iterator<Item = T>>(iter: I, at: &T) -> T {
-        let mut iter = iter.rev();
-        if let Some(last) = iter.next() {
-            let mut retval = last;
-            for coefficient in iter {
-                retval *= at;
-                retval += coefficient;
-            }
-            retval
-        } else {
-            T::make_zero_coefficient_from_coefficient(Cow::Borrowed(at))
+    fn eval_helper<
+        V: for<'a> Mul<&'a V, Output = V> + Add<T, Output = V>,
+        I: DoubleEndedIterator + Iterator<Item = T>,
+    >(
+        iter: I,
+        at: &V,
+        zero: V,
+    ) -> V {
+        let mut retval = zero;
+        for coefficient in iter.rev() {
+            retval = retval * at;
+            retval = retval + coefficient;
         }
+        retval
+    }
+    pub fn eval_generic<V: for<'a> Mul<&'a V, Output = V> + Add<T, Output = V>>(
+        &self,
+        at: &V,
+        zero: V,
+    ) -> V {
+        Self::eval_helper(self.iter(), at, zero)
+    }
+    pub fn into_eval_generic<V: for<'a> Mul<&'a V, Output = V> + Add<T, Output = V>>(
+        self,
+        at: &V,
+        zero: V,
+    ) -> V {
+        Self::eval_helper(self.into_iter(), at, zero)
     }
     pub fn eval(&self, at: &T) -> T {
-        Self::eval_helper(self.iter(), at)
+        self.eval_generic(
+            at,
+            T::make_zero_coefficient_from_coefficient(Cow::Borrowed(at)),
+        )
     }
     pub fn into_eval(self, at: &T) -> T {
-        Self::eval_helper(self.into_iter(), at)
+        self.into_eval_generic(
+            at,
+            T::make_zero_coefficient_from_coefficient(Cow::Borrowed(at)),
+        )
     }
     pub fn set_one_if_nonzero(&mut self) -> Result<(), ()> {
         if self.elements.is_empty() {
@@ -1475,8 +1549,8 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
 
 #[derive(Clone, Eq, Hash, PartialEq, Debug)]
 pub struct PolynomialFactor<T: PolynomialCoefficient> {
-    polynomial: Polynomial<T>,
-    power: usize,
+    pub polynomial: Polynomial<T>,
+    pub power: usize,
 }
 
 impl<T: fmt::Display + PolynomialCoefficient> fmt::Display for PolynomialFactor<T> {
@@ -1487,16 +1561,16 @@ impl<T: fmt::Display + PolynomialCoefficient> fmt::Display for PolynomialFactor<
 
 #[derive(Clone, Eq, Hash, PartialEq, Debug)]
 pub struct PolynomialFactors<T: PolynomialCoefficient> {
-    constant_factor: T,
+    pub constant_factor: T,
     // irreducible polynomials
-    polynomial_factors: Vec<PolynomialFactor<T>>,
+    pub polynomial_factors: Vec<PolynomialFactor<T>>,
 }
 
 #[derive(Clone, Eq, Hash, PartialEq, Debug)]
 pub struct SquareFreePolynomialFactors<T: PolynomialCoefficient> {
-    constant_factor: T,
+    pub constant_factor: T,
     // `polynomial_factors[n]` is raised to the power `n + 1` in the polynomial that was factored
-    polynomial_factors: Vec<Polynomial<T>>,
+    pub polynomial_factors: Vec<Polynomial<T>>,
 }
 
 impl<T> Polynomial<T>
@@ -1633,12 +1707,12 @@ impl<T: PolynomialCoefficient + FromPrimitive> FromPrimitive for Polynomial<T> {
 macro_rules! impl_to_primitive_fn {
     ($f:ident, $t:ident) => {
         fn $f(&self) -> Option<$t> {
-            if self.is_zero() {
-                Some(Zero::zero())
-            } else if self.len() == 1 {
-                Some(self.coefficient(0).$f()?)
-            } else {
+            if self.len() > 1 {
                 None
+            } else if let Some(coefficient) = self.nonzero_coefficient(0) {
+                Some(coefficient.$f()?)
+            } else {
+                Some($t::zero())
             }
         }
     };
@@ -1661,9 +1735,6 @@ impl<T: PolynomialCoefficient + ToPrimitive> ToPrimitive for Polynomial<T> {
     impl_to_primitive_fn!(to_f64, f64);
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Hash)]
-pub struct SturmSequence<T: PolynomialCoefficient>(Vec<Polynomial<T>>);
-
 #[derive(Copy, Clone, Debug)]
 pub struct PolynomialIsZero;
 
@@ -1678,19 +1749,6 @@ impl Error for PolynomialIsZero {}
 impl From<PolynomialIsZero> for std::io::Error {
     fn from(err: PolynomialIsZero) -> Self {
         Self::new(std::io::ErrorKind::InvalidInput, err)
-    }
-}
-
-impl<T: PolynomialDivSupported> SturmSequence<T> {
-    pub fn new(polynomial: Polynomial<T>) -> Self {
-        polynomial.into_sturm_sequence()
-    }
-}
-
-impl<T: PolynomialCoefficient> Deref for SturmSequence<T> {
-    type Target = [Polynomial<T>];
-    fn deref(&self) -> &[Polynomial<T>] {
-        &self.0
     }
 }
 
@@ -1775,32 +1833,85 @@ mod tests {
     #[test]
     fn test_sturm_sequence() {
         let mut poly: Polynomial<Ratio<i64>> = Zero::zero();
-        assert_eq!(*Vec::<Polynomial<_>>::new(), *poly.to_sturm_sequence());
+        assert_eq!(Vec::<Polynomial<_>>::new(), poly.to_sturm_sequence());
         poly = From::<Vec<Ratio<_>>>::from(vec![1.into()]);
-        assert_eq!([poly.clone()], *poly.to_sturm_sequence());
+        assert_eq!(vec![poly.clone()], poly.to_sturm_sequence());
         poly = From::<Vec<Ratio<_>>>::from(vec![1.into(), 2.into()]);
         assert_eq!(
-            [poly.clone(), From::<Vec<Ratio<_>>>::from(vec![2.into()])],
-            *poly.to_sturm_sequence()
+            vec![poly.clone(), From::<Vec<Ratio<_>>>::from(vec![2.into()])],
+            poly.to_sturm_sequence()
         );
         poly = From::<Vec<Ratio<_>>>::from(vec![1.into(), 2.into(), 3.into()]);
         assert_eq!(
-            [
+            vec![
                 poly.clone(),
                 From::<Vec<Ratio<_>>>::from(vec![2.into(), 6.into()]),
                 From::<Vec<Ratio<_>>>::from(vec![(-2, 3).into()]),
             ],
-            *poly.to_sturm_sequence()
+            poly.to_sturm_sequence()
         );
         poly = From::<Vec<Ratio<_>>>::from(vec![1.into(), 2.into(), 3.into(), 4.into()]);
         assert_eq!(
-            [
+            vec![
                 poly.clone(),
                 From::<Vec<Ratio<_>>>::from(vec![2.into(), 6.into(), 12.into()]),
                 From::<Vec<Ratio<_>>>::from(vec![(-5, 6).into(), (-5, 6).into()]),
                 From::<Vec<Ratio<_>>>::from(vec![(-8).into()]),
             ],
-            *poly.to_sturm_sequence()
+            poly.to_sturm_sequence()
+        );
+    }
+
+    #[test]
+    fn test_primitive_sturm_sequence() {
+        let mut poly: Polynomial<i64> = Zero::zero();
+        assert_eq!(
+            Vec::<Polynomial<_>>::new(),
+            poly.to_primitive_sturm_sequence()
+        );
+        poly = vec![1].into();
+        assert_eq!(vec![poly.clone()], poly.to_primitive_sturm_sequence());
+        poly = vec![1, 2].into();
+        assert_eq!(
+            vec![poly.clone(), vec![1].into()],
+            poly.to_primitive_sturm_sequence()
+        );
+        poly = vec![1, 2, 3].into();
+        assert_eq!(
+            vec![poly.clone(), vec![1, 3].into(), vec![-1].into()],
+            poly.to_primitive_sturm_sequence()
+        );
+        poly = vec![1, 2, 3, 4].into();
+        assert_eq!(
+            vec![
+                poly.clone(),
+                vec![1, 3, 6].into(),
+                vec![-1, -1].into(),
+                vec![-1].into(),
+            ],
+            poly.to_primitive_sturm_sequence()
+        );
+        poly = vec![-1].into();
+        assert_eq!(vec![poly.clone()], poly.to_primitive_sturm_sequence());
+        poly = vec![-1, -2].into();
+        assert_eq!(
+            vec![poly.clone(), vec![-1].into()],
+            poly.to_primitive_sturm_sequence()
+        );
+        poly = vec![-1, -2, -3].into();
+        assert_eq!(
+            vec![poly.clone(), vec![-1, -3].into(), vec![1].into()],
+            poly.to_primitive_sturm_sequence()
+        );
+        poly = vec![-1, -2, -3, -4].into();
+        assert_eq!(
+            vec![
+                poly.clone(),
+                vec![-1, -3, -6].into(),
+                vec![1, 1].into(),
+                vec![1].into(),
+            ],
+            poly.to_primitive_sturm_sequence()
         );
     }
 

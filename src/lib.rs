@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // See Notices.txt for copyright information
+
+#[macro_use]
+extern crate lazy_static;
+
 pub mod algebraic_numbers;
 pub mod array2d;
 pub mod lattice;
