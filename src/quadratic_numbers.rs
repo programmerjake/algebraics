@@ -775,7 +775,7 @@ mod tests {
                 quadratic_term: 3
             })
             .to_string(),
-            "1 + 2*x + 3*x^2"
+            "1 + 2*X + 3*X^2"
         );
     }
     #[test]
@@ -787,7 +787,7 @@ mod tests {
                 quadratic_term: 3
             })
             .to_string(),
-            "-1 + -2*x + -3*x^2"
+            "-1 + -2*X + -3*X^2"
         );
         assert_eq!(
             Polynomial::from(-&QuadraticPolynomial {
@@ -796,7 +796,7 @@ mod tests {
                 quadratic_term: 3
             })
             .to_string(),
-            "-1 + -2*x + -3*x^2"
+            "-1 + -2*X + -3*X^2"
         );
     }
     #[test]

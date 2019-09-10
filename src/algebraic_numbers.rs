@@ -237,14 +237,14 @@ mod tests {
             p(&[0, 1]),
             ri(0),
             ri(0),
-            "RealAlgebraicNumber { minimal_polynomial: 0 + 1*x, lower_bound: 0, upper_bound: 0 }",
+            "RealAlgebraicNumber { minimal_polynomial: 0 + 1*X, lower_bound: 0, upper_bound: 0 }",
         );
 
         test_case(
             p(&[-2, 0, 1]),
             ri(1),
             ri(2),
-            "RealAlgebraicNumber { minimal_polynomial: -2 + 0*x + 1*x^2, lower_bound: 1, upper_bound: 2 }",
+            "RealAlgebraicNumber { minimal_polynomial: -2 + 0*X + 1*X^2, lower_bound: 1, upper_bound: 2 }",
         );
 
         test_case(
@@ -270,22 +270,22 @@ mod tests {
             r(22_46827, 100_000),
             r(22_4683, 10_000),
             "RealAlgebraicNumber { minimal_polynomial: 10788246961 \
-             + 1545510240*x \
-             + -29925033224*x^2 \
-             + 1820726496*x^3 \
-             + 19259216972*x^4 \
-             + -6781142688*x^5 \
-             + -2872989528*x^6 \
-             + 2147919840*x^7 \
-             + -306405418*x^8 \
-             + -105773280*x^9 \
-             + 53150088*x^10 \
-             + -10681440*x^11 \
-             + 1243820*x^12 \
-             + -89568*x^13 \
-             + 3928*x^14 \
-             + -96*x^15 \
-             + 1*x^16, \
+             + 1545510240*X \
+             + -29925033224*X^2 \
+             + 1820726496*X^3 \
+             + 19259216972*X^4 \
+             + -6781142688*X^5 \
+             + -2872989528*X^6 \
+             + 2147919840*X^7 \
+             + -306405418*X^8 \
+             + -105773280*X^9 \
+             + 53150088*X^10 \
+             + -10681440*X^11 \
+             + 1243820*X^12 \
+             + -89568*X^13 \
+             + 3928*X^14 \
+             + -96*X^15 \
+             + 1*X^16, \
              lower_bound: 2246827/100000, \
              upper_bound: 224683/10000 }",
         );
