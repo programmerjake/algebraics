@@ -380,6 +380,70 @@ impl RealAlgebraicNumber {
         } = &mut self.data;
         BoundsShrinker::new(minimal_polynomial, lower_bound, upper_bound)
     }
+    pub fn into_integer_floor(mut self) -> BigInt {
+        if let Some(ratio) = self.to_rational() {
+            ratio.floor().to_integer()
+        } else {
+            let mut bounds_shrinker = self.bounds_shrinker();
+            loop {
+                let lower_bound_floor = bounds_shrinker.lower_bound.floor();
+                let upper_bound_floor = bounds_shrinker.upper_bound.floor();
+                if lower_bound_floor == upper_bound_floor {
+                    return lower_bound_floor.to_integer();
+                }
+                bounds_shrinker.shrink();
+            }
+        }
+    }
+    pub fn to_integer_floor(&self) -> BigInt {
+        if let Some(ratio) = self.to_rational() {
+            ratio.floor().to_integer()
+        } else {
+            self.clone().into_integer_floor()
+        }
+    }
+    pub fn into_floor(self) -> Self {
+        self.into_integer_floor().into()
+    }
+    pub fn floor(&self) -> Self {
+        self.to_integer_floor().into()
+    }
+    /// returns `self - self.floor()`
+    pub fn into_fract(mut self) -> Self {
+        if let Some(ratio) = self.to_rational() {
+            ratio.fract().into()
+        } else {
+            let mut bounds_shrinker = self.bounds_shrinker();
+            loop {
+                let lower_bound_floor = bounds_shrinker.lower_bound.floor();
+                let upper_bound_floor = bounds_shrinker.upper_bound.floor();
+                if lower_bound_floor == upper_bound_floor {
+                    return self - RealAlgebraicNumber::from(lower_bound_floor);
+                }
+                bounds_shrinker.shrink();
+            }
+        }
+    }
+    /// returns `self - self.floor()`
+    pub fn fract(&self) -> Self {
+        if let Some(ratio) = self.to_rational() {
+            ratio.fract().into()
+        } else {
+            self.clone().into_fract()
+        }
+    }
+    pub fn into_integer_ceil(self) -> BigInt {
+        self.neg().into_integer_floor().neg()
+    }
+    pub fn to_integer_ceil(&self) -> BigInt {
+        self.neg().into_integer_floor().neg()
+    }
+    pub fn into_ceil(self) -> Self {
+        self.neg().into_floor().neg()
+    }
+    pub fn ceil(&self) -> Self {
+        self.neg().into_floor().neg()
+    }
 }
 
 fn neg(value: Cow<RealAlgebraicNumber>) -> RealAlgebraicNumber {
@@ -1003,6 +1067,49 @@ mod tests {
             make_sqrt(2, ri(1), ri(2)),
             make_sqrt(3, ri(1), ri(2)),
             RealAlgebraicNumber::new_unchecked(p(&[1, 0, -10, 0, 1]), ri(-1), ri(0)),
+        );
+    }
+
+    #[test]
+    fn test_floor_ceil() {
+        fn test_case<V: Into<RealAlgebraicNumber>, F: Into<BigInt>, C: Into<BigInt>>(
+            value: V,
+            expected_floor: F,
+            expected_ceil: C,
+        ) {
+            let value = value.into();
+            println!("value: {:?}", value);
+            let expected_floor = expected_floor.into();
+            println!("expected_floor: {}", expected_floor);
+            let expected_ceil = expected_ceil.into();
+            println!("expected_ceil: {}", expected_ceil);
+            let floor = value.to_integer_floor();
+            println!("floor: {}", floor);
+            let ceil = value.into_integer_ceil();
+            println!("ceil: {}", ceil);
+            assert!(expected_floor == floor);
+            assert!(expected_ceil == ceil);
+        }
+        test_case(1, 1, 1);
+        test_case(r(6, 5), 1, 2);
+        test_case(r(4, 5), 0, 1);
+        test_case(r(-1, 5), -1, 0);
+        test_case(make_sqrt(2, ri(1), ri(2)), 1, 2);
+        test_case(make_sqrt(2_000_000, ri(1000), ri(2000)), 1_414, 1_415);
+        test_case(
+            make_sqrt(5_00000_00000, ri(1_00000), ri(3_00000)),
+            2_23606,
+            2_23607,
+        );
+        test_case(
+            RealAlgebraicNumber::new_unchecked(p(&[1, 0, -10, 0, 1]), ri(-1), ri(0)),
+            -1,
+            0,
+        );
+        test_case(
+            RealAlgebraicNumber::new_unchecked(p(&[1, 3, 2, 1]), ri(-1000), ri(1000)),
+            -1,
+            0,
         );
     }
 }
