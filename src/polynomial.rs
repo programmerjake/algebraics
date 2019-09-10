@@ -13,6 +13,7 @@ use num_rational::Ratio;
 use num_traits::FromPrimitive;
 use num_traits::NumAssign;
 use num_traits::One;
+use num_traits::Pow;
 use num_traits::Signed;
 use num_traits::ToPrimitive;
 use num_traits::Zero;
@@ -107,6 +108,7 @@ pub trait PolynomialCoefficient:
         + for<'a> ExactDivAssign<&'a Self::Divisor>
         + GCD<Output = Self::Divisor>
         + One;
+    const NESTING_DEPTH: usize;
     fn is_element_zero(element: &Self::Element) -> bool;
     fn is_element_one(element: &Self::Element) -> bool;
     fn is_coefficient_zero(coefficient: &Self) -> bool;
@@ -294,6 +296,7 @@ impl<
 {
     type Element = T;
     type Divisor = T;
+    const NESTING_DEPTH: usize = 0;
     fn is_element_zero(element: &Self::Element) -> bool {
         element.is_zero()
     }
@@ -587,6 +590,7 @@ macro_rules! impl_polynomial_coefficient_for_int {
         impl PolynomialCoefficient for $t {
             type Element = $t;
             type Divisor = DivisorIsOne;
+            const NESTING_DEPTH: usize = 0;
             fn is_element_zero(element:&Self::Element) -> bool {
                 element.is_zero()
             }
@@ -705,6 +709,107 @@ impl_polynomial_coefficient_for_int! {
     i128;
     isize;
     BigInt;
+}
+
+impl<T: PolynomialCoefficient<Divisor = DivisorIsOne, Element = T> + One> PolynomialCoefficient
+    for Polynomial<T>
+where
+    T::Element: Zero + One,
+{
+    type Element = Polynomial<T>;
+    type Divisor = DivisorIsOne;
+    const NESTING_DEPTH: usize = T::NESTING_DEPTH + 1;
+    fn is_element_zero(element: &Self::Element) -> bool {
+        element.is_zero()
+    }
+    fn is_element_one(element: &Self::Element) -> bool {
+        element.is_one()
+    }
+    fn is_coefficient_zero(coefficient: &Self) -> bool {
+        coefficient.is_zero()
+    }
+    fn is_coefficient_one(coefficient: &Self) -> bool {
+        coefficient.is_one()
+    }
+    fn set_element_zero(element: &mut Self::Element) {
+        element.set_zero();
+    }
+    fn set_element_one(element: &mut Self::Element) {
+        element.set_one();
+    }
+    fn set_coefficient_zero(coefficient: &mut Self) {
+        coefficient.set_zero();
+    }
+    fn set_coefficient_one(coefficient: &mut Self) {
+        coefficient.set_one();
+    }
+    fn make_zero_element(_element: Cow<Self::Element>) -> Self::Element {
+        Zero::zero()
+    }
+    fn make_one_element(element: Cow<Self::Element>) -> Self::Element {
+        if let Cow::Owned(mut element) = element {
+            element.set_one();
+            element
+        } else {
+            One::one()
+        }
+    }
+    fn make_zero_coefficient_from_element(_element: Cow<Self::Element>) -> Self {
+        Zero::zero()
+    }
+    fn make_one_coefficient_from_element(element: Cow<Self::Element>) -> Self {
+        Self::make_one_element(element)
+    }
+    fn make_zero_coefficient_from_coefficient(_coefficient: Cow<Self>) -> Self {
+        Zero::zero()
+    }
+    fn make_one_coefficient_from_coefficient(coefficient: Cow<Self>) -> Self {
+        Self::make_one_element(coefficient)
+    }
+    fn negate_element(element: &mut Self::Element) {
+        *element = -mem::replace(element, Zero::zero());
+    }
+    fn mul_element_by_usize(element: Cow<Self::Element>, multiplier: usize) -> Self::Element {
+        let mut element = element.into_owned();
+        Self::mul_assign_element_by_usize(&mut element, multiplier);
+        element
+    }
+    fn mul_assign_element_by_usize(element: &mut Self::Element, multiplier: usize) {
+        for sub_element in &mut element.elements {
+            T::mul_assign_element_by_usize(sub_element, multiplier);
+        }
+    }
+    fn divisor_to_element(
+        _v: Cow<Self::Divisor>,
+        other_element: Cow<Self::Element>,
+    ) -> Self::Element {
+        Self::make_one_element(other_element)
+    }
+    fn coefficients_to_elements(coefficients: Cow<[Self]>) -> (Vec<Self::Element>, Self::Divisor) {
+        (coefficients.into_owned(), DivisorIsOne)
+    }
+    fn make_coefficient(element: Cow<Self::Element>, _divisor: Cow<Self::Divisor>) -> Self {
+        element.into_owned()
+    }
+    fn reduce_divisor(_elements: &mut [Self::Element], _divisor: &mut Self::Divisor) {}
+    fn get_reduced_divisor(
+        elements: &[Self::Element],
+        _divisor: &Self::Divisor,
+    ) -> (Vec<Self::Element>, Self::Divisor) {
+        (elements.to_vec(), DivisorIsOne)
+    }
+    fn coefficient_to_element(coefficient: Cow<Self>) -> (Self::Element, Self::Divisor) {
+        (coefficient.into_owned(), DivisorIsOne)
+    }
+    fn divisor_pow_usize(_base: Self::Divisor, _exponent: usize) -> Self::Divisor {
+        DivisorIsOne
+    }
+    fn element_pow_usize(base: Self::Element, exponent: usize) -> Self::Element {
+        base.pow(exponent)
+    }
+    fn coefficient_pow_usize(base: Self, exponent: usize) -> Self {
+        base.pow(exponent)
+    }
 }
 
 pub trait PolynomialDivSupported:
@@ -1457,16 +1562,42 @@ impl<'a, T: PolynomialCoefficient> IntoIterator for &'a Polynomial<T> {
     }
 }
 
+pub fn get_variable_name(nesting_depth: usize) -> Cow<'static, str> {
+    const VARIABLE_CHARS: [&str; 26] = [
+        "X", "Y", "Z", "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O",
+        "P", "Q", "R", "S", "T", "U", "V", "W",
+    ];
+    if nesting_depth < VARIABLE_CHARS.len() {
+        Cow::Borrowed(VARIABLE_CHARS[nesting_depth])
+    } else {
+        Cow::Owned(
+            get_variable_name(nesting_depth / VARIABLE_CHARS.len()).into_owned()
+                + VARIABLE_CHARS[nesting_depth % VARIABLE_CHARS.len()],
+        )
+    }
+}
+
 impl<T: fmt::Display + PolynomialCoefficient> fmt::Display for Polynomial<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if self.is_empty() {
             write!(f, "0")
         } else {
+            let variable_name = get_variable_name(T::NESTING_DEPTH);
+            let left_paren = if T::NESTING_DEPTH != 0 { "(" } else { "" };
+            let right_paren = if T::NESTING_DEPTH != 0 { ")" } else { "" };
             for (power, coefficient) in self.iter().enumerate() {
                 match power {
                     0 => write!(f, "{}", coefficient)?,
-                    1 => write!(f, " + {}*x", coefficient)?,
-                    _ => write!(f, " + {}*x^{}", coefficient, power)?,
+                    1 => write!(
+                        f,
+                        " + {}{}{}*{}",
+                        left_paren, coefficient, right_paren, variable_name
+                    )?,
+                    _ => write!(
+                        f,
+                        " + {}{}{}*{}^{}",
+                        left_paren, coefficient, right_paren, variable_name, power
+                    )?,
                 }
             }
             Ok(())
@@ -1588,11 +1719,42 @@ mod tests {
         poly = Polynomial::from(vec![1]);
         assert_eq!(format!("{}", poly), "1");
         poly = Polynomial::from(vec![1, 2]);
-        assert_eq!(format!("{}", poly), "1 + 2*x");
+        assert_eq!(format!("{}", poly), "1 + 2*X");
         poly = Polynomial::from(vec![1, 2, 3]);
-        assert_eq!(format!("{}", poly), "1 + 2*x + 3*x^2");
+        assert_eq!(format!("{}", poly), "1 + 2*X + 3*X^2");
         poly = Polynomial::from(vec![1, 2, 3, 4]);
-        assert_eq!(format!("{}", poly), "1 + 2*x + 3*x^2 + 4*x^3");
+        assert_eq!(format!("{}", poly), "1 + 2*X + 3*X^2 + 4*X^3");
+        let poly =
+            Polynomial::<Polynomial<i32>>::from(vec![vec![1, 2, 3].into(), vec![4, 5, 6].into()]);
+        assert_eq!(format!("{}", poly), "1 + 2*X + 3*X^2 + (4 + 5*X + 6*X^2)*Y");
+        let poly: Polynomial<Polynomial<Polynomial<Polynomial<Polynomial<i32>>>>> = vec![
+            Zero::zero(),
+            Zero::zero(),
+            vec![
+                Zero::zero(),
+                Zero::zero(),
+                Zero::zero(),
+                vec![
+                    Zero::zero(),
+                    Zero::zero(),
+                    Zero::zero(),
+                    Zero::zero(),
+                    vec![
+                        Zero::zero(),
+                        Zero::zero(),
+                        Zero::zero(),
+                        Zero::zero(),
+                        Zero::zero(),
+                        vec![0, 0, 0, 0, 0, 0, 1].into(),
+                    ]
+                    .into(),
+                ]
+                .into(),
+            ]
+            .into(),
+        ]
+        .into();
+        assert_eq!(format!("{}", poly), "0 + (0)*B + (0 + (0)*A + (0)*A^2 + (0 + (0)*Z + (0)*Z^2 + (0)*Z^3 + (0 + (0)*Y + (0)*Y^2 + (0)*Y^3 + (0)*Y^4 + (0 + 0*X + 0*X^2 + 0*X^3 + 0*X^4 + 0*X^5 + 1*X^6)*Y^5)*Z^4)*A^3)*B^2");
     }
 
     #[test]

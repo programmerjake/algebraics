@@ -1159,6 +1159,7 @@ where
 {
     type Element = Self;
     type Divisor = DivisorIsOne;
+    const NESTING_DEPTH: usize = 0;
     fn is_element_zero(element: &Self::Element) -> bool {
         element.value.is_zero()
     }
