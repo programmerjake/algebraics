@@ -201,7 +201,7 @@ macro_rules! impl_div_rem {
             }
         }
 
-        impl<T: PolynomialDivSupported> ExactDiv<$r> for $l {
+        impl<T: PolynomialCoefficient + for<'a> ExactDiv<&'a T, Output = T>> ExactDiv<$r> for $l {
             type Output = Polynomial<T>;
             fn exact_div(self, rhs: $r) -> Polynomial<T> {
                 let (quotient, factor) = $l_to_owned(self).exact_pseudo_div(rhs.borrow());
@@ -240,7 +240,9 @@ impl<'a, 'b, T: PolynomialDivSupported> Rem<&'a Polynomial<T>> for &'b Polynomia
     }
 }
 
-impl<'l, 'r, T: PolynomialDivSupported> ExactDiv<&'r Polynomial<T>> for &'l Polynomial<T> {
+impl<'l, 'r, T: PolynomialCoefficient + for<'a> ExactDiv<&'a T, Output = T>>
+    ExactDiv<&'r Polynomial<T>> for &'l Polynomial<T>
+{
     type Output = Polynomial<T>;
     fn exact_div(self, rhs: &Polynomial<T>) -> Polynomial<T> {
         let (quotient, factor) = self.clone().exact_pseudo_div(rhs.borrow());
@@ -268,7 +270,9 @@ macro_rules! impl_div_rem_eq {
             }
         }
 
-        impl<T: PolynomialDivSupported> ExactDivAssign<$r> for Polynomial<T> {
+        impl<T: PolynomialCoefficient + for<'a> ExactDiv<&'a T, Output = T>> ExactDivAssign<$r>
+            for Polynomial<T>
+        {
             fn exact_div_assign(&mut self, rhs: $r) {
                 let lhs = mem::replace(self, Zero::zero());
                 *self = lhs.exact_div(rhs);
