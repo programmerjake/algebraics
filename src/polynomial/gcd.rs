@@ -1390,4 +1390,24 @@ mod tests {
         test_case(&[2, 2, 2], &[2, 2, 1], 4);
         test_case(&[2, 2, 2], &[2, 2, 2], 0);
     }
+
+    #[test]
+    fn test_multivariable_resultant() {
+        let bi = |v: i64| BigInt::from(v);
+        let lhs: Polynomial<Polynomial<BigInt>> =
+            vec![bi(-2).into(), bi(0).into(), bi(1).into()].into();
+        let rhs: Polynomial<Polynomial<BigInt>> = vec![
+            vec![bi(-2), bi(0), bi(1)].into(),
+            vec![bi(0), bi(-2)].into(),
+            bi(1).into(),
+        ]
+        .into();
+        let expected: Polynomial<BigInt> = vec![bi(0), bi(0), bi(-8), bi(0), bi(1)].into();
+        println!("lhs = {}", lhs);
+        println!("rhs = {}", rhs);
+        println!("expected = {}", expected);
+        let resultant = lhs.resultant(rhs);
+        println!("resultant = {}", resultant);
+        assert!(expected == resultant);
+    }
 }
