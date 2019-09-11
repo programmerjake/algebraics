@@ -4,8 +4,10 @@
 use crate::polynomial::Polynomial;
 use crate::traits::AlwaysExactDiv;
 use crate::traits::AlwaysExactDivAssign;
+use crate::traits::CeilLog2;
 use crate::traits::ExactDiv;
 use crate::traits::ExactDivAssign;
+use crate::traits::FloorLog2;
 use crate::util::DebugAsDisplay;
 use crate::util::Sign;
 use num_bigint::BigInt;
@@ -718,12 +720,77 @@ impl RealAlgebraicNumber {
     }
 }
 
+#[derive(Clone)]
+struct DyadicFractionBounds {
+    log2_denom: usize,
+    lower_bound_numer: BigInt,
+    upper_bound_numer: BigInt,
+}
+
+impl fmt::Debug for DyadicFractionBounds {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("DyadicFractionBounds")
+            .field("log2_denom", &self.log2_denom)
+            .field(
+                "lower_bound_numer",
+                &DebugAsDisplay(&self.lower_bound_numer),
+            )
+            .field(
+                "upper_bound_numer",
+                &DebugAsDisplay(&self.upper_bound_numer),
+            )
+            .finish()
+    }
+}
+
+impl From<Bounds<Ratio<BigInt>>> for DyadicFractionBounds {
+    fn from(bounds: Bounds<Ratio<BigInt>>) -> Self {
+        let (mut lower_bound_numer, lower_bound_denom) = bounds.lower_bound.into();
+        let (mut upper_bound_numer, upper_bound_denom) = bounds.upper_bound.into();
+        let log2_denom = lower_bound_denom.bits().max(upper_bound_denom.bits());
+        lower_bound_numer <<= log2_denom;
+        upper_bound_numer <<= log2_denom;
+        let lower_bound_numer = Ratio::new(lower_bound_numer, lower_bound_denom)
+            .floor()
+            .to_integer();
+        let upper_bound_numer = Ratio::new(upper_bound_numer, upper_bound_denom)
+            .ceil()
+            .to_integer();
+        Self {
+            log2_denom,
+            lower_bound_numer,
+            upper_bound_numer,
+        }
+    }
+}
+
+impl From<DyadicFractionBounds> for Bounds<Ratio<BigInt>> {
+    fn from(bounds: DyadicFractionBounds) -> Self {
+        let denom = BigInt::one() << bounds.log2_denom;
+        Bounds {
+            lower_bound: Ratio::new(bounds.lower_bound_numer, denom.clone()),
+            upper_bound: Ratio::new(bounds.upper_bound_numer, denom),
+        }
+    }
+}
+
 fn log2_bounds(bounds: Bounds<Ratio<BigInt>>) -> Bounds<Ratio<BigInt>> {
+    println!("log2_bounds:");
+    dbg!(&bounds);
     assert!(bounds.lower_bound.is_positive());
+    assert!(bounds.lower_bound <= bounds.upper_bound);
+    let bounds = DyadicFractionBounds::from(bounds);
+    dbg!(&bounds);
+    // FIXME: handle lower_bound rounding to zero
+    // FIXME: handle passing in a precision to handle lower_bound == upper_bound
+    let lower_bound_numer_floor_log2 = bounds.lower_bound_numer.floor_log2();
+    let upper_bound_numer_floor_log2 = bounds.upper_bound_numer.floor_log2();
+
     unimplemented!();
 }
 
 fn exp2_bounds(bounds: Bounds<Ratio<BigInt>>) -> Bounds<Ratio<BigInt>> {
+    assert!(bounds.lower_bound <= bounds.upper_bound);
     unimplemented!();
 }
 
