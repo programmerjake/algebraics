@@ -1145,6 +1145,46 @@ pub(crate) mod tests {
         assert_eq!(op_move_move(l, r), *expected);
     }
 
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn test_checked_op_helper<
+        T: Clone + PartialEq + fmt::Debug,
+        OpEqMove: Fn(&mut T, T) -> Result<(), ()>,
+        OpEqRef: Fn(&mut T, &T) -> Result<(), ()>,
+        OpRefRef: Fn(&T, &T) -> Option<T>,
+        OpMoveRef: Fn(T, &T) -> Option<T>,
+        OpRefMove: Fn(&T, T) -> Option<T>,
+        OpMoveMove: Fn(T, T) -> Option<T>,
+    >(
+        l: T,
+        r: T,
+        expected: &Option<T>,
+        op_eq_move: OpEqMove,
+        op_eq_ref: OpEqRef,
+        op_ref_ref: OpRefRef,
+        op_move_ref: OpMoveRef,
+        op_ref_move: OpRefMove,
+        op_move_move: OpMoveMove,
+    ) {
+        let mut eq_move_result = l.clone();
+        let eq_move_result = if op_eq_move(&mut eq_move_result, r.clone()).is_ok() {
+            Some(eq_move_result)
+        } else {
+            None
+        };
+        assert_eq!(eq_move_result, *expected);
+        let mut eq_ref_result = l.clone();
+        let eq_ref_result = if op_eq_ref(&mut eq_ref_result, &r).is_ok() {
+            Some(eq_ref_result)
+        } else {
+            None
+        };
+        assert_eq!(eq_ref_result, *expected);
+        assert_eq!(op_ref_ref(&l, &r), *expected);
+        assert_eq!(op_ref_move(&l, r.clone()), *expected);
+        assert_eq!(op_move_ref(l.clone(), &r), *expected);
+        assert_eq!(op_move_move(l, r), *expected);
+    }
+
     pub(crate) fn test_unary_op_helper<
         T: Clone + PartialEq + fmt::Debug,
         OpRef: Fn(&T) -> T,
