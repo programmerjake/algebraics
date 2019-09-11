@@ -20,6 +20,7 @@ use std::ops::AddAssign;
 use std::ops::Deref;
 use std::ops::DerefMut;
 use std::ops::Mul;
+use std::ops::MulAssign;
 use std::ops::Neg;
 use std::ops::Sub;
 use std::ops::SubAssign;
@@ -537,21 +538,6 @@ impl EvalPoint {
         }
         &EVAL_POINT
     }
-    fn div_eval_point() -> &'static Self {
-        fn make_eval_point() -> EvalPoint {
-            EvalPoint(
-                vec![
-                    Polynomial::zero(),
-                    vec![BigInt::zero(), BigInt::one()].into(),
-                ]
-                .into(),
-            )
-        }
-        lazy_static! {
-            static ref EVAL_POINT: EvalPoint = make_eval_point();
-        }
-        &EVAL_POINT
-    }
 }
 
 impl Add<BigInt> for EvalPoint {
@@ -887,6 +873,109 @@ impl Ord for RealAlgebraicNumber {
     }
 }
 
+impl MulAssign for RealAlgebraicNumber {
+    fn mul_assign(&mut self, mut rhs: RealAlgebraicNumber) {
+        #![allow(clippy::suspicious_op_assign_impl)] // we need to use other operators
+        println!("mul_assign:");
+        dbg!(&self);
+        dbg!(&rhs);
+        if self.is_rational() && rhs.is_rational() {
+            *self = (self.to_rational().expect("known to be rational")
+                * rhs.to_rational().expect("known to be rational"))
+            .into();
+            return;
+        }
+        if self.is_zero() || rhs.is_zero() {
+            self.set_zero();
+            return;
+        }
+        let resultant_lhs: Polynomial<Polynomial<BigInt>> = self
+            .minimal_polynomial()
+            .iter()
+            .enumerate()
+            .rev()
+            .map(|(power, coefficient)| Polynomial::make_monomial(coefficient, power))
+            .collect();
+        println!("resultant_lhs: {}", resultant_lhs);
+        let resultant_rhs: Polynomial<Polynomial<BigInt>> = rhs
+            .minimal_polynomial()
+            .iter()
+            .map(Polynomial::from)
+            .collect();
+        println!("resultant_rhs: {}", resultant_rhs);
+        let resultant = resultant_lhs.resultant(resultant_rhs);
+        println!("resultant: {}", resultant);
+        struct MulRootShrinker<'a> {
+            lhs_bounds_shrinker: BoundsShrinker<'a>,
+            rhs_bounds_shrinker: BoundsShrinker<'a>,
+        }
+        impl RootSelector for MulRootShrinker<'_> {
+            fn get_bounds(&self) -> Bounds<Ratio<BigInt>> {
+                let mut bounds = [
+                    &*self.lhs_bounds_shrinker.lower_bound * &*self.rhs_bounds_shrinker.lower_bound,
+                    &*self.lhs_bounds_shrinker.lower_bound * &*self.rhs_bounds_shrinker.upper_bound,
+                    &*self.lhs_bounds_shrinker.upper_bound * &*self.rhs_bounds_shrinker.lower_bound,
+                    &*self.lhs_bounds_shrinker.upper_bound * &*self.rhs_bounds_shrinker.upper_bound,
+                ];
+                bounds.sort_unstable();
+                let [lower_bound, _, _, upper_bound] = bounds;
+                assert!(lower_bound <= upper_bound);
+                Bounds {
+                    lower_bound,
+                    upper_bound,
+                }
+            }
+            fn shrink_bounds(&mut self) {
+                self.lhs_bounds_shrinker.shrink();
+                self.rhs_bounds_shrinker.shrink();
+            }
+        }
+        let lhs_bounds_shrinker = self.bounds_shrinker();
+        let rhs_bounds_shrinker = rhs.bounds_shrinker();
+        *self = MulRootShrinker {
+            lhs_bounds_shrinker,
+            rhs_bounds_shrinker,
+        }
+        .select_root(resultant);
+    }
+}
+
+impl MulAssign<&'_ RealAlgebraicNumber> for RealAlgebraicNumber {
+    fn mul_assign(&mut self, rhs: &RealAlgebraicNumber) {
+        *self *= rhs.clone();
+    }
+}
+
+impl Mul for RealAlgebraicNumber {
+    type Output = RealAlgebraicNumber;
+    fn mul(mut self, rhs: RealAlgebraicNumber) -> RealAlgebraicNumber {
+        self *= rhs;
+        self
+    }
+}
+
+impl Mul<&'_ RealAlgebraicNumber> for RealAlgebraicNumber {
+    type Output = RealAlgebraicNumber;
+    fn mul(mut self, rhs: &RealAlgebraicNumber) -> RealAlgebraicNumber {
+        self *= rhs;
+        self
+    }
+}
+
+impl Mul<RealAlgebraicNumber> for &'_ RealAlgebraicNumber {
+    type Output = RealAlgebraicNumber;
+    fn mul(self, rhs: RealAlgebraicNumber) -> RealAlgebraicNumber {
+        self.clone().mul(rhs)
+    }
+}
+
+impl<'a, 'b> Mul<&'a RealAlgebraicNumber> for &'b RealAlgebraicNumber {
+    type Output = RealAlgebraicNumber;
+    fn mul(self, rhs: &RealAlgebraicNumber) -> RealAlgebraicNumber {
+        self.clone().mul(rhs)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1148,6 +1237,47 @@ mod tests {
             RealAlgebraicNumber::new_unchecked(p(&[1, 3, 2, 1]), ri(-1000), ri(1000)),
             -1,
             0,
+        );
+    }
+
+    #[test]
+    fn test_mul() {
+        fn test_case<
+            A: Into<RealAlgebraicNumber>,
+            B: Into<RealAlgebraicNumber>,
+            E: Into<RealAlgebraicNumber>,
+        >(
+            a: A,
+            b: B,
+            expected: E,
+        ) {
+            let a = a.into();
+            println!("a: {:?}", a);
+            let b = b.into();
+            println!("b: {:?}", b);
+            let expected = expected.into();
+            println!("expected: {:?}", expected);
+            test_op_helper(
+                a,
+                b,
+                &expected,
+                |l, r| *l *= r,
+                |l, r| *l *= r,
+                |l, r| l * r,
+                |l, r| l * r,
+                |l, r| l * r,
+                |l, r| l * r,
+            );
+        }
+        test_case(1, 0, 0);
+        test_case(make_sqrt(2, ri(1), ri(2)), 0, 0);
+        test_case(0, make_sqrt(2, ri(1), ri(2)), 0);
+        test_case(1, 2, 2);
+        test_case(make_sqrt(2, ri(1), ri(2)), make_sqrt(2, ri(-2), ri(-1)), -2);
+        test_case(
+            make_sqrt(2, ri(1), ri(2)),
+            make_sqrt(3, ri(1), ri(2)),
+            make_sqrt(6, ri(1), ri(10)),
         );
     }
 }
