@@ -14,7 +14,9 @@ use num_integer::Integer;
 use num_rational::Ratio;
 use num_traits::Num;
 use num_traits::One;
+use num_traits::Pow;
 use num_traits::Signed;
+use num_traits::ToPrimitive;
 use num_traits::Zero;
 use std::borrow::Cow;
 use std::cmp::Ordering;
@@ -556,6 +558,196 @@ impl RealAlgebraicNumber {
         self.checked_recip()
             .expect("checked_recip called on zero value")
     }
+    pub fn negative_one() -> Self {
+        NEGATIVE_ONE.clone()
+    }
+    pub fn set_negative_one(&mut self) {
+        *self = Self::negative_one();
+    }
+    pub fn is_negative_one(&self) -> bool {
+        self.minimal_polynomial() == NEGATIVE_ONE.minimal_polynomial()
+    }
+    fn checked_pow_impl(base: Cow<Self>, exponent: Ratio<BigInt>) -> Option<Self> {
+        lazy_static! {
+            static ref NEGATIVE_ONE_RATIO: Ratio<BigInt> = BigInt::from(-1).into();
+        }
+        println!("checked_pow:");
+        println!("base: {:?}", base);
+        println!("exponent: {}", exponent);
+        if exponent.is_zero() {
+            if base.is_zero() {
+                None
+            } else {
+                Some(Self::one())
+            }
+        } else if exponent.is_one() {
+            Some(base.into_owned())
+        } else if exponent == *NEGATIVE_ONE_RATIO {
+            base.checked_recip()
+        } else if base.is_zero() {
+            if exponent.is_negative() {
+                None
+            } else {
+                Some(Self::zero())
+            }
+        } else if base.is_one() {
+            Some(Self::one())
+        } else if base.is_negative_one() {
+            if exponent.is_integer() {
+                Some(if exponent.numer().is_odd() {
+                    Self::negative_one()
+                } else {
+                    Self::one()
+                })
+            } else {
+                None
+            }
+        } else {
+            let base_is_negative = base.is_negative();
+            let result_sign = if base_is_negative {
+                if exponent.is_integer() {
+                    if exponent.numer().is_odd() {
+                        Sign::Negative
+                    } else {
+                        Sign::Positive
+                    }
+                } else {
+                    return None;
+                }
+            } else {
+                Sign::Positive
+            };
+            let exponent_sign = Sign::new(&exponent).expect("known to be non-zero");
+            println!("exponent_sign: {:?}", exponent_sign);
+            let (exponent_numer, exponent_denom) = exponent.abs().into();
+            let exponent_numer = exponent_numer
+                .to_usize()
+                .expect("exponent numerator too big");
+            println!("exponent_numer: {}", exponent_numer);
+            let exponent_denom = exponent_denom
+                .to_usize()
+                .expect("exponent denominator too big");
+            println!("exponent_denom: {}", exponent_denom);
+            if exponent_denom == 1 {
+                if let Some((mut numer, mut denom)) = base.to_rational().map(Into::into) {
+                    if exponent_sign == Sign::Negative {
+                        mem::swap(&mut numer, &mut denom);
+                    }
+                    // workaround pow not working for Ratio
+                    return Some(
+                        Ratio::new(numer.pow(exponent_numer), denom.pow(exponent_numer)).into(),
+                    );
+                }
+            }
+            let mut base = if exponent_sign == Sign::Negative {
+                base.recip() // base was already checked for zero
+            } else {
+                base.into_owned()
+            };
+            println!("base: {:?}", base);
+            let resultant_lhs: Polynomial<Polynomial<BigInt>> = base
+                .minimal_polynomial()
+                .iter()
+                .map(Polynomial::from)
+                .collect();
+            println!("resultant_lhs: {}", resultant_lhs);
+            let resultant_rhs: Polynomial<Polynomial<BigInt>> =
+                Polynomial::make_monomial(-Polynomial::<BigInt>::one(), exponent_numer)
+                    + Polynomial::make_monomial(BigInt::one(), exponent_denom);
+            println!("resultant_rhs: {}", resultant_rhs);
+            let resultant = resultant_lhs.resultant(resultant_rhs);
+            println!("resultant: {}", resultant);
+            struct PowRootSelector<'a> {
+                base: BoundsShrinker<'a>,
+                exponent: Ratio<BigInt>,
+                result_sign: Sign,
+            }
+            impl RootSelector for PowRootSelector<'_> {
+                fn get_bounds(&self) -> Bounds<Ratio<BigInt>> {
+                    let bounds = if self.base.lower_bound.is_positive() {
+                        let lower_bound = self.base.lower_bound.clone();
+                        let upper_bound = self.base.upper_bound.clone();
+                        Bounds {
+                            lower_bound,
+                            upper_bound,
+                        }
+                    } else if self.base.upper_bound.is_negative() {
+                        let lower_bound = -&*self.base.upper_bound;
+                        let upper_bound = -&*self.base.lower_bound;
+                        Bounds {
+                            lower_bound,
+                            upper_bound,
+                        }
+                    } else {
+                        let lower_bound = Ratio::zero();
+                        let upper_bound =
+                            self.base.lower_bound.abs().max(self.base.upper_bound.abs());
+                        Bounds {
+                            lower_bound,
+                            upper_bound,
+                        }
+                    };
+                    let bounds = pow_bounds(bounds, &self.exponent);
+                    match self.result_sign {
+                        Sign::Positive => bounds,
+                        Sign::Negative => Bounds {
+                            lower_bound: -bounds.upper_bound,
+                            upper_bound: -bounds.lower_bound,
+                        },
+                    }
+                }
+                fn shrink_bounds(&mut self) {
+                    self.base.shrink();
+                }
+            }
+            Some(
+                PowRootSelector {
+                    base: base.bounds_shrinker(),
+                    exponent: Ratio::new(exponent_numer.into(), exponent_denom.into()),
+                    result_sign,
+                }
+                .select_root(resultant),
+            )
+        }
+    }
+    pub fn checked_into_pow<E: Into<Ratio<BigInt>>>(self, exponent: E) -> Option<Self> {
+        Self::checked_pow_impl(Cow::Owned(self), exponent.into())
+    }
+    pub fn checked_pow<E: Into<Ratio<BigInt>>>(&self, exponent: E) -> Option<Self> {
+        Self::checked_pow_impl(Cow::Borrowed(self), exponent.into())
+    }
+}
+
+fn log2_bounds(bounds: Bounds<Ratio<BigInt>>) -> Bounds<Ratio<BigInt>> {
+    assert!(bounds.lower_bound.is_positive());
+    unimplemented!();
+}
+
+fn exp2_bounds(bounds: Bounds<Ratio<BigInt>>) -> Bounds<Ratio<BigInt>> {
+    unimplemented!();
+}
+
+fn pow_bounds(
+    mut bounds: Bounds<Ratio<BigInt>>,
+    exponent: &Ratio<BigInt>,
+) -> Bounds<Ratio<BigInt>> {
+    assert!(!bounds.lower_bound.is_negative());
+    assert!(exponent.is_positive());
+    let lower_bound_is_zero = bounds.lower_bound.is_zero();
+    if lower_bound_is_zero {
+        if bounds.upper_bound.is_zero() {
+            return bounds;
+        }
+        bounds.lower_bound = &bounds.upper_bound / BigInt::from(2);
+    }
+    bounds = log2_bounds(bounds);
+    bounds.lower_bound *= exponent;
+    bounds.upper_bound *= exponent;
+    bounds = exp2_bounds(bounds);
+    if lower_bound_is_zero {
+        bounds.lower_bound.set_zero();
+    }
+    bounds
 }
 
 fn neg(value: Cow<RealAlgebraicNumber>) -> RealAlgebraicNumber {
@@ -654,20 +846,14 @@ impl EvalPoint {
 impl Add<BigInt> for EvalPoint {
     type Output = Self;
     fn add(self, rhs: BigInt) -> Self {
-        println!("self + rhs: ({}) + ({})", self.0, rhs);
-        let retval = self.0 + Polynomial::from(rhs);
-        println!("retval: {}", retval);
-        EvalPoint(retval)
+        EvalPoint(self.0 + Polynomial::from(rhs))
     }
 }
 
 impl Mul<&'_ EvalPoint> for EvalPoint {
     type Output = Self;
     fn mul(self, rhs: &Self) -> Self {
-        println!("self * rhs: ({}) * ({})", self.0, rhs.0);
-        let retval = self.0 * &rhs.0;
-        println!("retval: {}", retval);
-        EvalPoint(retval)
+        EvalPoint(self.0 * &rhs.0)
     }
 }
 
@@ -697,10 +883,19 @@ impl fmt::Debug for ResultFactor {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, PartialEq)]
 struct Bounds<T> {
     lower_bound: T,
     upper_bound: T,
+}
+
+impl<T: fmt::Display> fmt::Debug for Bounds<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("Bounds")
+            .field("lower_bound", &DebugAsDisplay(&self.lower_bound))
+            .field("upper_bound", &DebugAsDisplay(&self.upper_bound))
+            .finish()
+    }
 }
 
 trait RootSelector: Sized {
@@ -774,9 +969,6 @@ trait RootSelector: Sized {
 impl AddAssign for RealAlgebraicNumber {
     fn add_assign(&mut self, mut rhs: RealAlgebraicNumber) {
         #![allow(clippy::suspicious_op_assign_impl)] // we need to use other operators
-        println!("add_assign:");
-        dbg!(&self);
-        dbg!(&rhs);
         if self.is_rational() && rhs.is_rational() {
             *self = (self.to_rational().expect("known to be rational")
                 + rhs.to_rational().expect("known to be rational"))
@@ -795,16 +987,12 @@ impl AddAssign for RealAlgebraicNumber {
             .iter()
             .map(Polynomial::from)
             .collect();
-        println!("resultant_lhs: {}", resultant_lhs);
         let eval_point = EvalPoint::add_eval_point();
-        println!("eval_point: {:?}", eval_point);
         let resultant_rhs = rhs
             .minimal_polynomial()
             .eval_generic(eval_point, EvalPoint::zero())
             .0;
-        println!("resultant_rhs: {}", resultant_rhs);
         let resultant = resultant_lhs.resultant(resultant_rhs);
-        println!("resultant: {}", resultant);
         struct AddRootShrinker<'a> {
             lhs_bounds_shrinker: BoundsShrinker<'a>,
             rhs_bounds_shrinker: BoundsShrinker<'a>,
@@ -874,6 +1062,7 @@ impl<'a, 'b> Add<&'a RealAlgebraicNumber> for &'b RealAlgebraicNumber {
 lazy_static! {
     static ref ZERO: RealAlgebraicNumber = 0.into();
     static ref ONE: RealAlgebraicNumber = 1.into();
+    static ref NEGATIVE_ONE: RealAlgebraicNumber = (-1).into();
 }
 
 impl Zero for RealAlgebraicNumber {
@@ -1258,6 +1447,20 @@ impl<'a, 'b> Rem<&'a RealAlgebraicNumber> for &'b RealAlgebraicNumber {
     }
 }
 
+impl<E: Into<Ratio<BigInt>>> Pow<E> for RealAlgebraicNumber {
+    type Output = RealAlgebraicNumber;
+    fn pow(self, exponent: E) -> RealAlgebraicNumber {
+        self.checked_into_pow(exponent).expect("checked_pow failed")
+    }
+}
+
+impl<E: Into<Ratio<BigInt>>> Pow<E> for &'_ RealAlgebraicNumber {
+    type Output = RealAlgebraicNumber;
+    fn pow(self, exponent: E) -> RealAlgebraicNumber {
+        self.checked_pow(exponent).expect("checked_pow failed")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1634,5 +1837,95 @@ mod tests {
                 ri(1),
             )),
         );
+    }
+
+    #[test]
+    fn test_log2_bounds() {
+        fn test_case(input: Bounds<Ratio<BigInt>>, expected: Bounds<Ratio<BigInt>>) {
+            println!("input: {:?}", input);
+            println!("expected: {:?}", expected);
+            let result = log2_bounds(input);
+            println!("result: {:?}", result);
+            assert!(expected == result);
+        }
+        test_case(
+            Bounds {
+                lower_bound: ri(1),
+                upper_bound: ri(1),
+            },
+            Bounds {
+                lower_bound: ri(0),
+                upper_bound: ri(0),
+            },
+        );
+        unimplemented!("add more test cases");
+    }
+
+    #[test]
+    fn test_exp2_bounds() {
+        fn test_case(input: Bounds<Ratio<BigInt>>, expected: Bounds<Ratio<BigInt>>) {
+            println!("input: {:?}", input);
+            println!("expected: {:?}", expected);
+            let result = exp2_bounds(input);
+            println!("result: {:?}", result);
+            assert!(expected == result);
+        }
+        test_case(
+            Bounds {
+                lower_bound: ri(0),
+                upper_bound: ri(0),
+            },
+            Bounds {
+                lower_bound: ri(1),
+                upper_bound: ri(1),
+            },
+        );
+        unimplemented!("add more test cases");
+    }
+
+    #[test]
+    fn test_pow() {
+        fn test_case<B: Into<RealAlgebraicNumber>, E: Into<Ratio<BigInt>>>(
+            base: B,
+            exponent: E,
+            expected: Option<RealAlgebraicNumber>,
+        ) {
+            let base = base.into();
+            let exponent = exponent.into();
+            println!("base: {:?}", base);
+            println!("exponent: {}", exponent);
+            println!("expected: {:?}", expected);
+            let result = base.checked_into_pow(exponent);
+            println!("result: {:?}", result);
+            assert!(result == expected);
+        }
+        test_case(0, ri(0), None);
+        test_case(1, ri(0), Some(1.into()));
+        test_case(make_sqrt(2, ri(1), ri(2)), ri(0), Some(1.into()));
+        test_case(r(2, 3), ri(1), Some(r(2, 3).into()));
+        test_case(
+            make_sqrt(2, ri(1), ri(2)),
+            ri(1),
+            Some(make_sqrt(2, ri(1), ri(2))),
+        );
+        test_case(r(2, 3), ri(-1), Some(r(3, 2).into()));
+        test_case(r(-2, 3), ri(-1), Some(r(-3, 2).into()));
+        test_case(0, ri(-1), None);
+        test_case(0, ri(-2), None);
+        test_case(0, ri(2), Some(0.into()));
+        test_case(1, ri(2), Some(1.into()));
+        test_case(1, r(2, 3), Some(1.into()));
+        test_case(-1, ri(3), Some((-1).into()));
+        test_case(-1, ri(1234), Some(1.into()));
+        test_case(-1, r(1, 2), None);
+        test_case(-2, r(1, 2), None);
+        test_case(-2, ri(2), Some(4.into()));
+        test_case(-2, ri(3), Some((-8).into()));
+        test_case(r(-2, 3), ri(3), Some(r(-8, 27).into()));
+        test_case(r(-2, 3), ri(-3), Some(r(-27, 8).into()));
+        test_case(make_sqrt(8, ri(2), ri(3)), r(-2, 3), Some(r(1, 2).into()));
+        test_case(make_sqrt(2, ri(1), ri(2)), ri(2), Some(2.into()));
+        test_case(make_sqrt(2, ri(1), ri(2)), ri(-2), Some(r(1, 2).into()));
+        unimplemented!("add more cases");
     }
 }
