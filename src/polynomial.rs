@@ -1073,6 +1073,9 @@ impl<T: PolynomialCoefficient> Iterator for Iter<'_, T> {
             Cow::Borrowed(self.divisor),
         ))
     }
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.elements.size_hint()
+    }
 }
 
 impl<T: PolynomialCoefficient> DoubleEndedIterator for Iter<'_, T> {
@@ -1083,6 +1086,8 @@ impl<T: PolynomialCoefficient> DoubleEndedIterator for Iter<'_, T> {
         ))
     }
 }
+
+impl<T: PolynomialCoefficient> ExactSizeIterator for Iter<'_, T> {}
 
 #[derive(Clone, Debug)]
 pub struct IntoIter<T: PolynomialCoefficient> {
@@ -1103,6 +1108,9 @@ impl<T: PolynomialCoefficient> Iterator for IntoIter<T> {
             divisor,
         ))
     }
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.elements.size_hint()
+    }
 }
 
 impl<T: PolynomialCoefficient> DoubleEndedIterator for IntoIter<T> {
@@ -1118,6 +1126,8 @@ impl<T: PolynomialCoefficient> DoubleEndedIterator for IntoIter<T> {
         ))
     }
 }
+
+impl<T: PolynomialCoefficient> ExactSizeIterator for IntoIter<T> {}
 
 impl<T: PolynomialCoefficient> IntoIterator for Polynomial<T> {
     type Item = T;
