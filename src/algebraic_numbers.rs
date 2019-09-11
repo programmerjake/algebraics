@@ -2,26 +2,36 @@
 // See Notices.txt for copyright information
 
 use crate::polynomial::Polynomial;
+use crate::traits::AlwaysExactDiv;
+use crate::traits::AlwaysExactDivAssign;
+use crate::traits::ExactDiv;
+use crate::traits::ExactDivAssign;
 use crate::util::DebugAsDisplay;
 use crate::util::Sign;
 use num_bigint::BigInt;
 use num_bigint::BigUint;
 use num_integer::Integer;
 use num_rational::Ratio;
+use num_traits::Num;
 use num_traits::One;
 use num_traits::Signed;
 use num_traits::Zero;
 use std::borrow::Cow;
 use std::cmp::Ordering;
+use std::error::Error;
 use std::fmt;
 use std::mem;
 use std::ops::Add;
 use std::ops::AddAssign;
 use std::ops::Deref;
 use std::ops::DerefMut;
+use std::ops::Div;
+use std::ops::DivAssign;
 use std::ops::Mul;
 use std::ops::MulAssign;
 use std::ops::Neg;
+use std::ops::Rem;
+use std::ops::RemAssign;
 use std::ops::Sub;
 use std::ops::SubAssign;
 
@@ -445,6 +455,107 @@ impl RealAlgebraicNumber {
     pub fn ceil(&self) -> Self {
         self.neg().into_floor().neg()
     }
+    pub fn cmp_with_zero(&self) -> Ordering {
+        if self.is_zero() {
+            Ordering::Equal
+        } else if self.lower_bound().is_positive() {
+            Ordering::Greater
+        } else if self.upper_bound().is_negative() {
+            Ordering::Less
+        } else if let Some(value) = self.to_rational() {
+            value.cmp(&Ratio::zero())
+        } else {
+            let primitive_sturm_sequence = self.minimal_polynomial().to_primitive_sturm_sequence();
+            let lower_bound_sign_changes = sign_changes_at(
+                &primitive_sturm_sequence,
+                ValueOrInfinity::Value(self.lower_bound()),
+            );
+            assert!(!lower_bound_sign_changes.is_root);
+            let upper_bound_sign_changes = sign_changes_at(
+                &primitive_sturm_sequence,
+                ValueOrInfinity::Value(self.upper_bound()),
+            );
+            assert!(!upper_bound_sign_changes.is_root);
+            let zero_sign_changes =
+                sign_changes_at(&primitive_sturm_sequence, ValueOrInfinity::Zero);
+            assert!(!zero_sign_changes.is_root);
+            if lower_bound_sign_changes.sign_change_count == zero_sign_changes.sign_change_count {
+                Ordering::Greater
+            } else {
+                assert_eq!(
+                    upper_bound_sign_changes.sign_change_count,
+                    zero_sign_changes.sign_change_count
+                );
+                Ordering::Less
+            }
+        }
+    }
+    pub fn into_integer_trunc(self) -> BigInt {
+        match self.cmp_with_zero() {
+            Ordering::Equal => BigInt::zero(),
+            Ordering::Greater => self.into_integer_floor(),
+            Ordering::Less => self.into_integer_ceil(),
+        }
+    }
+    pub fn to_integer_trunc(&self) -> BigInt {
+        match self.cmp_with_zero() {
+            Ordering::Equal => BigInt::zero(),
+            Ordering::Greater => self.to_integer_floor(),
+            Ordering::Less => self.to_integer_ceil(),
+        }
+    }
+    pub fn into_trunc(self) -> Self {
+        self.into_integer_trunc().into()
+    }
+    pub fn trunc(&self) -> Self {
+        self.to_integer_trunc().into()
+    }
+    pub fn checked_recip(&self) -> Option<Self> {
+        if let Some(value) = self.to_rational() {
+            if value.is_zero() {
+                return None;
+            }
+            return Some(value.recip().into());
+        }
+        let sign = match self.cmp_with_zero() {
+            Ordering::Equal => unreachable!("already checked for zero"),
+            Ordering::Less => Sign::Negative,
+            Ordering::Greater => Sign::Positive,
+        };
+        let mut value = self.clone();
+        match sign {
+            Sign::Negative => {
+                if value.upper_bound().is_positive() {
+                    value.data.upper_bound.set_zero();
+                }
+            }
+            Sign::Positive => {
+                if value.lower_bound().is_negative() {
+                    value.data.lower_bound.set_zero();
+                }
+            }
+        }
+        let mut bounds_shrinker = value.bounds_shrinker();
+        while bounds_shrinker.lower_bound.is_zero() || bounds_shrinker.upper_bound.is_zero() {
+            bounds_shrinker.shrink();
+        }
+        let RealAlgebraicNumberData {
+            minimal_polynomial,
+            lower_bound,
+            upper_bound,
+        } = value.into_data();
+        let (lower_bound, upper_bound) = (upper_bound.recip(), lower_bound.recip());
+        let minimal_polynomial = minimal_polynomial.into_iter().rev().collect();
+        Some(RealAlgebraicNumber::new_unchecked(
+            minimal_polynomial,
+            lower_bound,
+            upper_bound,
+        ))
+    }
+    pub fn recip(&self) -> Self {
+        self.checked_recip()
+            .expect("checked_recip called on zero value")
+    }
 }
 
 fn neg(value: Cow<RealAlgebraicNumber>) -> RealAlgebraicNumber {
@@ -672,6 +783,13 @@ impl AddAssign for RealAlgebraicNumber {
             .into();
             return;
         }
+        if rhs.is_zero() {
+            return;
+        }
+        if self.is_zero() {
+            *self = rhs;
+            return;
+        }
         let resultant_lhs: Polynomial<Polynomial<BigInt>> = self
             .minimal_polynomial()
             .iter()
@@ -768,6 +886,16 @@ impl Zero for RealAlgebraicNumber {
     }
 }
 
+impl One for RealAlgebraicNumber {
+    fn one() -> Self {
+        ONE.clone()
+    }
+    #[inline]
+    fn is_one(&self) -> bool {
+        self.minimal_polynomial() == ONE.minimal_polynomial()
+    }
+}
+
 impl SubAssign for RealAlgebraicNumber {
     fn sub_assign(&mut self, rhs: RealAlgebraicNumber) {
         self.add_assign(-rhs);
@@ -810,6 +938,64 @@ impl<'a, 'b> Sub<&'a RealAlgebraicNumber> for &'b RealAlgebraicNumber {
     }
 }
 
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+pub enum RealAlgebraicNumberParseError {}
+
+impl fmt::Display for RealAlgebraicNumberParseError {
+    fn fmt(&self, _f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {}
+    }
+}
+
+impl Error for RealAlgebraicNumberParseError {}
+
+impl Num for RealAlgebraicNumber {
+    type FromStrRadixErr = RealAlgebraicNumberParseError;
+    fn from_str_radix(_str: &str, _radix: u32) -> Result<Self, Self::FromStrRadixErr> {
+        unimplemented!()
+    }
+}
+
+impl Signed for RealAlgebraicNumber {
+    fn abs(&self) -> Self {
+        if self.is_negative() {
+            -self
+        } else {
+            self.clone()
+        }
+    }
+
+    fn abs_sub(&self, other: &Self) -> Self {
+        let difference = self - other;
+        if difference.is_negative() {
+            Self::zero()
+        } else {
+            difference
+        }
+    }
+
+    /// Returns the sign of the number.
+    ///
+    /// * `0` if the number is zero
+    /// * `1` if the number is positive
+    /// * `-1` if the number is negative
+    fn signum(&self) -> Self {
+        match self.cmp_with_zero() {
+            Ordering::Equal => Self::zero(),
+            Ordering::Greater => Self::one(),
+            Ordering::Less => -Self::one(),
+        }
+    }
+
+    fn is_positive(&self) -> bool {
+        self.cmp_with_zero() == Ordering::Greater
+    }
+
+    fn is_negative(&self) -> bool {
+        self.cmp_with_zero() == Ordering::Less
+    }
+}
+
 impl PartialEq for RealAlgebraicNumber {
     fn eq(&self, rhs: &RealAlgebraicNumber) -> bool {
         (self - rhs).is_zero()
@@ -826,50 +1012,7 @@ impl PartialOrd for RealAlgebraicNumber {
 
 impl Ord for RealAlgebraicNumber {
     fn cmp(&self, rhs: &RealAlgebraicNumber) -> Ordering {
-        let difference = self - rhs;
-        if difference.is_zero() {
-            Ordering::Equal
-        } else if let Some(value) = difference.to_rational() {
-            if value.is_positive() {
-                Ordering::Greater
-            } else {
-                Ordering::Less
-            }
-        } else {
-            let difference = difference.into_data();
-            if difference.lower_bound.is_positive() {
-                Ordering::Greater
-            } else if difference.upper_bound.is_negative() {
-                Ordering::Less
-            } else {
-                let primitive_sturm_sequence = difference
-                    .minimal_polynomial
-                    .into_primitive_sturm_sequence();
-                let lower_bound_sign_changes = sign_changes_at(
-                    &primitive_sturm_sequence,
-                    ValueOrInfinity::Value(&difference.lower_bound),
-                );
-                assert!(!lower_bound_sign_changes.is_root);
-                let upper_bound_sign_changes = sign_changes_at(
-                    &primitive_sturm_sequence,
-                    ValueOrInfinity::Value(&difference.upper_bound),
-                );
-                assert!(!upper_bound_sign_changes.is_root);
-                let zero_sign_changes =
-                    sign_changes_at(&primitive_sturm_sequence, ValueOrInfinity::Zero);
-                assert!(!zero_sign_changes.is_root);
-                if lower_bound_sign_changes.sign_change_count == zero_sign_changes.sign_change_count
-                {
-                    Ordering::Greater
-                } else {
-                    assert_eq!(
-                        upper_bound_sign_changes.sign_change_count,
-                        zero_sign_changes.sign_change_count
-                    );
-                    Ordering::Less
-                }
-            }
-        }
+        (self - rhs).cmp_with_zero()
     }
 }
 
@@ -887,6 +1030,13 @@ impl MulAssign for RealAlgebraicNumber {
         }
         if self.is_zero() || rhs.is_zero() {
             self.set_zero();
+            return;
+        }
+        if rhs.is_one() {
+            return;
+        }
+        if self.is_one() {
+            *self = rhs;
             return;
         }
         let resultant_lhs: Polynomial<Polynomial<BigInt>> = self
@@ -976,9 +1126,142 @@ impl<'a, 'b> Mul<&'a RealAlgebraicNumber> for &'b RealAlgebraicNumber {
     }
 }
 
+impl ExactDivAssign for RealAlgebraicNumber {
+    fn checked_exact_div_assign(&mut self, rhs: RealAlgebraicNumber) -> Result<(), ()> {
+        self.checked_exact_div_assign(&rhs)
+    }
+}
+
+impl ExactDivAssign<&'_ RealAlgebraicNumber> for RealAlgebraicNumber {
+    fn checked_exact_div_assign(&mut self, rhs: &RealAlgebraicNumber) -> Result<(), ()> {
+        self.mul_assign(&rhs.checked_recip().ok_or(())?);
+        Ok(())
+    }
+}
+
+impl AlwaysExactDiv<RealAlgebraicNumber> for RealAlgebraicNumber {}
+impl AlwaysExactDiv<&'_ RealAlgebraicNumber> for RealAlgebraicNumber {}
+impl AlwaysExactDiv<RealAlgebraicNumber> for &'_ RealAlgebraicNumber {}
+impl<'a, 'b> AlwaysExactDiv<&'a RealAlgebraicNumber> for &'b RealAlgebraicNumber {}
+impl AlwaysExactDivAssign<RealAlgebraicNumber> for RealAlgebraicNumber {}
+impl AlwaysExactDivAssign<&'_ RealAlgebraicNumber> for RealAlgebraicNumber {}
+
+impl ExactDiv for RealAlgebraicNumber {
+    type Output = RealAlgebraicNumber;
+    fn checked_exact_div(mut self, rhs: RealAlgebraicNumber) -> Option<RealAlgebraicNumber> {
+        self.checked_exact_div_assign(rhs).ok()?;
+        Some(self)
+    }
+}
+
+impl ExactDiv<&'_ RealAlgebraicNumber> for RealAlgebraicNumber {
+    type Output = RealAlgebraicNumber;
+    fn checked_exact_div(mut self, rhs: &RealAlgebraicNumber) -> Option<RealAlgebraicNumber> {
+        self.checked_exact_div_assign(rhs).ok()?;
+        Some(self)
+    }
+}
+
+impl ExactDiv<RealAlgebraicNumber> for &'_ RealAlgebraicNumber {
+    type Output = RealAlgebraicNumber;
+    fn checked_exact_div(self, rhs: RealAlgebraicNumber) -> Option<RealAlgebraicNumber> {
+        self.clone().checked_exact_div(rhs)
+    }
+}
+
+impl<'a, 'b> ExactDiv<&'a RealAlgebraicNumber> for &'b RealAlgebraicNumber {
+    type Output = RealAlgebraicNumber;
+    fn checked_exact_div(self, rhs: &RealAlgebraicNumber) -> Option<RealAlgebraicNumber> {
+        self.clone().checked_exact_div(rhs)
+    }
+}
+
+impl DivAssign<RealAlgebraicNumber> for RealAlgebraicNumber {
+    fn div_assign(&mut self, rhs: RealAlgebraicNumber) {
+        self.exact_div_assign(rhs);
+    }
+}
+
+impl DivAssign<&'_ RealAlgebraicNumber> for RealAlgebraicNumber {
+    fn div_assign(&mut self, rhs: &RealAlgebraicNumber) {
+        self.exact_div_assign(rhs);
+    }
+}
+
+impl Div<RealAlgebraicNumber> for RealAlgebraicNumber {
+    type Output = RealAlgebraicNumber;
+    fn div(self, rhs: RealAlgebraicNumber) -> RealAlgebraicNumber {
+        self.exact_div(rhs)
+    }
+}
+
+impl Div<RealAlgebraicNumber> for &'_ RealAlgebraicNumber {
+    type Output = RealAlgebraicNumber;
+    fn div(self, rhs: RealAlgebraicNumber) -> RealAlgebraicNumber {
+        self.exact_div(rhs)
+    }
+}
+
+impl Div<&'_ RealAlgebraicNumber> for RealAlgebraicNumber {
+    type Output = RealAlgebraicNumber;
+    fn div(self, rhs: &RealAlgebraicNumber) -> RealAlgebraicNumber {
+        self.exact_div(rhs)
+    }
+}
+
+impl<'a, 'b> Div<&'a RealAlgebraicNumber> for &'b RealAlgebraicNumber {
+    type Output = RealAlgebraicNumber;
+    fn div(self, rhs: &RealAlgebraicNumber) -> RealAlgebraicNumber {
+        self.exact_div(rhs)
+    }
+}
+
+impl RemAssign<RealAlgebraicNumber> for RealAlgebraicNumber {
+    fn rem_assign(&mut self, rhs: RealAlgebraicNumber) {
+        self.rem_assign(&rhs)
+    }
+}
+
+impl RemAssign<&'_ RealAlgebraicNumber> for RealAlgebraicNumber {
+    fn rem_assign(&mut self, rhs: &RealAlgebraicNumber) {
+        *self -= (&*self / rhs).trunc() * rhs;
+    }
+}
+
+impl Rem<RealAlgebraicNumber> for RealAlgebraicNumber {
+    type Output = RealAlgebraicNumber;
+    fn rem(mut self, rhs: RealAlgebraicNumber) -> RealAlgebraicNumber {
+        self.rem_assign(rhs);
+        self
+    }
+}
+
+impl Rem<RealAlgebraicNumber> for &'_ RealAlgebraicNumber {
+    type Output = RealAlgebraicNumber;
+    fn rem(self, rhs: RealAlgebraicNumber) -> RealAlgebraicNumber {
+        self.clone().rem(rhs)
+    }
+}
+
+impl Rem<&'_ RealAlgebraicNumber> for RealAlgebraicNumber {
+    type Output = RealAlgebraicNumber;
+    fn rem(mut self, rhs: &RealAlgebraicNumber) -> RealAlgebraicNumber {
+        self.rem_assign(rhs);
+        self
+    }
+}
+
+impl<'a, 'b> Rem<&'a RealAlgebraicNumber> for &'b RealAlgebraicNumber {
+    type Output = RealAlgebraicNumber;
+    fn rem(self, rhs: &RealAlgebraicNumber) -> RealAlgebraicNumber {
+        self.clone().rem(rhs)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::util::tests::test_checked_op_helper;
     use crate::util::tests::test_op_helper;
     use num_integer::Roots;
 
@@ -1103,6 +1386,34 @@ mod tests {
         test_case(
             RealAlgebraicNumber::from(r(4, 5)),
             RealAlgebraicNumber::from(r(-4, 5)).into_data(),
+        );
+    }
+
+    #[test]
+    fn test_cmp_with_zero() {
+        fn test_case<V: Into<RealAlgebraicNumber>>(value: V, expected: Ordering) {
+            let value = value.into();
+            println!("value: {:?}", value);
+            println!("expected: {:?}", expected);
+            let result = value.cmp_with_zero();
+            println!("result: {:?}", result);
+            assert_eq!(expected, result);
+        }
+        test_case(0, Ordering::Equal);
+        test_case(1, Ordering::Greater);
+        test_case(-1, Ordering::Less);
+        test_case(r(-1, 12), Ordering::Less);
+        test_case(
+            RealAlgebraicNumber::new_unchecked(p(&[1, 1]), ri(-1000), ri(1000)),
+            Ordering::Less,
+        );
+        test_case(
+            RealAlgebraicNumber::new_unchecked(p(&[-1, 1, 1]), ri(-1), ri(1000)),
+            Ordering::Greater,
+        );
+        test_case(
+            RealAlgebraicNumber::new_unchecked(p(&[-3, 1, 1]), ri(-1000), ri(1)),
+            Ordering::Less,
         );
     }
 
@@ -1278,6 +1589,50 @@ mod tests {
             make_sqrt(2, ri(1), ri(2)),
             make_sqrt(3, ri(1), ri(2)),
             make_sqrt(6, ri(1), ri(10)),
+        );
+    }
+
+    #[test]
+    fn test_div() {
+        fn test_case<A: Into<RealAlgebraicNumber>, B: Into<RealAlgebraicNumber>>(
+            a: A,
+            b: B,
+            expected: Option<RealAlgebraicNumber>,
+        ) {
+            let a = a.into();
+            println!("a: {:?}", a);
+            let b = b.into();
+            println!("b: {:?}", b);
+            println!("expected: {:?}", expected);
+            test_checked_op_helper(
+                a,
+                b,
+                &expected,
+                |l, r| l.checked_exact_div_assign(r),
+                |l, r| l.checked_exact_div_assign(r),
+                |l, r| l.checked_exact_div(r),
+                |l, r| l.checked_exact_div(r),
+                |l, r| l.checked_exact_div(r),
+                |l, r| l.checked_exact_div(r),
+            );
+        }
+        test_case(1, 0, None);
+        test_case(make_sqrt(2, ri(1), ri(2)), 0, None);
+        test_case(0, make_sqrt(2, ri(1), ri(2)), Some(0.into()));
+        test_case(1, 2, Some(r(1, 2).into()));
+        test_case(
+            make_sqrt(2, ri(1), ri(2)),
+            make_sqrt(2, ri(-2), ri(-1)),
+            Some((-1).into()),
+        );
+        test_case(
+            make_sqrt(2, ri(1), ri(2)),
+            make_sqrt(3, ri(1), ri(2)),
+            Some(RealAlgebraicNumber::new_unchecked(
+                p(&[-2, 0, 3]),
+                ri(0),
+                ri(1),
+            )),
         );
     }
 }
