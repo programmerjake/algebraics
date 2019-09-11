@@ -1160,7 +1160,10 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
             Cow::Borrowed(&self.divisor),
         ))
     }
-    pub fn coefficient(&self, index: usize) -> T where T: Zero {
+    pub fn coefficient(&self, index: usize) -> T
+    where
+        T: Zero,
+    {
         self.nonzero_coefficient(index).unwrap_or_else(T::zero)
     }
     pub fn nonzero_highest_power_coefficient(&self) -> Option<T> {
