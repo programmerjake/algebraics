@@ -600,36 +600,17 @@ impl fmt::Debug for ResultFactor {
     }
 }
 
-impl AddAssign for RealAlgebraicNumber {
-    fn add_assign(&mut self, mut rhs: RealAlgebraicNumber) {
-        #![allow(clippy::suspicious_op_assign_impl)] // we need to use other operators
-        println!("add_assign:");
-        dbg!(&self);
-        dbg!(&rhs);
-        if self.is_rational() && rhs.is_rational() {
-            *self = (self.to_rational().expect("known to be rational")
-                + rhs.to_rational().expect("known to be rational"))
-            .into();
-            return;
-        }
-        let mut lhs_bounds_shrinker = self.bounds_shrinker();
-        let mut rhs_bounds_shrinker = rhs.bounds_shrinker();
-        let resultant_lhs: Polynomial<Polynomial<BigInt>> = lhs_bounds_shrinker
-            .minimal_polynomial
-            .iter()
-            .map(Polynomial::from)
-            .collect();
-        println!("resultant_lhs: {}", resultant_lhs);
-        let eval_point = EvalPoint::add_eval_point();
-        println!("eval_point: {:?}", eval_point);
-        let resultant_rhs = rhs_bounds_shrinker
-            .minimal_polynomial
-            .eval_generic(eval_point, EvalPoint::zero())
-            .0;
-        println!("resultant_rhs: {}", resultant_rhs);
-        let resultant = resultant_lhs.resultant(resultant_rhs);
-        println!("resultant: {}", resultant);
-        let mut factors: Vec<ResultFactor> = resultant
+#[derive(Copy, Clone, Debug)]
+struct Bounds<T> {
+    lower_bound: T,
+    upper_bound: T,
+}
+
+trait RootSelector: Sized {
+    fn get_bounds(&self) -> Bounds<Ratio<BigInt>>;
+    fn shrink_bounds(&mut self);
+    fn select_root(mut self, polynomial: Polynomial<BigInt>) -> RealAlgebraicNumber {
+        let mut factors: Vec<ResultFactor> = polynomial
             .factor()
             .polynomial_factors
             .into_iter()
@@ -639,9 +620,11 @@ impl AddAssign for RealAlgebraicNumber {
             .collect();
         println!("factors: {:?}", factors);
         let mut factors_temp = Vec::with_capacity(factors.len());
-        let result = 'result_loop: loop {
-            let lower_bound = &*lhs_bounds_shrinker.lower_bound + &*rhs_bounds_shrinker.lower_bound;
-            let upper_bound = &*lhs_bounds_shrinker.upper_bound + &*rhs_bounds_shrinker.upper_bound;
+        loop {
+            let Bounds {
+                lower_bound,
+                upper_bound,
+            } = self.get_bounds();
             println!("lower_bound: {}", lower_bound);
             println!("upper_bound: {}", upper_bound);
             mem::swap(&mut factors, &mut factors_temp);
@@ -655,7 +638,7 @@ impl AddAssign for RealAlgebraicNumber {
                 );
                 if lower_bound_sign_changes.is_root {
                     println!("found root: {}", lower_bound);
-                    break 'result_loop lower_bound.into();
+                    return lower_bound.into();
                 }
                 let upper_bound_sign_changes = sign_changes_at(
                     &factor.primitive_sturm_sequence,
@@ -663,7 +646,7 @@ impl AddAssign for RealAlgebraicNumber {
                 );
                 if upper_bound_sign_changes.is_root {
                     println!("found root: {}", upper_bound);
-                    break 'result_loop upper_bound.into();
+                    return upper_bound.into();
                 }
                 if lower_bound_sign_changes.sign_change_count
                     != upper_bound_sign_changes.sign_change_count
@@ -686,10 +669,65 @@ impl AddAssign for RealAlgebraicNumber {
                     upper_bound,
                 );
             }
-            lhs_bounds_shrinker.shrink();
-            rhs_bounds_shrinker.shrink();
-        };
-        *self = result;
+            self.shrink_bounds();
+        }
+    }
+}
+
+impl AddAssign for RealAlgebraicNumber {
+    fn add_assign(&mut self, mut rhs: RealAlgebraicNumber) {
+        #![allow(clippy::suspicious_op_assign_impl)] // we need to use other operators
+        println!("add_assign:");
+        dbg!(&self);
+        dbg!(&rhs);
+        if self.is_rational() && rhs.is_rational() {
+            *self = (self.to_rational().expect("known to be rational")
+                + rhs.to_rational().expect("known to be rational"))
+            .into();
+            return;
+        }
+        let resultant_lhs: Polynomial<Polynomial<BigInt>> = self
+            .minimal_polynomial()
+            .iter()
+            .map(Polynomial::from)
+            .collect();
+        println!("resultant_lhs: {}", resultant_lhs);
+        let eval_point = EvalPoint::add_eval_point();
+        println!("eval_point: {:?}", eval_point);
+        let resultant_rhs = rhs
+            .minimal_polynomial()
+            .eval_generic(eval_point, EvalPoint::zero())
+            .0;
+        println!("resultant_rhs: {}", resultant_rhs);
+        let resultant = resultant_lhs.resultant(resultant_rhs);
+        println!("resultant: {}", resultant);
+        struct AddRootShrinker<'a> {
+            lhs_bounds_shrinker: BoundsShrinker<'a>,
+            rhs_bounds_shrinker: BoundsShrinker<'a>,
+        }
+        impl RootSelector for AddRootShrinker<'_> {
+            fn get_bounds(&self) -> Bounds<Ratio<BigInt>> {
+                let lower_bound =
+                    &*self.lhs_bounds_shrinker.lower_bound + &*self.rhs_bounds_shrinker.lower_bound;
+                let upper_bound =
+                    &*self.lhs_bounds_shrinker.upper_bound + &*self.rhs_bounds_shrinker.upper_bound;
+                Bounds {
+                    lower_bound,
+                    upper_bound,
+                }
+            }
+            fn shrink_bounds(&mut self) {
+                self.lhs_bounds_shrinker.shrink();
+                self.rhs_bounds_shrinker.shrink();
+            }
+        }
+        let lhs_bounds_shrinker = self.bounds_shrinker();
+        let rhs_bounds_shrinker = rhs.bounds_shrinker();
+        *self = AddRootShrinker {
+            lhs_bounds_shrinker,
+            rhs_bounds_shrinker,
+        }
+        .select_root(resultant);
     }
 }
 
