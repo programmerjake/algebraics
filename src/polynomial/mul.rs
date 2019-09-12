@@ -185,7 +185,7 @@ where
 }
 
 impl<T: PolynomialCoefficient> Polynomial<T> {
-    fn checked_pow<E: Integer + Clone>(&self, exponent: E) -> Option<Self> {
+    fn checked_pow<E: Integer + Clone>(&self, mut exponent: E) -> Option<Self> {
         if exponent < Zero::zero() {
             return None;
         }
@@ -196,7 +196,6 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
         if exponent.is_one() {
             return Some(base);
         }
-        let mut exponent = exponent.clone();
         let mut retval: Option<Self> = None;
         loop {
             if exponent.is_odd() {
