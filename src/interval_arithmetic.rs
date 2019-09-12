@@ -60,9 +60,9 @@ impl DyadicFractionInterval {
         }
     }
     pub fn from_ratio_range(
-        log2_denom: usize,
         lower_bound: Ratio<BigInt>,
         upper_bound: Ratio<BigInt>,
+        log2_denom: usize,
     ) -> Self {
         let denom = BigInt::one() << log2_denom;
         let lower_bound_numer = (lower_bound * &denom).floor().to_integer();
@@ -73,7 +73,7 @@ impl DyadicFractionInterval {
             log2_denom,
         }
     }
-    pub fn from_ratio(log2_denom: usize, ratio: Ratio<BigInt>) -> Self {
+    pub fn from_ratio(ratio: Ratio<BigInt>, log2_denom: usize) -> Self {
         let (mut numer, denom) = ratio.into();
         numer <<= log2_denom;
         let ratio = Ratio::new(numer, denom);
@@ -478,7 +478,7 @@ impl AddAssign<&'_ BigInt> for DyadicFractionInterval {
 
 impl AddAssign<Ratio<BigInt>> for DyadicFractionInterval {
     fn add_assign(&mut self, rhs: Ratio<BigInt>) {
-        self.add_assign(DyadicFractionInterval::from_ratio(self.log2_denom, rhs))
+        self.add_assign(DyadicFractionInterval::from_ratio(rhs, self.log2_denom))
     }
 }
 
@@ -523,7 +523,7 @@ impl SubAssign<&'_ BigInt> for DyadicFractionInterval {
 
 impl SubAssign<Ratio<BigInt>> for DyadicFractionInterval {
     fn sub_assign(&mut self, rhs: Ratio<BigInt>) {
-        self.sub_assign(DyadicFractionInterval::from_ratio(self.log2_denom, rhs))
+        self.sub_assign(DyadicFractionInterval::from_ratio(rhs, self.log2_denom))
     }
 }
 
@@ -689,10 +689,66 @@ impl<E: Unsigned + Integer> Pow<E> for &'_ DyadicFractionInterval {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::borrow::Borrow;
+
+    type DFI = DyadicFractionInterval;
+
+    macro_rules! assert_same {
+        ($a:expr, $b:expr) => {
+            let a = $a;
+            let b = $b;
+            let a = a.borrow();
+            let b = b.borrow();
+            let is_same = a.lower_bound_numer == b.lower_bound_numer
+                && a.upper_bound_numer == b.upper_bound_numer
+                && a.log2_denom == b.log2_denom;
+            assert!(is_same, "{:?} != {:?}", a, b);
+        };
+        ($a:expr, $b:expr,) => {
+            assert_same!($a, $b)
+        };
+        ($a:expr, $b:expr, $($msg:tt)+) => {
+            let a = $a;
+            let b = $b;
+            let a = a.borrow();
+            let b = b.borrow();
+            let is_same = a.lower_bound_numer == b.lower_bound_numer
+                && a.upper_bound_numer == b.upper_bound_numer
+                && a.log2_denom == b.log2_denom;
+            assert!(is_same, "{:?} != {:?}: {}", a, b, format_args!($($msg)+));
+        };
+    }
+
+    fn r(n: i128, d: i128) -> Ratio<BigInt> {
+        Ratio::new(n.into(), d.into())
+    }
+
+    fn ri(v: i128) -> Ratio<BigInt> {
+        bi(v).into()
+    }
+
+    fn bi(v: i128) -> BigInt {
+        v.into()
+    }
 
     #[test]
     fn test_from_ratio_range() {
-        unimplemented!("add more test cases");
+        assert_same!(
+            DFI::from_ratio_range(r(2, 3), r(5, 7), 8),
+            DFI::new(bi(170), bi(183), 8)
+        );
+        assert_same!(
+            DFI::from_ratio_range(ri(-1), r(-5, 7), 8),
+            DFI::new(bi(-256), bi(-182), 8)
+        );
+        assert_same!(
+            DFI::from_ratio_range(r(5, 32), r(45, 32), 5),
+            DFI::new(bi(5), bi(45), 5)
+        );
+        assert_same!(
+            DFI::from_ratio_range(r(7, 32), r(8, 32), 5),
+            DFI::new(bi(7), bi(8), 5)
+        );
     }
 
     #[test]
