@@ -753,7 +753,12 @@ mod tests {
 
     #[test]
     fn test_from_ratio() {
-        unimplemented!("add more test cases");
+        assert_same!(DFI::from_ratio(r(2, 3), 8), DFI::new(bi(170), bi(171), 8));
+        assert_same!(
+            DFI::from_ratio(r(-2, 3), 8),
+            DFI::new(bi(-171), bi(-170), 8)
+        );
+        assert_same!(DFI::from_ratio(r(1, 8), 8), DFI::new(bi(32), bi(32), 8));
     }
 
     #[test]
