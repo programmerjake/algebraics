@@ -1289,7 +1289,39 @@ mod tests {
 
     #[test]
     fn test_mul_int() {
-        unimplemented!("add more test cases");
+        fn test_case(lhs: DFI, rhs: BigInt, expected: DFI) {
+            test_op_helper(
+                SameWrapper(lhs),
+                rhs,
+                &SameWrapper(expected),
+                |SameWrapper(a), b| a.mul_assign(b),
+                |SameWrapper(a), b| a.mul_assign(b),
+                |SameWrapper(a), b| SameWrapper(a.mul(b)),
+                |SameWrapper(a), b| SameWrapper(a.mul(b)),
+                |SameWrapper(a), b| SameWrapper(a.mul(b)),
+                |SameWrapper(a), b| SameWrapper(a.mul(b)),
+            );
+        }
+        test_case(
+            DFI::new(bi(3), bi(5), 0),
+            bi(23),
+            DFI::new(bi(69), bi(115), 0),
+        );
+        test_case(
+            DFI::new(bi(3), bi(5), 1),
+            bi(23),
+            DFI::new(bi(69), bi(115), 1),
+        );
+        test_case(
+            DFI::new(bi(3), bi(5), 0),
+            bi(-23),
+            DFI::new(bi(-115), bi(-69), 0),
+        );
+        test_case(
+            DFI::new(bi(3), bi(5), 1),
+            bi(-23),
+            DFI::new(bi(-115), bi(-69), 1),
+        );
     }
 
     #[test]
