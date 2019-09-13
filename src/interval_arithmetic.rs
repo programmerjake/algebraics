@@ -1201,7 +1201,90 @@ mod tests {
 
     #[test]
     fn test_mul() {
-        unimplemented!("add more test cases");
+        fn test_case(lhs: DFI, rhs: DFI, expected: DFI) {
+            test_op_helper(
+                SameWrapper(lhs.clone()),
+                SameWrapper(rhs.clone()),
+                &SameWrapper(expected.clone()),
+                |SameWrapper(a), SameWrapper(b)| a.mul_assign(b),
+                |SameWrapper(a), SameWrapper(b)| a.mul_assign(b),
+                |SameWrapper(a), SameWrapper(b)| SameWrapper(a.mul(b)),
+                |SameWrapper(a), SameWrapper(b)| SameWrapper(a.mul(b)),
+                |SameWrapper(a), SameWrapper(b)| SameWrapper(a.mul(b)),
+                |SameWrapper(a), SameWrapper(b)| SameWrapper(a.mul(b)),
+            );
+            test_op_helper(
+                SameWrapper(rhs),
+                SameWrapper(lhs),
+                &SameWrapper(expected),
+                |SameWrapper(a), SameWrapper(b)| a.mul_assign(b),
+                |SameWrapper(a), SameWrapper(b)| a.mul_assign(b),
+                |SameWrapper(a), SameWrapper(b)| SameWrapper(a.mul(b)),
+                |SameWrapper(a), SameWrapper(b)| SameWrapper(a.mul(b)),
+                |SameWrapper(a), SameWrapper(b)| SameWrapper(a.mul(b)),
+                |SameWrapper(a), SameWrapper(b)| SameWrapper(a.mul(b)),
+            );
+        }
+        test_case(
+            DFI::new(bi(3), bi(5), 0),
+            DFI::new(bi(17), bi(97), 0),
+            DFI::new(bi(51), bi(485), 0),
+        );
+        test_case(
+            DFI::new(bi(-3), bi(5), 0),
+            DFI::new(bi(17), bi(97), 0),
+            DFI::new(bi(-291), bi(485), 0),
+        );
+        test_case(
+            DFI::new(bi(-3), bi(-5), 0),
+            DFI::new(bi(17), bi(97), 0),
+            DFI::new(bi(-485), bi(-51), 0),
+        );
+        test_case(
+            DFI::new(bi(3), bi(5), 0),
+            DFI::new(bi(-17), bi(97), 0),
+            DFI::new(bi(-85), bi(485), 0),
+        );
+        test_case(
+            DFI::new(bi(-3), bi(5), 0),
+            DFI::new(bi(-17), bi(97), 0),
+            DFI::new(bi(-291), bi(485), 0),
+        );
+        test_case(
+            DFI::new(bi(-3), bi(-5), 0),
+            DFI::new(bi(-17), bi(97), 0),
+            DFI::new(bi(-485), bi(85), 0),
+        );
+        test_case(
+            DFI::new(bi(3), bi(5), 0),
+            DFI::new(bi(-17), bi(-97), 0),
+            DFI::new(bi(-485), bi(-51), 0),
+        );
+        test_case(
+            DFI::new(bi(-3), bi(5), 0),
+            DFI::new(bi(-17), bi(-97), 0),
+            DFI::new(bi(-485), bi(291), 0),
+        );
+        test_case(
+            DFI::new(bi(-3), bi(-5), 0),
+            DFI::new(bi(-17), bi(-97), 0),
+            DFI::new(bi(51), bi(485), 0),
+        );
+        test_case(
+            DFI::new(bi(3), bi(5), 1),
+            DFI::new(bi(17), bi(97), 0),
+            DFI::new(bi(51), bi(485), 1),
+        );
+        test_case(
+            DFI::new(bi(3), bi(5), 0),
+            DFI::new(bi(17), bi(97), 1),
+            DFI::new(bi(51), bi(485), 1),
+        );
+        test_case(
+            DFI::new(bi(3), bi(5), 1),
+            DFI::new(bi(17), bi(97), 1),
+            DFI::new(bi(25), bi(243), 1),
+        );
     }
 
     #[test]
