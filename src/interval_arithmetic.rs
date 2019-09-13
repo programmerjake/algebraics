@@ -911,7 +911,10 @@ mod tests {
 
     #[test]
     fn test_display() {
-        unimplemented!("add more test cases");
+        assert_eq!(
+            &format!("{}", DFI::new(bi(-123), bi(456), 789)),
+            "[-123 / 2^789, 456 / 2^789]",
+        );
     }
 
     #[test]
