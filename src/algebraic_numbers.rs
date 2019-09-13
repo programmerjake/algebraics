@@ -4,7 +4,6 @@
 use crate::polynomial::Polynomial;
 use crate::traits::AlwaysExactDiv;
 use crate::traits::AlwaysExactDivAssign;
-use crate::traits::CeilLog2;
 use crate::traits::ExactDiv;
 use crate::traits::ExactDivAssign;
 use crate::traits::FloorLog2;
@@ -42,6 +41,7 @@ use std::ops::SubAssign;
 #[derive(Clone, Eq, PartialEq, Hash)]
 pub struct RealAlgebraicNumberData {
     pub minimal_polynomial: Polynomial<BigInt>,
+    // FIXME: switch to using DyadicFractionInterval instead of rational bounds
     pub lower_bound: Ratio<BigInt>,
     pub upper_bound: Ratio<BigInt>,
 }

@@ -23,6 +23,8 @@ use std::ops::MulAssign;
 use std::ops::Neg;
 use std::ops::Sub;
 use std::ops::SubAssign;
+use std::sync::Arc;
+use std::sync::RwLock;
 
 fn convert_log2_denom_floor(numer: &mut BigInt, old_log2_denom: usize, new_log2_denom: usize) {
     if new_log2_denom >= old_log2_denom {
@@ -41,6 +43,85 @@ fn convert_log2_denom_ceil(numer: &mut BigInt, old_log2_denom: usize, new_log2_d
         numer_value >>= old_log2_denom - new_log2_denom;
         numer_value = -numer_value;
         *numer = numer_value;
+    }
+}
+
+struct ConstantCache {
+    cache: RwLock<Arc<Vec<Arc<DyadicFractionInterval>>>>,
+}
+
+impl ConstantCache {
+    fn new() -> Self {
+        Self {
+            cache: RwLock::new(Vec::new().into()),
+        }
+    }
+    fn log2_denom_to_cache_index(log2_denom: usize) -> usize {
+        ((log2_denom as f64 + 1.0).log2() * 4.0).floor() as usize
+    }
+    fn get_required_log2_denom_for_cache_index(cache_index: usize) -> usize {
+        let mut bit = !(!0usize >> 1); // just top bit set
+        let mut retval = 0;
+        while bit != 0 {
+            if Self::log2_denom_to_cache_index(retval | bit) <= cache_index {
+                retval |= bit;
+            }
+            bit >>= 1;
+        }
+        retval
+    }
+    #[inline]
+    fn read_cache(
+        &self,
+        cache_index: usize,
+    ) -> Result<Arc<DyadicFractionInterval>, Arc<Vec<Arc<DyadicFractionInterval>>>> {
+        let read_lock = self.cache.read().unwrap();
+        if let Some(entry) = read_lock.get(cache_index) {
+            Ok(entry.clone())
+        } else {
+            Err(read_lock.clone())
+        }
+    }
+    fn write_cache(&self, new_cache: Vec<Arc<DyadicFractionInterval>>) {
+        let mut write_lock = self.cache.write().unwrap();
+        // check because some other thread could have calculated a more accurate in the mean time
+        if new_cache.len() > write_lock.len() {
+            *write_lock = Arc::new(new_cache);
+        }
+    }
+    #[cold]
+    fn fill_cache<F: Fn(usize) -> DyadicFractionInterval>(
+        &self,
+        old_cache: Arc<Vec<Arc<DyadicFractionInterval>>>,
+        cache_index: usize,
+        compute_fn: F,
+    ) -> Arc<DyadicFractionInterval> {
+        let computed_result =
+            compute_fn(Self::get_required_log2_denom_for_cache_index(cache_index));
+        let mut new_cache: Vec<Arc<_>> = Vec::with_capacity(cache_index + 1);
+        new_cache.extend(old_cache.iter().cloned());
+        for i in new_cache.len()..cache_index {
+            let log2_denom = Self::get_required_log2_denom_for_cache_index(i);
+            new_cache.push(computed_result.to_converted_log2_denom(log2_denom).into());
+        }
+        let log2_denom = Self::get_required_log2_denom_for_cache_index(cache_index);
+        assert!(computed_result.log2_denom >= log2_denom);
+        let retval = Arc::new(computed_result.into_converted_log2_denom(log2_denom));
+        new_cache.push(retval.clone());
+        self.write_cache(new_cache);
+        retval
+    }
+    fn get<F: Fn(usize) -> DyadicFractionInterval>(
+        &self,
+        log2_denom: usize,
+        compute_fn: F,
+    ) -> DyadicFractionInterval {
+        let cache_index = Self::log2_denom_to_cache_index(log2_denom);
+        match self.read_cache(cache_index) {
+            Ok(entry) => entry,
+            Err(cache) => self.fill_cache(cache, cache_index, compute_fn),
+        }
+        .to_converted_log2_denom(log2_denom)
     }
 }
 
@@ -86,6 +167,9 @@ impl DyadicFractionInterval {
             log2_denom,
         }
     }
+    pub fn from_int(value: BigInt, log2_denom: usize) -> Self {
+        Self::from_dyadic_fraction(value << log2_denom, log2_denom)
+    }
     pub fn from_dyadic_fraction(numer: BigInt, log2_denom: usize) -> Self {
         Self {
             lower_bound_numer: numer.clone(),
@@ -101,10 +185,10 @@ impl DyadicFractionInterval {
         }
     }
     pub fn one(log2_denom: usize) -> Self {
-        Self::from_dyadic_fraction(BigInt::one() << log2_denom, log2_denom)
+        Self::from_int(BigInt::one(), log2_denom)
     }
     pub fn negative_one(log2_denom: usize) -> Self {
-        Self::from_dyadic_fraction(-(BigInt::one() << log2_denom), log2_denom)
+        Self::from_int(-BigInt::one(), log2_denom)
     }
     pub fn set_zero(&mut self) {
         self.lower_bound_numer.set_zero();
@@ -375,6 +459,28 @@ impl DyadicFractionInterval {
     pub fn arithmetic_geometric_mean(&self, rhs: &Self) -> Self {
         self.clone().into_arithmetic_geometric_mean(rhs.clone())
     }
+    pub fn sqrt_2(log2_denom: usize) -> Self {
+        lazy_static! {
+            static ref CACHE: ConstantCache = ConstantCache::new();
+        }
+        CACHE.get(log2_denom, |log2_denom: usize| -> Self {
+            Self::from_int(2i32.into(), log2_denom).into_sqrt()
+        })
+    }
+    pub fn pi(log2_denom: usize) -> Self {
+        lazy_static! {
+            static ref CACHE: ConstantCache = ConstantCache::new();
+        }
+        let compute_pi = |log2_denom: usize| -> Self {
+            let log2_denom = log2_denom + 32 + log2_denom / 1000;
+            let _ = log2_denom;
+            unimplemented!(
+                "finish implementing algorithm to compute pi using arithmetic_geometric_mean"
+            );
+        };
+        CACHE.get(log2_denom, compute_pi)
+    }
+    // TODO: implement exp/log in terms of arithmetic_geometric_mean and pi
 }
 
 impl fmt::Debug for DyadicFractionInterval {
