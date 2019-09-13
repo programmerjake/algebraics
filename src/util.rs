@@ -1116,15 +1116,16 @@ pub(crate) mod tests {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn test_op_helper<
         T: Clone + PartialEq + fmt::Debug,
-        OpEqMove: Fn(&mut T, T),
-        OpEqRef: Fn(&mut T, &T),
-        OpRefRef: Fn(&T, &T) -> T,
-        OpMoveRef: Fn(T, &T) -> T,
-        OpRefMove: Fn(&T, T) -> T,
-        OpMoveMove: Fn(T, T) -> T,
+        R: Clone,
+        OpEqMove: Fn(&mut T, R),
+        OpEqRef: Fn(&mut T, &R),
+        OpRefRef: Fn(&T, &R) -> T,
+        OpMoveRef: Fn(T, &R) -> T,
+        OpRefMove: Fn(&T, R) -> T,
+        OpMoveMove: Fn(T, R) -> T,
     >(
         l: T,
-        r: T,
+        r: R,
         expected: &T,
         op_eq_move: OpEqMove,
         op_eq_ref: OpEqRef,
@@ -1148,15 +1149,16 @@ pub(crate) mod tests {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn test_checked_op_helper<
         T: Clone + PartialEq + fmt::Debug,
-        OpEqMove: Fn(&mut T, T) -> Result<(), ()>,
-        OpEqRef: Fn(&mut T, &T) -> Result<(), ()>,
-        OpRefRef: Fn(&T, &T) -> Option<T>,
-        OpMoveRef: Fn(T, &T) -> Option<T>,
-        OpRefMove: Fn(&T, T) -> Option<T>,
-        OpMoveMove: Fn(T, T) -> Option<T>,
+        R: Clone,
+        OpEqMove: Fn(&mut T, R) -> Result<(), ()>,
+        OpEqRef: Fn(&mut T, &R) -> Result<(), ()>,
+        OpRefRef: Fn(&T, &R) -> Option<T>,
+        OpMoveRef: Fn(T, &R) -> Option<T>,
+        OpRefMove: Fn(&T, R) -> Option<T>,
+        OpMoveMove: Fn(T, R) -> Option<T>,
     >(
         l: T,
-        r: T,
+        r: R,
         expected: &Option<T>,
         op_eq_move: OpEqMove,
         op_eq_ref: OpEqRef,
@@ -1186,12 +1188,13 @@ pub(crate) mod tests {
     }
 
     pub(crate) fn test_unary_op_helper<
-        T: Clone + PartialEq + fmt::Debug,
-        OpRef: Fn(&T) -> T,
-        OpMove: Fn(T) -> T,
+        T,
+        O: PartialEq + fmt::Debug,
+        OpRef: Fn(&T) -> O,
+        OpMove: Fn(T) -> O,
     >(
         v: T,
-        expected: &T,
+        expected: &O,
         op_ref: OpRef,
         op_move: OpMove,
     ) {
