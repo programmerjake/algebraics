@@ -1326,7 +1326,45 @@ mod tests {
 
     #[test]
     fn test_mul_ratio() {
-        unimplemented!("add more test cases");
+        fn test_case(lhs: DFI, rhs: Ratio<BigInt>, expected: DFI) {
+            test_op_helper(
+                SameWrapper(lhs),
+                rhs,
+                &SameWrapper(expected),
+                |SameWrapper(a), b| a.mul_assign(b),
+                |SameWrapper(a), b| a.mul_assign(b),
+                |SameWrapper(a), b| SameWrapper(a.mul(b)),
+                |SameWrapper(a), b| SameWrapper(a.mul(b)),
+                |SameWrapper(a), b| SameWrapper(a.mul(b)),
+                |SameWrapper(a), b| SameWrapper(a.mul(b)),
+            );
+        }
+        test_case(
+            DFI::new(bi(3), bi(5), 0),
+            r(23, 7),
+            DFI::new(bi(9), bi(17), 0),
+        );
+        test_case(
+            DFI::new(bi(3), bi(5), 1),
+            r(23, 7),
+            DFI::new(bi(9), bi(17), 1),
+        );
+        test_case(
+            DFI::new(bi(3), bi(5), 0),
+            r(-23, 7),
+            DFI::new(bi(-17), bi(-9), 0),
+        );
+        test_case(
+            DFI::new(bi(3), bi(5), 1),
+            r(-23, 7),
+            DFI::new(bi(-17), bi(-9), 1),
+        );
+        test_case(DFI::new(bi(3), bi(5), 0), ri(3), DFI::new(bi(9), bi(15), 0));
+        test_case(
+            DFI::new(bi(3), bi(5), 0),
+            ri(-3),
+            DFI::new(bi(-15), bi(-9), 0),
+        );
     }
 
     #[test]
