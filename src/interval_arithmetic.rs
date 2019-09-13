@@ -689,33 +689,63 @@ impl<E: Unsigned + Integer> Pow<E> for &'_ DyadicFractionInterval {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::util::tests::test_op_helper;
     use std::borrow::Borrow;
+    use std::borrow::BorrowMut;
+    use std::ops::Deref;
+    use std::ops::DerefMut;
 
     type DFI = DyadicFractionInterval;
 
+    #[derive(Clone)]
+    struct SameWrapper<T: Borrow<DFI>>(T);
+
+    impl<T: Borrow<DFI>> Deref for SameWrapper<T> {
+        type Target = DFI;
+        fn deref(&self) -> &DFI {
+            self.0.borrow()
+        }
+    }
+
+    impl<T: BorrowMut<DFI>> DerefMut for SameWrapper<T> {
+        fn deref_mut(&mut self) -> &mut DFI {
+            self.0.borrow_mut()
+        }
+    }
+
+    impl<T: Borrow<DFI>> PartialEq for SameWrapper<T> {
+        fn eq(&self, rhs: &Self) -> bool {
+            let DFI {
+                lower_bound_numer: lhs_lower_bound_numer,
+                upper_bound_numer: lhs_upper_bound_numer,
+                log2_denom: lhs_log2_denom,
+            } = &**self;
+            let DFI {
+                lower_bound_numer: rhs_lower_bound_numer,
+                upper_bound_numer: rhs_upper_bound_numer,
+                log2_denom: rhs_log2_denom,
+            } = &**rhs;
+            lhs_lower_bound_numer == rhs_lower_bound_numer
+                && lhs_upper_bound_numer == rhs_upper_bound_numer
+                && lhs_log2_denom == rhs_log2_denom
+        }
+    }
+
+    impl<T: Borrow<DFI>> fmt::Debug for SameWrapper<T> {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            fmt::Debug::fmt(&**self, f)
+        }
+    }
+
     macro_rules! assert_same {
         ($a:expr, $b:expr) => {
-            let a = $a;
-            let b = $b;
-            let a = a.borrow();
-            let b = b.borrow();
-            let is_same = a.lower_bound_numer == b.lower_bound_numer
-                && a.upper_bound_numer == b.upper_bound_numer
-                && a.log2_denom == b.log2_denom;
-            assert!(is_same, "{:?} != {:?}", a, b);
+            assert_eq!(SameWrapper($a), SameWrapper($b));
         };
         ($a:expr, $b:expr,) => {
             assert_same!($a, $b)
         };
         ($a:expr, $b:expr, $($msg:tt)+) => {
-            let a = $a;
-            let b = $b;
-            let a = a.borrow();
-            let b = b.borrow();
-            let is_same = a.lower_bound_numer == b.lower_bound_numer
-                && a.upper_bound_numer == b.upper_bound_numer
-                && a.log2_denom == b.log2_denom;
-            assert!(is_same, "{:?} != {:?}: {}", a, b, format_args!($($msg)+));
+            assert_eq!(SameWrapper($a), SameWrapper($b), $($msg)+);
         };
     }
 
@@ -919,6 +949,24 @@ mod tests {
 
     #[test]
     fn test_add() {
+        fn test_case(lhs: DFI, rhs: DFI, expected: DFI) {
+            test_op_helper(
+                SameWrapper(lhs),
+                SameWrapper(rhs),
+                &SameWrapper(expected),
+                |SameWrapper(a), SameWrapper(b)| a.add_assign(b),
+                |SameWrapper(a), SameWrapper(b)| a.add_assign(b),
+                |SameWrapper(a), SameWrapper(b)| SameWrapper(a.add(b)),
+                |SameWrapper(a), SameWrapper(b)| SameWrapper(a.add(b)),
+                |SameWrapper(a), SameWrapper(b)| SameWrapper(a.add(b)),
+                |SameWrapper(a), SameWrapper(b)| SameWrapper(a.add(b)),
+            );
+        }
+        test_case(
+            DFI::new(bi(0), bi(0), 0),
+            DFI::new(bi(0), bi(0), 0),
+            DFI::new(bi(0), bi(0), 0),
+        );
         unimplemented!("add more test cases");
     }
 
