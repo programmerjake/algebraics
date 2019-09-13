@@ -491,6 +491,7 @@ impl AddAssign<&'_ Ratio<BigInt>> for DyadicFractionInterval {
 forward_types_to_bigint!(AddAssign, add_assign, Add, add);
 forward_op_to_op_assign!(AddAssign, add_assign, Add, add, DyadicFractionInterval);
 forward_op_to_op_assign!(AddAssign, add_assign, Add, add, Ratio<BigInt>);
+forward_op_to_op_assign!(AddAssign, add_assign, Add, add, BigInt);
 
 impl SubAssign<DyadicFractionInterval> for DyadicFractionInterval {
     fn sub_assign(&mut self, rhs: DyadicFractionInterval) {
@@ -536,6 +537,7 @@ impl SubAssign<&'_ Ratio<BigInt>> for DyadicFractionInterval {
 forward_types_to_bigint!(SubAssign, sub_assign, Sub, sub);
 forward_op_to_op_assign!(SubAssign, sub_assign, Sub, sub, DyadicFractionInterval);
 forward_op_to_op_assign!(SubAssign, sub_assign, Sub, sub, Ratio<BigInt>);
+forward_op_to_op_assign!(SubAssign, sub_assign, Sub, sub, BigInt);
 
 impl MulAssign<DyadicFractionInterval> for DyadicFractionInterval {
     fn mul_assign(&mut self, rhs: DyadicFractionInterval) {
@@ -576,6 +578,7 @@ impl MulAssign<&'_ Ratio<BigInt>> for DyadicFractionInterval {
 forward_types_to_bigint!(MulAssign, mul_assign, Mul, mul);
 forward_op_to_op_assign!(MulAssign, mul_assign, Mul, mul, DyadicFractionInterval);
 forward_op_to_op_assign!(MulAssign, mul_assign, Mul, mul, Ratio<BigInt>);
+forward_op_to_op_assign!(MulAssign, mul_assign, Mul, mul, BigInt);
 
 impl DivAssign<BigInt> for DyadicFractionInterval {
     fn div_assign(&mut self, rhs: BigInt) {
@@ -603,6 +606,7 @@ impl DivAssign<&'_ Ratio<BigInt>> for DyadicFractionInterval {
 
 forward_types_to_bigint!(DivAssign, div_assign, Div, div);
 forward_op_to_op_assign!(DivAssign, div_assign, Div, div, Ratio<BigInt>);
+forward_op_to_op_assign!(DivAssign, div_assign, Div, div, BigInt);
 
 impl<E: Unsigned + Integer> Pow<E> for DyadicFractionInterval {
     type Output = DyadicFractionInterval;
@@ -968,14 +972,14 @@ mod tests {
             DFI::new(bi(20), bi(102), 0),
         );
         test_case(
-            DFI::new(bi(3), bi(5), 0),
-            DFI::new(bi(17), bi(97), 1),
-            DFI::new(bi(23), bi(107), 1),
-        );
-        test_case(
             DFI::new(bi(3), bi(5), 1),
             DFI::new(bi(17), bi(97), 0),
             DFI::new(bi(37), bi(199), 1),
+        );
+        test_case(
+            DFI::new(bi(3), bi(5), 0),
+            DFI::new(bi(17), bi(97), 1),
+            DFI::new(bi(23), bi(107), 1),
         );
         test_case(
             DFI::new(bi(3), bi(5), 1),
@@ -986,7 +990,29 @@ mod tests {
 
     #[test]
     fn test_add_int() {
-        unimplemented!("add more test cases");
+        fn test_case(lhs: DFI, rhs: BigInt, expected: DFI) {
+            test_op_helper(
+                SameWrapper(lhs),
+                rhs,
+                &SameWrapper(expected),
+                |SameWrapper(a), b| a.add_assign(b),
+                |SameWrapper(a), b| a.add_assign(b),
+                |SameWrapper(a), b| SameWrapper(a.add(b)),
+                |SameWrapper(a), b| SameWrapper(a.add(b)),
+                |SameWrapper(a), b| SameWrapper(a.add(b)),
+                |SameWrapper(a), b| SameWrapper(a.add(b)),
+            );
+        }
+        test_case(
+            DFI::new(bi(3), bi(5), 0),
+            23.into(),
+            DFI::new(bi(26), bi(28), 0),
+        );
+        test_case(
+            DFI::new(bi(3), bi(5), 1),
+            23.into(),
+            DFI::new(bi(49), bi(51), 1),
+        );
     }
 
     #[test]
