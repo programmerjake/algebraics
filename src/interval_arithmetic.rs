@@ -763,7 +763,62 @@ mod tests {
 
     #[test]
     fn test_convert_log2_denom() {
-        unimplemented!("add more test cases");
+        assert_same!(
+            DFI::new(bi(1), bi(2), 0).into_converted_log2_denom(2),
+            DFI::new(bi(4), bi(8), 2)
+        );
+        assert_same!(
+            DFI::new(bi(-2), bi(-1), 0).into_converted_log2_denom(2),
+            DFI::new(bi(-8), bi(-4), 2)
+        );
+        assert_same!(
+            DFI::new(bi(4), bi(8), 2).into_converted_log2_denom(0),
+            DFI::new(bi(1), bi(2), 0)
+        );
+        assert_same!(
+            DFI::new(bi(7), bi(7), 2).into_converted_log2_denom(0),
+            DFI::new(bi(1), bi(2), 0)
+        );
+        assert_same!(
+            DFI::new(bi(6), bi(6), 2).into_converted_log2_denom(0),
+            DFI::new(bi(1), bi(2), 0)
+        );
+        assert_same!(
+            DFI::new(bi(5), bi(5), 2).into_converted_log2_denom(0),
+            DFI::new(bi(1), bi(2), 0)
+        );
+        assert_same!(
+            DFI::new(bi(4), bi(4), 2).into_converted_log2_denom(0),
+            DFI::new(bi(1), bi(1), 0)
+        );
+        assert_same!(
+            DFI::new(bi(8), bi(8), 2).into_converted_log2_denom(0),
+            DFI::new(bi(2), bi(2), 0)
+        );
+        assert_same!(
+            DFI::new(bi(-8), bi(-4), 2).into_converted_log2_denom(0),
+            DFI::new(bi(-2), bi(-1), 0)
+        );
+        assert_same!(
+            DFI::new(bi(-7), bi(-7), 2).into_converted_log2_denom(0),
+            DFI::new(bi(-2), bi(-1), 0)
+        );
+        assert_same!(
+            DFI::new(bi(-6), bi(-6), 2).into_converted_log2_denom(0),
+            DFI::new(bi(-2), bi(-1), 0)
+        );
+        assert_same!(
+            DFI::new(bi(-5), bi(-5), 2).into_converted_log2_denom(0),
+            DFI::new(bi(-2), bi(-1), 0)
+        );
+        assert_same!(
+            DFI::new(bi(-4), bi(-4), 2).into_converted_log2_denom(0),
+            DFI::new(bi(-1), bi(-1), 0)
+        );
+        assert_same!(
+            DFI::new(bi(-8), bi(-8), 2).into_converted_log2_denom(0),
+            DFI::new(bi(-2), bi(-2), 0)
+        );
     }
 
     #[test]
