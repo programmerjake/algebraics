@@ -288,7 +288,7 @@ impl DyadicFractionInterval {
         } else {
             (&min * &min) >> self.log2_denom
         };
-        self.upper_bound_numer = (&max * &max) >> self.log2_denom;
+        self.upper_bound_numer = -(-(&max * &max) >> self.log2_denom);
         self
     }
     pub fn square_assign(&mut self) {
@@ -823,7 +823,50 @@ mod tests {
 
     #[test]
     fn test_square() {
-        unimplemented!("add more test cases");
+        assert_same!(
+            DFI::new(bi(1), bi(2), 0).into_square(),
+            DFI::new(bi(1), bi(4), 0)
+        );
+        assert_same!(
+            DFI::new(bi(4), bi(5), 0).into_square(),
+            DFI::new(bi(16), bi(25), 0)
+        );
+        assert_same!(
+            DFI::new(bi(1), bi(1), 4).into_square(),
+            DFI::new(bi(0), bi(1), 4)
+        );
+        assert_same!(
+            DFI::new(bi(16), bi(16), 4).into_square(),
+            DFI::new(bi(16), bi(16), 4)
+        );
+        assert_same!(
+            DFI::new(bi(15), bi(15), 4).into_square(),
+            DFI::new(bi(14), bi(15), 4)
+        );
+        assert_same!(
+            DFI::new(bi(15), bi(15), 4).into_square(),
+            DFI::new(bi(14), bi(15), 4)
+        );
+        assert_same!(
+            DFI::new(bi(-16), bi(16), 4).into_square(),
+            DFI::new(bi(0), bi(16), 4)
+        );
+        assert_same!(
+            DFI::new(bi(-4), bi(5), 0).into_square(),
+            DFI::new(bi(0), bi(25), 0)
+        );
+        assert_same!(
+            DFI::new(bi(-5), bi(4), 0).into_square(),
+            DFI::new(bi(0), bi(25), 0)
+        );
+        assert_same!(
+            DFI::new(bi(-16), bi(-16), 4).into_square(),
+            DFI::new(bi(16), bi(16), 4)
+        );
+        assert_same!(
+            DFI::new(bi(-5), bi(-4), 0).into_square(),
+            DFI::new(bi(16), bi(25), 0)
+        );
     }
 
     #[test]
