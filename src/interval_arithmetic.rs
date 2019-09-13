@@ -1054,7 +1054,39 @@ mod tests {
 
     #[test]
     fn test_sub() {
-        unimplemented!("add more test cases");
+        fn test_case(lhs: DFI, rhs: DFI, expected: DFI) {
+            test_op_helper(
+                SameWrapper(lhs),
+                SameWrapper(rhs),
+                &SameWrapper(expected),
+                |SameWrapper(a), SameWrapper(b)| a.sub_assign(b),
+                |SameWrapper(a), SameWrapper(b)| a.sub_assign(b),
+                |SameWrapper(a), SameWrapper(b)| SameWrapper(a.sub(b)),
+                |SameWrapper(a), SameWrapper(b)| SameWrapper(a.sub(b)),
+                |SameWrapper(a), SameWrapper(b)| SameWrapper(a.sub(b)),
+                |SameWrapper(a), SameWrapper(b)| SameWrapper(a.sub(b)),
+            );
+        }
+        test_case(
+            DFI::new(bi(3), bi(5), 0),
+            DFI::new(bi(17), bi(97), 0),
+            DFI::new(bi(-94), bi(-12), 0),
+        );
+        test_case(
+            DFI::new(bi(3), bi(5), 1),
+            DFI::new(bi(17), bi(97), 0),
+            DFI::new(bi(-191), bi(-29), 1),
+        );
+        test_case(
+            DFI::new(bi(3), bi(5), 0),
+            DFI::new(bi(17), bi(97), 1),
+            DFI::new(bi(-91), bi(-7), 1),
+        );
+        test_case(
+            DFI::new(bi(3), bi(5), 1),
+            DFI::new(bi(17), bi(97), 1),
+            DFI::new(bi(-94), bi(-12), 1),
+        );
     }
 
     #[test]
