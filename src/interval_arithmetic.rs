@@ -339,7 +339,6 @@ impl DyadicFractionInterval {
 impl fmt::Debug for DyadicFractionInterval {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("DyadicFractionInterval")
-            .field("log2_denom", &self.log2_denom)
             .field(
                 "lower_bound_numer",
                 &DebugAsDisplay(&self.lower_bound_numer),
@@ -348,6 +347,7 @@ impl fmt::Debug for DyadicFractionInterval {
                 "upper_bound_numer",
                 &DebugAsDisplay(&self.upper_bound_numer),
             )
+            .field("log2_denom", &self.log2_denom)
             .finish()
     }
 }
@@ -899,7 +899,14 @@ mod tests {
 
     #[test]
     fn test_debug() {
-        unimplemented!("add more test cases");
+        assert_eq!(
+            &format!("{:?}", DFI::new(bi(-123), bi(456), 789)),
+            "DyadicFractionInterval { lower_bound_numer: -123, upper_bound_numer: 456, log2_denom: 789 }",
+        );
+        assert_eq!(
+            &format!("{:#?}", DFI::new(bi(-123), bi(456), 789)),
+            "DyadicFractionInterval {\n    lower_bound_numer: -123,\n    upper_bound_numer: 456,\n    log2_denom: 789,\n}",
+        );
     }
 
     #[test]
