@@ -871,7 +871,30 @@ mod tests {
 
     #[test]
     fn test_sqrt() {
-        unimplemented!("add more test cases");
+        assert_same!(
+            DFI::new(bi(0), bi(1), 8).into_sqrt(),
+            DFI::new(bi(0), bi(16), 8)
+        );
+        assert_same!(
+            DFI::new(bi(1), bi(2), 8).into_sqrt(),
+            DFI::new(bi(16), bi(23), 8)
+        );
+        assert_same!(
+            DFI::new(bi(2), bi(3), 8).into_sqrt(),
+            DFI::new(bi(22), bi(28), 8)
+        );
+        assert_same!(
+            DFI::new(bi(3), bi(4), 8).into_sqrt(),
+            DFI::new(bi(27), bi(32), 8)
+        );
+        assert_same!(
+            DFI::new(bi(4), bi(5), 8).into_sqrt(),
+            DFI::new(bi(32), bi(36), 8)
+        );
+        assert_same!(
+            DFI::new(bi(512), bi(512), 8).into_sqrt(),
+            DFI::new(bi(362), bi(363), 8)
+        );
     }
 
     #[test]
