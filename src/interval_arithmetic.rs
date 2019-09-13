@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // See Notices.txt for copyright information
 
+use std::ops::Neg;
 use crate::util::DebugAsDisplay;
 use num_bigint::BigInt;
 use num_bigint::BigUint;
@@ -359,6 +360,21 @@ impl fmt::Display for DyadicFractionInterval {
             "[{} / 2^{}, {} / 2^{}]",
             self.lower_bound_numer, self.log2_denom, self.upper_bound_numer, self.log2_denom
         )
+    }
+}
+
+impl Neg for DyadicFractionInterval {
+    type Output = Self;
+    fn neg(self) -> Self {
+        let Self {lower_bound_numer, upper_bound_numer, log2_denom} = self;
+        Self {lower_bound_numer: -upper_bound_numer, upper_bound_numer: -lower_bound_numer, log2_denom}
+    }
+}
+
+impl Neg for &'_ DyadicFractionInterval {
+    type Output = DyadicFractionInterval;
+    fn neg(self) -> DyadicFractionInterval {
+        -self.clone()
     }
 }
 
@@ -955,8 +971,19 @@ mod tests {
     fn test_add() {
         fn test_case(lhs: DFI, rhs: DFI, expected: DFI) {
             test_op_helper(
-                SameWrapper(lhs),
+                SameWrapper(lhs.clone()),
+                SameWrapper(rhs.clone()),
+                &SameWrapper(expected.clone()),
+                |SameWrapper(a), SameWrapper(b)| a.add_assign(b),
+                |SameWrapper(a), SameWrapper(b)| a.add_assign(b),
+                |SameWrapper(a), SameWrapper(b)| SameWrapper(a.add(b)),
+                |SameWrapper(a), SameWrapper(b)| SameWrapper(a.add(b)),
+                |SameWrapper(a), SameWrapper(b)| SameWrapper(a.add(b)),
+                |SameWrapper(a), SameWrapper(b)| SameWrapper(a.add(b)),
+            );
+            test_op_helper(
                 SameWrapper(rhs),
+                SameWrapper(lhs),
                 &SameWrapper(expected),
                 |SameWrapper(a), SameWrapper(b)| a.add_assign(b),
                 |SameWrapper(a), SameWrapper(b)| a.add_assign(b),
@@ -1056,8 +1083,19 @@ mod tests {
     fn test_sub() {
         fn test_case(lhs: DFI, rhs: DFI, expected: DFI) {
             test_op_helper(
-                SameWrapper(lhs),
-                SameWrapper(rhs),
+                SameWrapper(lhs.clone()),
+                SameWrapper(rhs.clone()),
+                &SameWrapper(expected.clone()),
+                |SameWrapper(a), SameWrapper(b)| a.sub_assign(b),
+                |SameWrapper(a), SameWrapper(b)| a.sub_assign(b),
+                |SameWrapper(a), SameWrapper(b)| SameWrapper(a.sub(b)),
+                |SameWrapper(a), SameWrapper(b)| SameWrapper(a.sub(b)),
+                |SameWrapper(a), SameWrapper(b)| SameWrapper(a.sub(b)),
+                |SameWrapper(a), SameWrapper(b)| SameWrapper(a.sub(b)),
+            );
+            test_op_helper(
+                SameWrapper(-rhs),
+                SameWrapper(-lhs),
                 &SameWrapper(expected),
                 |SameWrapper(a), SameWrapper(b)| a.sub_assign(b),
                 |SameWrapper(a), SameWrapper(b)| a.sub_assign(b),
