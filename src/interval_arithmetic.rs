@@ -718,6 +718,7 @@ impl<E: Unsigned + Integer> Pow<E> for &'_ DyadicFractionInterval {
 mod tests {
     use super::*;
     use crate::util::tests::test_op_helper;
+    use crate::util::tests::test_unary_op_helper;
     use std::borrow::Borrow;
     use std::borrow::BorrowMut;
     use std::ops::Deref;
@@ -1369,16 +1370,108 @@ mod tests {
 
     #[test]
     fn test_div_int() {
-        unimplemented!("add more test cases");
+        fn test_case(lhs: DFI, rhs: BigInt, expected: DFI) {
+            test_op_helper(
+                SameWrapper(lhs),
+                rhs,
+                &SameWrapper(expected),
+                |SameWrapper(a), b| a.div_assign(b),
+                |SameWrapper(a), b| a.div_assign(b),
+                |SameWrapper(a), b| SameWrapper(a.div(b)),
+                |SameWrapper(a), b| SameWrapper(a.div(b)),
+                |SameWrapper(a), b| SameWrapper(a.div(b)),
+                |SameWrapper(a), b| SameWrapper(a.div(b)),
+            );
+        }
+        test_case(
+            DFI::new(bi(35), bi(72), 0),
+            bi(11),
+            DFI::new(bi(3), bi(7), 0),
+        );
+        test_case(
+            DFI::new(bi(35), bi(72), 1),
+            bi(11),
+            DFI::new(bi(3), bi(7), 1),
+        );
+        test_case(
+            DFI::new(bi(35), bi(72), 0),
+            bi(-11),
+            DFI::new(bi(-7), bi(-3), 0),
+        );
+        test_case(
+            DFI::new(bi(35), bi(72), 1),
+            bi(-11),
+            DFI::new(bi(-7), bi(-3), 1),
+        );
+        test_case(
+            DFI::new(bi(35), bi(72), 0),
+            bi(3),
+            DFI::new(bi(11), bi(24), 0),
+        );
+        test_case(
+            DFI::new(bi(35), bi(72), 0),
+            bi(5),
+            DFI::new(bi(7), bi(15), 0),
+        );
     }
 
     #[test]
     fn test_div_ratio() {
-        unimplemented!("add more test cases");
+        fn test_case(lhs: DFI, rhs: Ratio<BigInt>, expected: DFI) {
+            test_op_helper(
+                SameWrapper(lhs),
+                rhs,
+                &SameWrapper(expected),
+                |SameWrapper(a), b| a.div_assign(b),
+                |SameWrapper(a), b| a.div_assign(b),
+                |SameWrapper(a), b| SameWrapper(a.div(b)),
+                |SameWrapper(a), b| SameWrapper(a.div(b)),
+                |SameWrapper(a), b| SameWrapper(a.div(b)),
+                |SameWrapper(a), b| SameWrapper(a.div(b)),
+            );
+        }
+        test_case(
+            DFI::new(bi(3), bi(5), 0),
+            r(7, 23),
+            DFI::new(bi(9), bi(17), 0),
+        );
+        test_case(
+            DFI::new(bi(3), bi(5), 1),
+            r(7, 23),
+            DFI::new(bi(9), bi(17), 1),
+        );
+        test_case(
+            DFI::new(bi(3), bi(5), 0),
+            r(-7, 23),
+            DFI::new(bi(-17), bi(-9), 0),
+        );
+        test_case(
+            DFI::new(bi(3), bi(5), 1),
+            r(-7, 23),
+            DFI::new(bi(-17), bi(-9), 1),
+        );
+        test_case(
+            DFI::new(bi(3), bi(5), 0),
+            r(1, 3),
+            DFI::new(bi(9), bi(15), 0),
+        );
+        test_case(
+            DFI::new(bi(3), bi(5), 0),
+            r(-1, 3),
+            DFI::new(bi(-15), bi(-9), 0),
+        );
     }
 
     #[test]
     fn test_pow() {
+        fn test_case(lhs: DFI, rhs: u64, expected: DFI) {
+            test_unary_op_helper(
+                SameWrapper(lhs),
+                &SameWrapper(expected),
+                |SameWrapper(a)| SameWrapper(a.pow(rhs)),
+                |SameWrapper(a)| SameWrapper(a.pow(rhs)),
+            );
+        }
         unimplemented!("add more test cases");
     }
 }
