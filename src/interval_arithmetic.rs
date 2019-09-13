@@ -655,7 +655,7 @@ impl<E: Unsigned + Integer> Pow<E> for DyadicFractionInterval {
             if upper_bound_numer_is_negative {
                 base_upper_bound_numer = -base_upper_bound_numer;
             }
-            let mut bounds_swapped = base_lower_bound_numer < base_upper_bound_numer;
+            let mut bounds_swapped = base_lower_bound_numer > base_upper_bound_numer;
             if bounds_swapped {
                 mem::swap(&mut base_lower_bound_numer, &mut base_upper_bound_numer);
             }
@@ -685,7 +685,7 @@ impl<E: Unsigned + Integer> Pow<E> for DyadicFractionInterval {
                 base_lower_bound_numer = &base_lower_bound_numer * &base_lower_bound_numer;
                 base_lower_bound_numer >>= log2_denom;
                 base_upper_bound_numer = -&base_upper_bound_numer * &base_upper_bound_numer;
-                base_lower_bound_numer >>= log2_denom;
+                base_upper_bound_numer >>= log2_denom;
                 base_upper_bound_numer = -base_upper_bound_numer;
             }
             retval_upper_bound_numer = -neg_retval_upper_bound_numer;
@@ -1472,6 +1472,81 @@ mod tests {
                 |SameWrapper(a)| SameWrapper(a.pow(rhs)),
             );
         }
-        unimplemented!("add more test cases");
+        test_case(DFI::new(bi(5), bi(7), 0), 0, DFI::new(bi(1), bi(1), 0));
+        test_case(DFI::new(bi(5), bi(7), 0), 1, DFI::new(bi(5), bi(7), 0));
+        test_case(DFI::new(bi(5), bi(7), 0), 2, DFI::new(bi(25), bi(49), 0));
+        test_case(DFI::new(bi(5), bi(7), 0), 3, DFI::new(bi(125), bi(343), 0));
+        test_case(DFI::new(bi(5), bi(7), 0), 4, DFI::new(bi(625), bi(2401), 0));
+        test_case(
+            DFI::new(bi(5), bi(7), 0),
+            5,
+            DFI::new(bi(3125), bi(16807), 0),
+        );
+        test_case(
+            DFI::new(bi(255), bi(257), 8),
+            0,
+            DFI::new(bi(256), bi(256), 8),
+        );
+        test_case(
+            DFI::new(bi(255), bi(257), 8),
+            1,
+            DFI::new(bi(255), bi(257), 8),
+        );
+        test_case(
+            DFI::new(bi(255), bi(257), 8),
+            2,
+            DFI::new(bi(254), bi(259), 8),
+        );
+        test_case(
+            DFI::new(bi(255), bi(257), 8),
+            3,
+            DFI::new(bi(253), bi(261), 8),
+        );
+        test_case(DFI::new(bi(-5), bi(7), 0), 0, DFI::new(bi(1), bi(1), 0));
+        test_case(DFI::new(bi(-5), bi(7), 0), 1, DFI::new(bi(-5), bi(7), 0));
+        test_case(DFI::new(bi(-5), bi(7), 0), 2, DFI::new(bi(0), bi(49), 0));
+        test_case(
+            DFI::new(bi(-5), bi(7), 0),
+            3,
+            DFI::new(bi(-125), bi(343), 0),
+        );
+        test_case(DFI::new(bi(-5), bi(7), 0), 4, DFI::new(bi(0), bi(2401), 0));
+        test_case(
+            DFI::new(bi(-5), bi(7), 0),
+            5,
+            DFI::new(bi(-3125), bi(16807), 0),
+        );
+        test_case(DFI::new(bi(-7), bi(5), 0), 0, DFI::new(bi(1), bi(1), 0));
+        test_case(DFI::new(bi(-7), bi(5), 0), 1, DFI::new(bi(-7), bi(5), 0));
+        test_case(DFI::new(bi(-7), bi(5), 0), 2, DFI::new(bi(0), bi(49), 0));
+        test_case(
+            DFI::new(bi(-7), bi(5), 0),
+            3,
+            DFI::new(bi(-343), bi(125), 0),
+        );
+        test_case(DFI::new(bi(-7), bi(5), 0), 4, DFI::new(bi(0), bi(2401), 0));
+        test_case(
+            DFI::new(bi(-7), bi(5), 0),
+            5,
+            DFI::new(bi(-16807), bi(3125), 0),
+        );
+        test_case(DFI::new(bi(-7), bi(-5), 0), 0, DFI::new(bi(1), bi(1), 0));
+        test_case(DFI::new(bi(-7), bi(-5), 0), 1, DFI::new(bi(-7), bi(-5), 0));
+        test_case(DFI::new(bi(-7), bi(-5), 0), 2, DFI::new(bi(25), bi(49), 0));
+        test_case(
+            DFI::new(bi(-7), bi(-5), 0),
+            3,
+            DFI::new(bi(-343), bi(-125), 0),
+        );
+        test_case(
+            DFI::new(bi(-7), bi(-5), 0),
+            4,
+            DFI::new(bi(625), bi(2401), 0),
+        );
+        test_case(
+            DFI::new(bi(-7), bi(-5), 0),
+            5,
+            DFI::new(bi(-16807), bi(-3125), 0),
+        );
     }
 }
