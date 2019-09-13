@@ -963,11 +963,25 @@ mod tests {
             );
         }
         test_case(
-            DFI::new(bi(0), bi(0), 0),
-            DFI::new(bi(0), bi(0), 0),
-            DFI::new(bi(0), bi(0), 0),
+            DFI::new(bi(3), bi(5), 0),
+            DFI::new(bi(17), bi(97), 0),
+            DFI::new(bi(20), bi(102), 0),
         );
-        unimplemented!("add more test cases");
+        test_case(
+            DFI::new(bi(3), bi(5), 0),
+            DFI::new(bi(17), bi(97), 1),
+            DFI::new(bi(23), bi(107), 1),
+        );
+        test_case(
+            DFI::new(bi(3), bi(5), 1),
+            DFI::new(bi(17), bi(97), 0),
+            DFI::new(bi(37), bi(199), 1),
+        );
+        test_case(
+            DFI::new(bi(3), bi(5), 1),
+            DFI::new(bi(17), bi(97), 1),
+            DFI::new(bi(20), bi(102), 1),
+        );
     }
 
     #[test]
