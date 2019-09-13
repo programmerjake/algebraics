@@ -1091,12 +1091,66 @@ mod tests {
 
     #[test]
     fn test_sub_int() {
-        unimplemented!("add more test cases");
+        fn test_case(lhs: DFI, rhs: BigInt, expected: DFI) {
+            test_op_helper(
+                SameWrapper(lhs),
+                rhs,
+                &SameWrapper(expected),
+                |SameWrapper(a), b| a.sub_assign(b),
+                |SameWrapper(a), b| a.sub_assign(b),
+                |SameWrapper(a), b| SameWrapper(a.sub(b)),
+                |SameWrapper(a), b| SameWrapper(a.sub(b)),
+                |SameWrapper(a), b| SameWrapper(a.sub(b)),
+                |SameWrapper(a), b| SameWrapper(a.sub(b)),
+            );
+        }
+        test_case(
+            DFI::new(bi(3), bi(5), 0),
+            bi(23),
+            DFI::new(bi(-20), bi(-18), 0),
+        );
+        test_case(
+            DFI::new(bi(3), bi(5), 1),
+            bi(23),
+            DFI::new(bi(-43), bi(-41), 1),
+        );
     }
 
     #[test]
     fn test_sub_ratio() {
-        unimplemented!("add more test cases");
+        fn test_case(lhs: DFI, rhs: Ratio<BigInt>, expected: DFI) {
+            test_op_helper(
+                SameWrapper(lhs),
+                rhs,
+                &SameWrapper(expected),
+                |SameWrapper(a), b| a.sub_assign(b),
+                |SameWrapper(a), b| a.sub_assign(b),
+                |SameWrapper(a), b| SameWrapper(a.sub(b)),
+                |SameWrapper(a), b| SameWrapper(a.sub(b)),
+                |SameWrapper(a), b| SameWrapper(a.sub(b)),
+                |SameWrapper(a), b| SameWrapper(a.sub(b)),
+            );
+        }
+        test_case(
+            DFI::new(bi(3), bi(5), 0),
+            r(7, 5),
+            DFI::new(bi(1), bi(4), 0),
+        );
+        test_case(
+            DFI::new(bi(3), bi(5), 0),
+            r(-7, 5),
+            DFI::new(bi(4), bi(7), 0),
+        );
+        test_case(
+            DFI::new(bi(3), bi(5), 8),
+            r(7, 5),
+            DFI::new(bi(-356), bi(-353), 8),
+        );
+        test_case(
+            DFI::new(bi(3), bi(5), 8),
+            r(-7, 5),
+            DFI::new(bi(361), bi(364), 8),
+        );
     }
 
     #[test]
