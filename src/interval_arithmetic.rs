@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // See Notices.txt for copyright information
 
-use std::ops::Neg;
 use crate::util::DebugAsDisplay;
 use num_bigint::BigInt;
 use num_bigint::BigUint;
@@ -21,6 +20,7 @@ use std::ops::Div;
 use std::ops::DivAssign;
 use std::ops::Mul;
 use std::ops::MulAssign;
+use std::ops::Neg;
 use std::ops::Sub;
 use std::ops::SubAssign;
 
@@ -366,8 +366,16 @@ impl fmt::Display for DyadicFractionInterval {
 impl Neg for DyadicFractionInterval {
     type Output = Self;
     fn neg(self) -> Self {
-        let Self {lower_bound_numer, upper_bound_numer, log2_denom} = self;
-        Self {lower_bound_numer: -upper_bound_numer, upper_bound_numer: -lower_bound_numer, log2_denom}
+        let Self {
+            lower_bound_numer,
+            upper_bound_numer,
+            log2_denom,
+        } = self;
+        Self {
+            lower_bound_numer: -upper_bound_numer,
+            upper_bound_numer: -lower_bound_numer,
+            log2_denom,
+        }
     }
 }
 
