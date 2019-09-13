@@ -143,7 +143,7 @@ impl DyadicFractionInterval {
     pub fn to_converted_log2_denom(&self, log2_denom: usize) -> Self {
         self.clone().into_converted_log2_denom(log2_denom)
     }
-    fn do_add_sub_mul_assign<Op: Fn(&mut BigInt, &mut BigInt, &BigInt, &BigInt, usize)>(
+    fn do_op_assign<Op: Fn(&mut BigInt, &mut BigInt, &BigInt, &BigInt, usize)>(
         &mut self,
         rhs: Cow<DyadicFractionInterval>,
         op: Op,
@@ -184,7 +184,7 @@ impl DyadicFractionInterval {
         }
     }
     fn do_add_assign(&mut self, rhs: Cow<DyadicFractionInterval>) {
-        self.do_add_sub_mul_assign(
+        self.do_op_assign(
             rhs,
             |lhs_lower_bound_numer,
              lhs_upper_bound_numer,
@@ -197,7 +197,7 @@ impl DyadicFractionInterval {
         );
     }
     fn do_sub_assign(&mut self, rhs: Cow<DyadicFractionInterval>) {
-        self.do_add_sub_mul_assign(
+        self.do_op_assign(
             rhs,
             |lhs_lower_bound_numer,
              lhs_upper_bound_numer,
@@ -225,7 +225,7 @@ impl DyadicFractionInterval {
         self.upper_bound_numer = (rhs * &self.upper_bound_numer).ceil().to_integer();
     }
     fn do_mul_assign(&mut self, rhs: Cow<DyadicFractionInterval>) {
-        self.do_add_sub_mul_assign(
+        self.do_op_assign(
             rhs,
             |lhs_lower_bound_numer,
              lhs_upper_bound_numer,
@@ -334,6 +334,46 @@ impl DyadicFractionInterval {
     }
     pub fn contains_zero(&self) -> bool {
         !self.lower_bound_numer.is_positive() && !self.upper_bound_numer.is_negative()
+    }
+    fn do_interval_union_assign(&mut self, rhs: Cow<Self>) {
+        self.do_op_assign(
+            rhs,
+            |lhs_lower_bound_numer,
+             lhs_upper_bound_numer,
+             rhs_lower_bound_numer,
+             rhs_upper_bound_numer,
+             _log2_denom| {
+                if *lhs_lower_bound_numer > *rhs_lower_bound_numer {
+                    lhs_lower_bound_numer.clone_from(rhs_lower_bound_numer);
+                }
+                if *lhs_upper_bound_numer < *rhs_upper_bound_numer {
+                    lhs_upper_bound_numer.clone_from(rhs_upper_bound_numer);
+                }
+            },
+        );
+    }
+    pub fn into_arithmetic_geometric_mean(self, rhs: Self) -> Self {
+        assert!(!self.lower_bound_numer.is_negative());
+        assert!(!rhs.lower_bound_numer.is_negative());
+        let mut result = (&self).interval_union(&rhs);
+        let mut result_range = &result.upper_bound_numer - &result.lower_bound_numer;
+        let mut arithmetic_mean = (&self + &rhs) / 2i32;
+        let mut geometric_mean = (self * rhs).into_sqrt();
+        let mut next_result = (&arithmetic_mean).interval_union(&geometric_mean);
+        let mut next_result_range = &next_result.upper_bound_numer - &next_result.lower_bound_numer;
+        while next_result_range < result_range {
+            result = next_result;
+            result_range = next_result_range;
+            let next_arithmetic_mean = (&arithmetic_mean + &geometric_mean) / 2;
+            geometric_mean = (arithmetic_mean * geometric_mean).into_sqrt();
+            arithmetic_mean = next_arithmetic_mean;
+            next_result = (&arithmetic_mean).interval_union(&geometric_mean);
+            next_result_range = &next_result.upper_bound_numer - &next_result.lower_bound_numer;
+        }
+        result
+    }
+    pub fn arithmetic_geometric_mean(&self, rhs: &Self) -> Self {
+        self.clone().into_arithmetic_geometric_mean(rhs.clone())
     }
 }
 
@@ -470,6 +510,35 @@ macro_rules! forward_types_to_bigint {
         forward_type_to_bigint!($op_assign_trait, $op_assign, $op_trait, $op, isize);
     };
 }
+
+pub trait IntervalUnion<Rhs> {
+    type Output;
+    fn interval_union(self, rhs: Rhs) -> Self::Output;
+}
+
+pub trait IntervalUnionAssign<Rhs> {
+    fn interval_union_assign(&mut self, rhs: Rhs);
+}
+
+impl IntervalUnionAssign<DyadicFractionInterval> for DyadicFractionInterval {
+    fn interval_union_assign(&mut self, rhs: DyadicFractionInterval) {
+        self.do_interval_union_assign(Cow::Owned(rhs));
+    }
+}
+
+impl IntervalUnionAssign<&'_ DyadicFractionInterval> for DyadicFractionInterval {
+    fn interval_union_assign(&mut self, rhs: &DyadicFractionInterval) {
+        self.do_interval_union_assign(Cow::Borrowed(rhs));
+    }
+}
+
+forward_op_to_op_assign!(
+    IntervalUnionAssign,
+    interval_union_assign,
+    IntervalUnion,
+    interval_union,
+    DyadicFractionInterval
+);
 
 impl AddAssign<DyadicFractionInterval> for DyadicFractionInterval {
     fn add_assign(&mut self, rhs: DyadicFractionInterval) {
@@ -957,6 +1026,34 @@ mod tests {
     }
 
     #[test]
+    fn test_arithmetic_geometric_mean() {
+        assert_same!(
+            DFI::new(bi(0), bi(1), 8).into_arithmetic_geometric_mean(DFI::new(bi(0), bi(1), 8)),
+            DFI::new(bi(0), bi(1), 8),
+        );
+        assert_same!(
+            DFI::new(bi(256), bi(256), 8).into_arithmetic_geometric_mean(DFI::new(
+                bi(512),
+                bi(512),
+                8
+            )),
+            DFI::new(bi(372), bi(374), 8),
+        );
+        assert_same!(
+            DFI::new(bi(1) << 64, bi(1) << 64, 64).into_arithmetic_geometric_mean(DFI::new(
+                bi(2) << 64,
+                bi(2) << 64,
+                64
+            )),
+            DFI::new(
+                bi(26_873_051_318_597_756_702),
+                bi(26_873_051_318_597_756_707),
+                64
+            ),
+        );
+    }
+
+    #[test]
     fn test_debug() {
         assert_eq!(
             &format!("{:?}", DFI::new(bi(-123), bi(456), 789)),
@@ -973,6 +1070,84 @@ mod tests {
         assert_eq!(
             &format!("{}", DFI::new(bi(-123), bi(456), 789)),
             "[-123 / 2^789, 456 / 2^789]",
+        );
+    }
+
+    #[test]
+    fn test_interval_union() {
+        fn test_case(lhs: DFI, rhs: DFI, expected: DFI) {
+            test_op_helper(
+                SameWrapper(lhs.clone()),
+                SameWrapper(rhs.clone()),
+                &SameWrapper(expected.clone()),
+                |SameWrapper(a), SameWrapper(b)| a.interval_union_assign(b),
+                |SameWrapper(a), SameWrapper(b)| a.interval_union_assign(b),
+                |SameWrapper(a), SameWrapper(b)| SameWrapper(a.interval_union(b)),
+                |SameWrapper(a), SameWrapper(b)| SameWrapper(a.interval_union(b)),
+                |SameWrapper(a), SameWrapper(b)| SameWrapper(a.interval_union(b)),
+                |SameWrapper(a), SameWrapper(b)| SameWrapper(a.interval_union(b)),
+            );
+            test_op_helper(
+                SameWrapper(rhs),
+                SameWrapper(lhs),
+                &SameWrapper(expected),
+                |SameWrapper(a), SameWrapper(b)| a.interval_union_assign(b),
+                |SameWrapper(a), SameWrapper(b)| a.interval_union_assign(b),
+                |SameWrapper(a), SameWrapper(b)| SameWrapper(a.interval_union(b)),
+                |SameWrapper(a), SameWrapper(b)| SameWrapper(a.interval_union(b)),
+                |SameWrapper(a), SameWrapper(b)| SameWrapper(a.interval_union(b)),
+                |SameWrapper(a), SameWrapper(b)| SameWrapper(a.interval_union(b)),
+            );
+        }
+        test_case(
+            DFI::new(bi(3), bi(5), 0),
+            DFI::new(bi(17), bi(97), 0),
+            DFI::new(bi(3), bi(97), 0),
+        );
+        test_case(
+            DFI::new(bi(3), bi(5), 1),
+            DFI::new(bi(17), bi(97), 0),
+            DFI::new(bi(3), bi(194), 1),
+        );
+        test_case(
+            DFI::new(bi(3), bi(5), 0),
+            DFI::new(bi(17), bi(97), 1),
+            DFI::new(bi(6), bi(97), 1),
+        );
+        test_case(
+            DFI::new(bi(3), bi(5), 1),
+            DFI::new(bi(17), bi(97), 1),
+            DFI::new(bi(3), bi(97), 1),
+        );
+        test_case(
+            DFI::new(bi(-3), bi(5), 0),
+            DFI::new(bi(17), bi(97), 0),
+            DFI::new(bi(-3), bi(97), 0),
+        );
+        test_case(
+            DFI::new(bi(-5), bi(3), 0),
+            DFI::new(bi(17), bi(97), 0),
+            DFI::new(bi(-5), bi(97), 0),
+        );
+        test_case(
+            DFI::new(bi(-5), bi(-3), 0),
+            DFI::new(bi(17), bi(97), 0),
+            DFI::new(bi(-5), bi(97), 0),
+        );
+        test_case(
+            DFI::new(bi(3), bi(5), 1),
+            DFI::new(bi(-17), bi(97), 1),
+            DFI::new(bi(-17), bi(97), 1),
+        );
+        test_case(
+            DFI::new(bi(3), bi(5), 1),
+            DFI::new(bi(-97), bi(17), 1),
+            DFI::new(bi(-97), bi(17), 1),
+        );
+        test_case(
+            DFI::new(bi(3), bi(5), 1),
+            DFI::new(bi(-97), bi(-17), 1),
+            DFI::new(bi(-97), bi(5), 1),
         );
     }
 
