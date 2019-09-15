@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // See Notices.txt for copyright information
 
+use crate::traits::FloorLog2;
 use crate::util::DebugAsDisplay;
 use num_bigint::BigInt;
 use num_bigint::BigUint;
@@ -57,7 +58,9 @@ impl ConstantCache {
         }
     }
     fn log2_denom_to_cache_index(log2_denom: usize) -> usize {
-        ((log2_denom as f64 + 1.0).log2() * 4.0).floor() as usize
+        let f = |log2_denom| ((log2_denom as f64 + 1.0).log2() * 3.0).floor() as usize;
+        let min_log2_denom = 32;
+        f(log2_denom.max(min_log2_denom)) - f(min_log2_denom)
     }
     fn get_required_log2_denom_for_cache_index(cache_index: usize) -> usize {
         let mut bit = !(!0usize >> 1); // just top bit set
@@ -108,7 +111,7 @@ impl ConstantCache {
         assert!(computed_result.log2_denom >= log2_denom);
         let retval = Arc::new(computed_result.into_converted_log2_denom(log2_denom));
         new_cache.push(retval.clone());
-        self.write_cache(new_cache);
+        self.write_cache(dbg!(new_cache));
         retval
     }
     fn get<F: Fn(usize) -> DyadicFractionInterval>(
@@ -118,7 +121,7 @@ impl ConstantCache {
     ) -> DyadicFractionInterval {
         let cache_index = Self::log2_denom_to_cache_index(log2_denom);
         match self.read_cache(cache_index) {
-            Ok(entry) => entry,
+            Ok(entry) => dbg!(entry),
             Err(cache) => self.fill_cache(cache, cache_index, compute_fn),
         }
         .to_converted_log2_denom(log2_denom)
@@ -471,14 +474,35 @@ impl DyadicFractionInterval {
         lazy_static! {
             static ref CACHE: ConstantCache = ConstantCache::new();
         }
-        let compute_pi = |log2_denom: usize| -> Self {
+        let compute = |log2_denom: usize| -> Self {
             let log2_denom = log2_denom + 32 + log2_denom / 1000;
             let _ = log2_denom;
             unimplemented!(
                 "finish implementing algorithm to compute pi using arithmetic_geometric_mean"
             );
         };
-        CACHE.get(log2_denom, compute_pi)
+        CACHE.get(log2_denom, compute)
+    }
+    pub fn natural_log_of_2(log2_denom: usize) -> Self {
+        lazy_static! {
+            static ref CACHE: ConstantCache = ConstantCache::new();
+        }
+        let compute = |log2_denom: usize| -> Self {
+            // TODO: switch to faster algorithm
+            // uses series for log(2) == sum(i=1..inf of 1/(i * 2^i))
+            let log2_denom = log2_denom
+                + 10
+                + (log2_denom + 1)
+                    .floor_log2()
+                    .expect("log2_denom + 1 is non-zero");
+            let mut retval = Self::zero(log2_denom);
+            for i in 1..log2_denom {
+                retval +=
+                    Self::from_ratio(Ratio::new(BigInt::one(), BigInt::from(i) << i), log2_denom);
+            }
+            retval
+        };
+        CACHE.get(log2_denom, compute)
     }
     // TODO: implement exp/log in terms of arithmetic_geometric_mean and pi
 }
@@ -1829,5 +1853,27 @@ mod tests {
             5,
             DFI::new(bi(-16807), bi(-3125), 0),
         );
+    }
+
+    #[test]
+    fn test_natural_log_of_2() {
+        for _ in 0..5 {
+            assert_same!(
+                DFI::natural_log_of_2(64),
+                DFI::new(
+                    bi(12_786_308_645_202_655_659),
+                    bi(12_786_308_645_202_655_660),
+                    64
+                )
+            );
+            assert_same!(
+                DFI::natural_log_of_2(128),
+                DFI::new(
+                    BigInt::from(235_865_763_225_513_294_137_944_142_764_154_484_399u128),
+                    BigInt::from(235_865_763_225_513_294_137_944_142_764_154_484_400u128),
+                    128
+                )
+            );
+        }
     }
 }
