@@ -7,6 +7,7 @@ use num_bigint::BigInt;
 use num_bigint::BigUint;
 use num_integer::Integer;
 use num_rational::Ratio;
+use num_traits::FromPrimitive;
 use num_traits::One;
 use num_traits::Pow;
 use num_traits::Signed;
@@ -111,7 +112,7 @@ impl ConstantCache {
         assert!(computed_result.log2_denom >= log2_denom);
         let retval = Arc::new(computed_result.into_converted_log2_denom(log2_denom));
         new_cache.push(retval.clone());
-        self.write_cache(dbg!(new_cache));
+        self.write_cache(new_cache);
         retval
     }
     fn get<F: Fn(usize) -> DyadicFractionInterval>(
@@ -121,7 +122,7 @@ impl ConstantCache {
     ) -> DyadicFractionInterval {
         let cache_index = Self::log2_denom_to_cache_index(log2_denom);
         match self.read_cache(cache_index) {
-            Ok(entry) => dbg!(entry),
+            Ok(entry) => entry,
             Err(cache) => self.fill_cache(cache, cache_index, compute_fn),
         }
         .to_converted_log2_denom(log2_denom)
@@ -172,6 +173,9 @@ impl DyadicFractionInterval {
     }
     pub fn from_int(value: BigInt, log2_denom: usize) -> Self {
         Self::from_dyadic_fraction(value << log2_denom, log2_denom)
+    }
+    pub fn from_int_range(lower_bound: BigInt, upper_bound: BigInt, log2_denom: usize) -> Self {
+        Self::new(lower_bound, upper_bound, 0).into_converted_log2_denom(log2_denom)
     }
     pub fn from_dyadic_fraction(numer: BigInt, log2_denom: usize) -> Self {
         Self {
@@ -500,11 +504,105 @@ impl DyadicFractionInterval {
                 retval +=
                     Self::from_ratio(Ratio::new(BigInt::one(), BigInt::from(i) << i), log2_denom);
             }
+            retval.upper_bound_numer += 1;
             retval
         };
         CACHE.get(log2_denom, compute)
     }
     // TODO: implement exp/log in terms of arithmetic_geometric_mean and pi
+    /// computes `log((self + 1) / (self - 1))` for `self >= 2`
+    fn log_core(&self) -> Self {
+        assert!(self.upper_bound_numer >= self.lower_bound_numer);
+        let working_log2_denom = self.log2_denom
+            + 10
+            + (self.log2_denom + 1)
+                .floor_log2()
+                .expect("log2_denom + 1 is non-zero");
+        let mut retval = Self::zero(working_log2_denom);
+        let scaled_term_numerator = BigInt::from(2) << working_log2_denom;
+        let mut power = self.to_converted_log2_denom(working_log2_denom);
+        assert!(
+            power.lower_bound_numer >= scaled_term_numerator,
+            "input is too small, must be at least 2"
+        );
+        let self_squared = power.square();
+        for i in 0..working_log2_denom {
+            let term_denominator = &power * (i * 2 + 1);
+            let term_lower_bound = Ratio::new(
+                scaled_term_numerator.clone(),
+                term_denominator.upper_bound_numer,
+            );
+            let term_upper_bound = Ratio::new(
+                scaled_term_numerator.clone(),
+                term_denominator.lower_bound_numer,
+            );
+            retval +=
+                Self::from_ratio_range(term_lower_bound, term_upper_bound, working_log2_denom);
+            power *= &self_squared;
+        }
+        retval.upper_bound_numer += 1;
+        retval.into_converted_log2_denom(self.log2_denom)
+    }
+    pub fn log(&self) -> Self {
+        assert!(self.lower_bound_numer.is_positive());
+        assert!(self.upper_bound_numer >= self.lower_bound_numer);
+        let working_log2_denom = self.log2_denom + 16;
+        let i64_self_log2_denom =
+            i64::from_usize(self.log2_denom).expect("self.log2_denom doesn't fit in i64");
+        let mut lower_bound_shift = self
+            .lower_bound_numer
+            .floor_log2()
+            .expect("already checked") as i64
+            - i64_self_log2_denom;
+        let mut upper_bound_shift = self
+            .upper_bound_numer
+            .floor_log2()
+            .expect("already checked") as i64
+            - i64_self_log2_denom;
+        let (self_lower_bound, self_upper_bound) = self.to_ratio_range();
+        let mut shifted_lower_bound = if lower_bound_shift < 0 {
+            self_lower_bound * (BigInt::one() << (-lower_bound_shift) as usize)
+        } else {
+            self_lower_bound / (BigInt::one() << lower_bound_shift as usize)
+        };
+        let mut shifted_upper_bound = if upper_bound_shift < 0 {
+            self_upper_bound * (BigInt::one() << (-upper_bound_shift) as usize)
+        } else {
+            self_upper_bound / (BigInt::one() << upper_bound_shift as usize)
+        };
+        lazy_static! {
+            static ref THREE_OVER_TWO: Ratio<BigInt> = Ratio::new(3.into(), 2.into());
+            static ref TWO: BigInt = 2.into();
+            static ref ONE: BigInt = 1.into();
+        }
+        if shifted_lower_bound < *THREE_OVER_TWO {
+            shifted_lower_bound *= &*TWO;
+            lower_bound_shift -= 1;
+        }
+        if shifted_upper_bound < *THREE_OVER_TWO {
+            shifted_upper_bound *= &*TWO;
+            upper_bound_shift -= 1;
+        }
+        let mut retval = Self::from_int_range(
+            BigInt::from(lower_bound_shift),
+            BigInt::from(upper_bound_shift),
+            working_log2_denom,
+        );
+        retval *= Self::natural_log_of_2(working_log2_denom);
+        retval += Self::from_ratio(
+            (shifted_lower_bound.clone() + &*ONE) / (shifted_lower_bound - &*ONE),
+            working_log2_denom,
+        )
+        .log_core()
+        .interval_union(
+            Self::from_ratio(
+                (shifted_upper_bound.clone() + &*ONE) / (shifted_upper_bound - &*ONE),
+                working_log2_denom,
+            )
+            .log_core(),
+        );
+        retval.into_converted_log2_denom(self.log2_denom)
+    }
 }
 
 impl fmt::Debug for DyadicFractionInterval {
@@ -918,8 +1016,10 @@ mod tests {
     use super::*;
     use crate::util::tests::test_op_helper;
     use crate::util::tests::test_unary_op_helper;
+    use num_traits::ToPrimitive;
     use std::borrow::Borrow;
     use std::borrow::BorrowMut;
+    use std::convert::TryInto;
     use std::ops::Deref;
     use std::ops::DerefMut;
 
@@ -1873,6 +1973,131 @@ mod tests {
                     BigInt::from(235_865_763_225_513_294_137_944_142_764_154_484_400u128),
                     128
                 )
+            );
+        }
+    }
+
+    #[test]
+    fn test_log_core() {
+        assert_same!(
+            DFI::from_ratio(ri(2), 64).log_core(), // calculate log(3)
+            DFI::new(
+                bi(20_265_819_725_292_939_638),
+                bi(20_265_819_725_292_939_639),
+                64
+            )
+        );
+        assert_same!(
+            DFI::from_ratio(ri(2), 128).log_core(), // calculate log(3)
+            DFI::new(
+                "373838389916413667603494184660470824117".parse().unwrap(),
+                "373838389916413667603494184660470824118".parse().unwrap(),
+                128
+            )
+        );
+        assert_same!(
+            DFI::from_ratio(ri(3), 64).log_core(), // calculate log(2)
+            DFI::new(
+                bi(12_786_308_645_202_655_659),
+                bi(12_786_308_645_202_655_660),
+                64
+            )
+        );
+        assert_same!(
+            DFI::from_ratio(ri(3), 128).log_core(), // calculate log(2)
+            DFI::new(
+                BigInt::from(235_865_763_225_513_294_137_944_142_764_154_484_399u128),
+                BigInt::from(235_865_763_225_513_294_137_944_142_764_154_484_400u128),
+                128
+            )
+        );
+        assert_same!(
+            DFI::from_ratio(ri(9), 64).log_core(), // calculate log(5 / 4)
+            DFI::new(
+                bi(4_116_271_982_791_902_040),
+                bi(4_116_271_982_791_902_041),
+                64
+            )
+        );
+        assert_same!(
+            DFI::from_ratio(ri(9), 128).log_core(), // calculate log(5 / 4)
+            DFI::new(
+                BigInt::from(75_931_815_804_343_184_391_506_054_410_983_916_693u128),
+                BigInt::from(75_931_815_804_343_184_391_506_054_410_983_916_694u128),
+                128
+            )
+        );
+        assert_same!(
+            DFI::from_ratio(r(13, 3), 64).log_core(), // calculate log(8 / 5)
+            DFI::new(
+                bi(8_670_036_662_410_753_619),
+                bi(8_670_036_662_410_753_620),
+                64
+            )
+        );
+        assert_same!(
+            DFI::from_ratio(r(13, 3), 80).log_core(), // calculate log(8 / 5)
+            DFI::new(
+                bi(568_199_522_707_751_149_207_091),
+                bi(568_199_522_707_751_149_207_092),
+                80
+            )
+        );
+        assert_same!(
+            DFI::from_ratio(r(13, 3), 128).log_core(), // calculate log(8 / 5)
+            DFI::new(
+                BigInt::from(159_933_947_421_170_109_746_438_088_353_170_567_705u128),
+                BigInt::from(159_933_947_421_170_109_746_438_088_353_170_567_706u128),
+                128
+            )
+        );
+    }
+
+    #[test]
+    fn test_log() {
+        assert_same!(
+            DFI::from_ratio_range(r(4, 5), r(123, 45), 64).log(),
+            DFI::new(
+                bi(-4_116_271_982_791_902_042),
+                bi(18_548_604_515_280_868_688),
+                64
+            )
+        );
+        assert_same!(
+            DFI::from_ratio_range(r(4, 5), r(123, 45), 127).log(),
+            DFI::new(
+                bi(-37_965_907_902_171_592_195_753_027_205_491_958_348),
+                BigInt::from(171_080_680_208_919_797_346_165_683_845_098_625_899u128),
+                127
+            )
+        );
+        assert_same!(
+            DFI::from_ratio(r(12345, 2), 64).log(),
+            DFI::new(
+                bi(161_000_585_365_199_022_398),
+                bi(161_000_585_365_199_022_399),
+                64
+            )
+        );
+        for i in 2..30 {
+            fn do_test(i: usize, input: DFI) {
+                assert!(input.log2_denom < 50);
+                println!("i = {}", i);
+                dbg!(&input);
+                let input_denom = 2.0f64.powi(input.log2_denom.try_into().unwrap());
+                let input_lower_bound = input.lower_bound_numer.to_f64().unwrap() / input_denom;
+                let input_upper_bound = input.upper_bound_numer.to_f64().unwrap() / input_denom;
+                let expected = DFI::from_ratio_range(
+                    Ratio::<BigInt>::from_float(input_lower_bound.ln()).unwrap(),
+                    Ratio::<BigInt>::from_float(input_upper_bound.ln()).unwrap(),
+                    input.log2_denom,
+                );
+                assert_same!(input.log(), expected);
+            }
+            do_test(i, DFI::from_int(BigInt::from(i), 32));
+            do_test(
+                i,
+                DFI::from_ratio(Ratio::new(BigInt::one(), BigInt::from(i)), 32),
             );
         }
     }
