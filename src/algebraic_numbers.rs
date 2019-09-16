@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // See Notices.txt for copyright information
 
+use crate::interval_arithmetic::DyadicFractionInterval;
 use crate::polynomial::Polynomial;
 use crate::traits::AlwaysExactDiv;
 use crate::traits::AlwaysExactDivAssign;
 use crate::traits::ExactDiv;
 use crate::traits::ExactDivAssign;
-use crate::traits::FloorLog2;
 use crate::util::DebugAsDisplay;
 use crate::util::Sign;
 use num_bigint::BigInt;
@@ -23,6 +23,7 @@ use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::error::Error;
 use std::fmt;
+use std::hash;
 use std::mem;
 use std::ops::Add;
 use std::ops::AddAssign;
@@ -38,13 +39,34 @@ use std::ops::RemAssign;
 use std::ops::Sub;
 use std::ops::SubAssign;
 
-#[derive(Clone, Eq, PartialEq, Hash)]
+#[derive(Clone)]
 pub struct RealAlgebraicNumberData {
     pub minimal_polynomial: Polynomial<BigInt>,
-    // FIXME: switch to using DyadicFractionInterval instead of rational bounds
-    pub lower_bound: Ratio<BigInt>,
-    pub upper_bound: Ratio<BigInt>,
+    pub interval: DyadicFractionInterval,
 }
+
+impl hash::Hash for RealAlgebraicNumberData {
+    fn hash<H: hash::Hasher>(&self, state: &mut H) {
+        let Self {
+            minimal_polynomial,
+            interval,
+        } = self;
+        minimal_polynomial.hash(state);
+        interval.hash(state);
+    }
+}
+
+impl PartialEq for RealAlgebraicNumberData {
+    fn eq(&self, rhs: &Self) -> bool {
+        let Self {
+            minimal_polynomial,
+            interval,
+        } = self;
+        *minimal_polynomial == rhs.minimal_polynomial && interval.is_same(&rhs.interval)
+    }
+}
+
+impl Eq for RealAlgebraicNumberData {}
 
 fn debug_real_algebraic_number(
     data: &RealAlgebraicNumberData,
@@ -56,8 +78,7 @@ fn debug_real_algebraic_number(
             "minimal_polynomial",
             &DebugAsDisplay(&data.minimal_polynomial),
         )
-        .field("lower_bound", &DebugAsDisplay(&data.lower_bound))
-        .field("upper_bound", &DebugAsDisplay(&data.upper_bound))
+        .field("interval", &data.interval)
         .finish()
 }
 
@@ -85,8 +106,7 @@ macro_rules! impl_from_int_or_ratio {
                 let value = BigInt::from(value);
                 Self::new_unchecked(
                     [-&value, BigInt::one()].into(),
-                    value.clone().into(),
-                    value.into(),
+                    DyadicFractionInterval::from_int(value, 0),
                 )
             }
         }
@@ -101,7 +121,10 @@ macro_rules! impl_from_int_or_ratio {
                 let denom = BigInt::from(denom);
                 let neg_numer = -&numer;
                 let ratio = Ratio::new_raw(numer, denom.clone());
-                Self::new_unchecked([neg_numer, denom].into(), ratio.clone(), ratio)
+                Self::new_unchecked(
+                    [neg_numer, denom].into(),
+                    DyadicFractionInterval::from_ratio(ratio, 0),
+                )
             }
         }
     };
@@ -185,45 +208,81 @@ fn sign_changes_at(
 }
 
 #[derive(Debug)]
-struct BoundAndSignChanges<'a> {
-    bound: &'a mut Ratio<BigInt>,
-    sign_changes: Option<SignChanges>,
+struct IntervalAndSignChanges<'a> {
+    interval: &'a mut DyadicFractionInterval,
+    lower_bound_sign_changes: Option<SignChanges>,
+    upper_bound_sign_changes: Option<SignChanges>,
 }
 
-impl<'a> BoundAndSignChanges<'a> {
+impl<'a> IntervalAndSignChanges<'a> {
     #[inline]
-    fn new(bound: &'a mut Ratio<BigInt>) -> Self {
+    fn new(interval: &'a mut DyadicFractionInterval) -> Self {
         Self {
-            bound,
-            sign_changes: None,
+            interval,
+            lower_bound_sign_changes: None,
+            upper_bound_sign_changes: None,
         }
     }
-    fn get_sign_changes(&mut self, primitive_sturm_sequence: &[Polynomial<BigInt>]) -> SignChanges {
-        if let Some(sign_changes) = self.sign_changes {
+    fn get_sign_changes_helper<
+        GSC: Fn(&mut Self) -> &mut Option<SignChanges>,
+        GIB: Fn(&DyadicFractionInterval) -> Ratio<BigInt>,
+    >(
+        &mut self,
+        primitive_sturm_sequence: &[Polynomial<BigInt>],
+        get_sign_changes: GSC,
+        get_interval_bound: GIB,
+    ) -> SignChanges {
+        if let Some(sign_changes) = *get_sign_changes(self) {
             sign_changes
         } else {
-            let sign_changes =
-                sign_changes_at(primitive_sturm_sequence, ValueOrInfinity::Value(self.bound));
-            self.sign_changes = Some(sign_changes);
+            let sign_changes = sign_changes_at(
+                primitive_sturm_sequence,
+                ValueOrInfinity::Value(&get_interval_bound(&self.interval)),
+            );
+            *get_sign_changes(self) = Some(sign_changes);
             sign_changes
         }
     }
-    fn set(&mut self, bound: Ratio<BigInt>, sign_changes: SignChanges) {
-        *self.bound = bound;
-        self.sign_changes = Some(sign_changes);
+    fn get_lower_bound_sign_changes(
+        &mut self,
+        primitive_sturm_sequence: &[Polynomial<BigInt>],
+    ) -> SignChanges {
+        self.get_sign_changes_helper(
+            primitive_sturm_sequence,
+            |v| &mut v.lower_bound_sign_changes,
+            DyadicFractionInterval::lower_bound,
+        )
+    }
+    fn get_upper_bound_sign_changes(
+        &mut self,
+        primitive_sturm_sequence: &[Polynomial<BigInt>],
+    ) -> SignChanges {
+        self.get_sign_changes_helper(
+            primitive_sturm_sequence,
+            |v| &mut v.upper_bound_sign_changes,
+            DyadicFractionInterval::upper_bound,
+        )
+    }
+    fn set_lower_bound(&mut self, lower_bound_numer: BigInt, sign_changes: SignChanges) {
+        self.interval.lower_bound_numer = lower_bound_numer;
+        self.lower_bound_sign_changes = Some(sign_changes);
+    }
+    fn set_upper_bound(&mut self, upper_bound_numer: BigInt, sign_changes: SignChanges) {
+        self.interval.upper_bound_numer = upper_bound_numer;
+        self.upper_bound_sign_changes = Some(sign_changes);
     }
 }
 
-impl Deref for BoundAndSignChanges<'_> {
-    type Target = Ratio<BigInt>;
-    fn deref(&self) -> &Ratio<BigInt> {
-        &self.bound
+impl Deref for IntervalAndSignChanges<'_> {
+    type Target = DyadicFractionInterval;
+    fn deref(&self) -> &DyadicFractionInterval {
+        &self.interval
     }
 }
 
-impl DerefMut for BoundAndSignChanges<'_> {
-    fn deref_mut(&mut self) -> &mut Ratio<BigInt> {
-        &mut self.bound
+impl DerefMut for IntervalAndSignChanges<'_> {
+    fn deref_mut(&mut self) -> &mut DyadicFractionInterval {
+        &mut self.interval
     }
 }
 
@@ -236,68 +295,75 @@ fn distance(a: usize, b: usize) -> usize {
 }
 
 #[derive(Debug)]
-struct BoundsShrinker<'a> {
+struct IntervalShrinker<'a> {
     minimal_polynomial: &'a Polynomial<BigInt>,
     primitive_sturm_sequence: Cow<'a, [Polynomial<BigInt>]>,
-    lower_bound: BoundAndSignChanges<'a>,
-    upper_bound: BoundAndSignChanges<'a>,
+    interval: IntervalAndSignChanges<'a>,
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
-enum BoundsShrinkResult {
+enum IntervalShrinkResult {
     Exact,
     Range,
 }
 
-impl<'a> BoundsShrinker<'a> {
+impl<'a> IntervalShrinker<'a> {
     #[inline]
     fn with_primitive_sturm_sequence(
         minimal_polynomial: &'a Polynomial<BigInt>,
         primitive_sturm_sequence: Cow<'a, [Polynomial<BigInt>]>,
-        lower_bound: &'a mut Ratio<BigInt>,
-        upper_bound: &'a mut Ratio<BigInt>,
+        interval: &'a mut DyadicFractionInterval,
     ) -> Self {
-        BoundsShrinker {
+        IntervalShrinker {
             minimal_polynomial,
             primitive_sturm_sequence,
-            lower_bound: BoundAndSignChanges::new(lower_bound),
-            upper_bound: BoundAndSignChanges::new(upper_bound),
+            interval: IntervalAndSignChanges::new(interval),
         }
     }
     fn new(
         minimal_polynomial: &'a Polynomial<BigInt>,
-        lower_bound: &'a mut Ratio<BigInt>,
-        upper_bound: &'a mut Ratio<BigInt>,
+        interval: &'a mut DyadicFractionInterval,
     ) -> Self {
         Self::with_primitive_sturm_sequence(
             minimal_polynomial,
             Cow::Owned(minimal_polynomial.to_primitive_sturm_sequence()),
-            lower_bound,
-            upper_bound,
+            interval,
         )
     }
-    fn shrink(&mut self) -> BoundsShrinkResult {
-        if *self.lower_bound == *self.upper_bound {
-            BoundsShrinkResult::Exact
-        } else if self.minimal_polynomial.degree() == Some(1) {
-            let value = Ratio::new(
-                -self.minimal_polynomial.coefficient(0),
-                self.minimal_polynomial.coefficient(1),
-            );
-            *self.lower_bound = value.clone();
-            *self.upper_bound = value;
-            BoundsShrinkResult::Exact
+    fn shrink(&mut self) -> IntervalShrinkResult {
+        let range_size = &self.interval.upper_bound_numer - &self.interval.lower_bound_numer;
+        assert!(!range_size.is_negative());
+        if range_size.is_zero() {
+            IntervalShrinkResult::Exact
         } else {
             // TODO: also use newton's method
-            let middle = (&*self.lower_bound + &*self.upper_bound) / BigInt::from(2);
+            lazy_static! {
+                static ref RANGE_SIZE_CUTOFF: BigInt = 16.into();
+            }
+            if range_size < *RANGE_SIZE_CUTOFF {
+                let log2_denom = self.interval.log2_denom;
+                self.interval.convert_log2_denom(log2_denom + 1);
+            }
             let lower_bound_sign_changes = self
-                .lower_bound
-                .get_sign_changes(&self.primitive_sturm_sequence);
-            assert!(!lower_bound_sign_changes.is_root);
+                .interval
+                .get_lower_bound_sign_changes(&self.primitive_sturm_sequence);
+            if lower_bound_sign_changes.is_root {
+                self.interval.set_upper_bound(
+                    self.interval.lower_bound_numer.clone(),
+                    lower_bound_sign_changes,
+                );
+                return IntervalShrinkResult::Exact;
+            }
             let upper_bound_sign_changes = self
-                .upper_bound
-                .get_sign_changes(&self.primitive_sturm_sequence);
-            assert!(!upper_bound_sign_changes.is_root);
+                .interval
+                .get_upper_bound_sign_changes(&self.primitive_sturm_sequence);
+            if upper_bound_sign_changes.is_root {
+                self.interval.set_lower_bound(
+                    self.interval.upper_bound_numer.clone(),
+                    upper_bound_sign_changes,
+                );
+                return IntervalShrinkResult::Exact;
+            }
             assert_eq!(
                 distance(
                     lower_bound_sign_changes.sign_change_count,
@@ -305,21 +371,35 @@ impl<'a> BoundsShrinker<'a> {
                 ),
                 1
             );
+            let middle_numer =
+                (&self.interval.lower_bound_numer + &self.interval.upper_bound_numer) / 2i32;
+            let middle = Ratio::new(
+                middle_numer.clone(),
+                BigInt::one() << self.interval.log2_denom,
+            );
             let middle_sign_changes = sign_changes_at(
                 &self.primitive_sturm_sequence,
                 ValueOrInfinity::Value(&middle),
             );
-            assert!(!middle_sign_changes.is_root);
+            if middle_sign_changes.is_root {
+                self.interval
+                    .set_lower_bound(middle_numer.clone(), middle_sign_changes);
+                self.interval
+                    .set_upper_bound(middle_numer, middle_sign_changes);
+                return IntervalShrinkResult::Exact;
+            }
             if middle_sign_changes.sign_change_count == lower_bound_sign_changes.sign_change_count {
-                self.lower_bound.set(middle, middle_sign_changes);
+                self.interval
+                    .set_lower_bound(middle_numer, middle_sign_changes);
             } else {
                 assert_eq!(
                     middle_sign_changes.sign_change_count,
                     upper_bound_sign_changes.sign_change_count
                 );
-                self.upper_bound.set(middle, middle_sign_changes);
+                self.interval
+                    .set_upper_bound(middle_numer, middle_sign_changes);
             }
-            BoundsShrinkResult::Range
+            IntervalShrinkResult::Range
         }
     }
 }
@@ -327,14 +407,12 @@ impl<'a> BoundsShrinker<'a> {
 impl RealAlgebraicNumber {
     pub fn new_unchecked(
         minimal_polynomial: Polynomial<BigInt>,
-        lower_bound: Ratio<BigInt>,
-        upper_bound: Ratio<BigInt>,
+        interval: DyadicFractionInterval,
     ) -> Self {
         Self {
             data: RealAlgebraicNumberData {
                 minimal_polynomial,
-                lower_bound,
-                upper_bound,
+                interval,
             },
         }
     }
@@ -380,33 +458,27 @@ impl RealAlgebraicNumber {
         }
     }
     #[inline]
-    pub fn lower_bound(&self) -> &Ratio<BigInt> {
-        &self.data().lower_bound
+    pub fn interval(&self) -> &DyadicFractionInterval {
+        &self.data().interval
     }
-    #[inline]
-    pub fn upper_bound(&self) -> &Ratio<BigInt> {
-        &self.data().upper_bound
-    }
-    fn bounds_shrinker(&mut self) -> BoundsShrinker {
+    fn interval_shrinker(&mut self) -> IntervalShrinker {
         let RealAlgebraicNumberData {
             minimal_polynomial,
-            lower_bound,
-            upper_bound,
+            interval,
         } = &mut self.data;
-        BoundsShrinker::new(minimal_polynomial, lower_bound, upper_bound)
+        IntervalShrinker::new(minimal_polynomial, interval)
     }
     pub fn into_integer_floor(mut self) -> BigInt {
         if let Some(ratio) = self.to_rational() {
             ratio.floor().to_integer()
         } else {
-            let mut bounds_shrinker = self.bounds_shrinker();
+            let mut interval_shrinker = self.interval_shrinker();
             loop {
-                let lower_bound_floor = bounds_shrinker.lower_bound.floor();
-                let upper_bound_floor = bounds_shrinker.upper_bound.floor();
-                if lower_bound_floor == upper_bound_floor {
-                    return lower_bound_floor.to_integer();
+                let floor_interval = interval_shrinker.interval.floor(0);
+                if floor_interval.lower_bound_numer == floor_interval.upper_bound_numer {
+                    return floor_interval.lower_bound_numer;
                 }
-                bounds_shrinker.shrink();
+                interval_shrinker.shrink();
             }
         }
     }
@@ -428,14 +500,13 @@ impl RealAlgebraicNumber {
         if let Some(ratio) = self.to_rational() {
             ratio.fract().into()
         } else {
-            let mut bounds_shrinker = self.bounds_shrinker();
+            let mut interval_shrinker = self.interval_shrinker();
             loop {
-                let lower_bound_floor = bounds_shrinker.lower_bound.floor();
-                let upper_bound_floor = bounds_shrinker.upper_bound.floor();
-                if lower_bound_floor == upper_bound_floor {
-                    return self - RealAlgebraicNumber::from(lower_bound_floor);
+                let floor_interval = interval_shrinker.interval.floor(0);
+                if floor_interval.lower_bound_numer == floor_interval.upper_bound_numer {
+                    return self - RealAlgebraicNumber::from(floor_interval.lower_bound_numer);
                 }
-                bounds_shrinker.shrink();
+                interval_shrinker.shrink();
             }
         }
     }
@@ -462,9 +533,9 @@ impl RealAlgebraicNumber {
     pub fn cmp_with_zero(&self) -> Ordering {
         if self.is_zero() {
             Ordering::Equal
-        } else if self.lower_bound().is_positive() {
+        } else if self.interval().lower_bound_numer.is_positive() {
             Ordering::Greater
-        } else if self.upper_bound().is_negative() {
+        } else if self.interval().upper_bound_numer.is_negative() {
             Ordering::Less
         } else if let Some(value) = self.to_rational() {
             value.cmp(&Ratio::zero())
@@ -472,12 +543,12 @@ impl RealAlgebraicNumber {
             let primitive_sturm_sequence = self.minimal_polynomial().to_primitive_sturm_sequence();
             let lower_bound_sign_changes = sign_changes_at(
                 &primitive_sturm_sequence,
-                ValueOrInfinity::Value(self.lower_bound()),
+                ValueOrInfinity::Value(&self.interval().lower_bound()),
             );
             assert!(!lower_bound_sign_changes.is_root);
             let upper_bound_sign_changes = sign_changes_at(
                 &primitive_sturm_sequence,
-                ValueOrInfinity::Value(self.upper_bound()),
+                ValueOrInfinity::Value(&self.interval().upper_bound()),
             );
             assert!(!upper_bound_sign_changes.is_root);
             let zero_sign_changes =
@@ -529,31 +600,28 @@ impl RealAlgebraicNumber {
         let mut value = self.clone();
         match sign {
             Sign::Negative => {
-                if value.upper_bound().is_positive() {
-                    value.data.upper_bound.set_zero();
+                if value.interval().upper_bound_numer.is_positive() {
+                    value.data.interval.upper_bound_numer.set_zero();
                 }
             }
             Sign::Positive => {
-                if value.lower_bound().is_negative() {
-                    value.data.lower_bound.set_zero();
+                if value.interval().lower_bound_numer.is_negative() {
+                    value.data.interval.lower_bound_numer.set_zero();
                 }
             }
         }
-        let mut bounds_shrinker = value.bounds_shrinker();
-        while bounds_shrinker.lower_bound.is_zero() || bounds_shrinker.upper_bound.is_zero() {
-            bounds_shrinker.shrink();
+        let mut interval_shrinker = value.interval_shrinker();
+        while interval_shrinker.interval.contains_zero() {
+            interval_shrinker.shrink();
         }
         let RealAlgebraicNumberData {
             minimal_polynomial,
-            lower_bound,
-            upper_bound,
+            interval,
         } = value.into_data();
-        let (lower_bound, upper_bound) = (upper_bound.recip(), lower_bound.recip());
         let minimal_polynomial = minimal_polynomial.into_iter().rev().collect();
         Some(RealAlgebraicNumber::new_unchecked(
             minimal_polynomial,
-            lower_bound,
-            upper_bound,
+            interval.recip(),
         ))
     }
     pub fn recip(&self) -> Self {
@@ -660,51 +728,42 @@ impl RealAlgebraicNumber {
             let resultant = resultant_lhs.resultant(resultant_rhs);
             println!("resultant: {}", resultant);
             struct PowRootSelector<'a> {
-                base: BoundsShrinker<'a>,
+                base: IntervalShrinker<'a>,
                 exponent: Ratio<BigInt>,
                 result_sign: Sign,
             }
             impl RootSelector for PowRootSelector<'_> {
-                fn get_bounds(&self) -> Bounds<Ratio<BigInt>> {
-                    let bounds = if self.base.lower_bound.is_positive() {
-                        let lower_bound = self.base.lower_bound.clone();
-                        let upper_bound = self.base.upper_bound.clone();
-                        Bounds {
-                            lower_bound,
-                            upper_bound,
-                        }
-                    } else if self.base.upper_bound.is_negative() {
-                        let lower_bound = -&*self.base.upper_bound;
-                        let upper_bound = -&*self.base.lower_bound;
-                        Bounds {
-                            lower_bound,
-                            upper_bound,
-                        }
-                    } else {
-                        let lower_bound = Ratio::zero();
-                        let upper_bound =
-                            self.base.lower_bound.abs().max(self.base.upper_bound.abs());
-                        Bounds {
-                            lower_bound,
-                            upper_bound,
-                        }
-                    };
-                    let bounds = pow_bounds(bounds, &self.exponent);
+                fn get_interval(&self) -> DyadicFractionInterval {
+                    let mut interval = self.base.interval.abs();
+                    let lower_bound_is_zero = interval.lower_bound_numer.is_zero();
+                    if interval.upper_bound_numer.is_zero() {
+                        assert!(lower_bound_is_zero);
+                        return interval;
+                    }
+                    if lower_bound_is_zero {
+                        interval
+                            .lower_bound_numer
+                            .clone_from(&interval.upper_bound_numer);
+                    }
+                    interval = interval.log();
+                    interval *= &self.exponent;
+                    unimplemented!("waiting on DyadicFractionInterval::exp()");
+                    // interval = interval.exp();
+                    if lower_bound_is_zero {
+                        interval.lower_bound_numer.set_zero();
+                    }
                     match self.result_sign {
-                        Sign::Positive => bounds,
-                        Sign::Negative => Bounds {
-                            lower_bound: -bounds.upper_bound,
-                            upper_bound: -bounds.lower_bound,
-                        },
+                        Sign::Positive => interval,
+                        Sign::Negative => -interval,
                     }
                 }
-                fn shrink_bounds(&mut self) {
+                fn shrink_interval(&mut self) {
                     self.base.shrink();
                 }
             }
             Some(
                 PowRootSelector {
-                    base: base.bounds_shrinker(),
+                    base: base.interval_shrinker(),
                     exponent: Ratio::new(exponent_numer.into(), exponent_denom.into()),
                     result_sign,
                 }
@@ -720,110 +779,12 @@ impl RealAlgebraicNumber {
     }
 }
 
-#[derive(Clone)]
-struct DyadicFractionBounds {
-    log2_denom: usize,
-    lower_bound_numer: BigInt,
-    upper_bound_numer: BigInt,
-}
-
-impl fmt::Debug for DyadicFractionBounds {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("DyadicFractionBounds")
-            .field("log2_denom", &self.log2_denom)
-            .field(
-                "lower_bound_numer",
-                &DebugAsDisplay(&self.lower_bound_numer),
-            )
-            .field(
-                "upper_bound_numer",
-                &DebugAsDisplay(&self.upper_bound_numer),
-            )
-            .finish()
-    }
-}
-
-impl From<Bounds<Ratio<BigInt>>> for DyadicFractionBounds {
-    fn from(bounds: Bounds<Ratio<BigInt>>) -> Self {
-        let (mut lower_bound_numer, lower_bound_denom) = bounds.lower_bound.into();
-        let (mut upper_bound_numer, upper_bound_denom) = bounds.upper_bound.into();
-        let log2_denom = lower_bound_denom.bits().max(upper_bound_denom.bits());
-        lower_bound_numer <<= log2_denom;
-        upper_bound_numer <<= log2_denom;
-        let lower_bound_numer = Ratio::new(lower_bound_numer, lower_bound_denom)
-            .floor()
-            .to_integer();
-        let upper_bound_numer = Ratio::new(upper_bound_numer, upper_bound_denom)
-            .ceil()
-            .to_integer();
-        Self {
-            log2_denom,
-            lower_bound_numer,
-            upper_bound_numer,
-        }
-    }
-}
-
-impl From<DyadicFractionBounds> for Bounds<Ratio<BigInt>> {
-    fn from(bounds: DyadicFractionBounds) -> Self {
-        let denom = BigInt::one() << bounds.log2_denom;
-        Bounds {
-            lower_bound: Ratio::new(bounds.lower_bound_numer, denom.clone()),
-            upper_bound: Ratio::new(bounds.upper_bound_numer, denom),
-        }
-    }
-}
-
-fn log2_bounds(bounds: Bounds<Ratio<BigInt>>) -> Bounds<Ratio<BigInt>> {
-    println!("log2_bounds:");
-    dbg!(&bounds);
-    assert!(bounds.lower_bound.is_positive());
-    assert!(bounds.lower_bound <= bounds.upper_bound);
-    let bounds = DyadicFractionBounds::from(bounds);
-    dbg!(&bounds);
-    // FIXME: handle lower_bound rounding to zero
-    // FIXME: handle passing in a precision to handle lower_bound == upper_bound
-    let lower_bound_numer_floor_log2 = bounds.lower_bound_numer.floor_log2();
-    let upper_bound_numer_floor_log2 = bounds.upper_bound_numer.floor_log2();
-
-    unimplemented!();
-}
-
-fn exp2_bounds(bounds: Bounds<Ratio<BigInt>>) -> Bounds<Ratio<BigInt>> {
-    assert!(bounds.lower_bound <= bounds.upper_bound);
-    unimplemented!();
-}
-
-fn pow_bounds(
-    mut bounds: Bounds<Ratio<BigInt>>,
-    exponent: &Ratio<BigInt>,
-) -> Bounds<Ratio<BigInt>> {
-    assert!(!bounds.lower_bound.is_negative());
-    assert!(exponent.is_positive());
-    let lower_bound_is_zero = bounds.lower_bound.is_zero();
-    if lower_bound_is_zero {
-        if bounds.upper_bound.is_zero() {
-            return bounds;
-        }
-        bounds.lower_bound = &bounds.upper_bound / BigInt::from(2);
-    }
-    bounds = log2_bounds(bounds);
-    bounds.lower_bound *= exponent;
-    bounds.upper_bound *= exponent;
-    bounds = exp2_bounds(bounds);
-    if lower_bound_is_zero {
-        bounds.lower_bound.set_zero();
-    }
-    bounds
-}
-
 fn neg(value: Cow<RealAlgebraicNumber>) -> RealAlgebraicNumber {
     let degree_is_odd = value.degree().is_odd();
     fn do_neg<I: Iterator<Item = BigInt>>(
         iter: I,
         degree_is_odd: bool,
-        neg_lower_bound: Ratio<BigInt>,
-        neg_upper_bound: Ratio<BigInt>,
+        negated_interval: DyadicFractionInterval,
     ) -> RealAlgebraicNumber {
         let minimal_polynomial = iter
             .enumerate()
@@ -835,32 +796,21 @@ fn neg(value: Cow<RealAlgebraicNumber>) -> RealAlgebraicNumber {
                 }
             })
             .collect();
-
-        // swap negated bounds
-        let lower_bound = neg_upper_bound;
-        let upper_bound = neg_lower_bound;
-        RealAlgebraicNumber::new_unchecked(minimal_polynomial, lower_bound, upper_bound)
+        RealAlgebraicNumber::new_unchecked(minimal_polynomial, negated_interval)
     }
     match value {
         Cow::Borrowed(value) => do_neg(
             value.minimal_polynomial().iter(),
             degree_is_odd,
-            -value.lower_bound(),
-            -value.upper_bound(),
+            -value.interval(),
         ),
         Cow::Owned(RealAlgebraicNumber {
             data:
                 RealAlgebraicNumberData {
                     minimal_polynomial,
-                    lower_bound,
-                    upper_bound,
+                    interval,
                 },
-        }) => do_neg(
-            minimal_polynomial.into_iter(),
-            degree_is_odd,
-            -lower_bound,
-            -upper_bound,
-        ),
+        }) => do_neg(minimal_polynomial.into_iter(), degree_is_odd, -interval),
     }
 }
 
@@ -950,24 +900,9 @@ impl fmt::Debug for ResultFactor {
     }
 }
 
-#[derive(Copy, Clone, PartialEq)]
-struct Bounds<T> {
-    lower_bound: T,
-    upper_bound: T,
-}
-
-impl<T: fmt::Display> fmt::Debug for Bounds<T> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("Bounds")
-            .field("lower_bound", &DebugAsDisplay(&self.lower_bound))
-            .field("upper_bound", &DebugAsDisplay(&self.upper_bound))
-            .finish()
-    }
-}
-
 trait RootSelector: Sized {
-    fn get_bounds(&self) -> Bounds<Ratio<BigInt>>;
-    fn shrink_bounds(&mut self);
+    fn get_interval(&self) -> DyadicFractionInterval;
+    fn shrink_interval(&mut self);
     fn select_root(mut self, polynomial: Polynomial<BigInt>) -> RealAlgebraicNumber {
         let mut factors: Vec<ResultFactor> = polynomial
             .factor()
@@ -980,10 +915,8 @@ trait RootSelector: Sized {
         println!("factors: {:?}", factors);
         let mut factors_temp = Vec::with_capacity(factors.len());
         loop {
-            let Bounds {
-                lower_bound,
-                upper_bound,
-            } = self.get_bounds();
+            let interval = self.get_interval();
+            let (lower_bound, upper_bound) = interval.to_ratio_range();
             println!("lower_bound: {}", lower_bound);
             println!("upper_bound: {}", upper_bound);
             mem::swap(&mut factors, &mut factors_temp);
@@ -1024,11 +957,10 @@ trait RootSelector: Sized {
             if roots_left <= 1 {
                 break RealAlgebraicNumber::new_unchecked(
                     factors.remove(0).into_factor(),
-                    lower_bound,
-                    upper_bound,
+                    interval,
                 );
             }
-            self.shrink_bounds();
+            self.shrink_interval();
         }
     }
 }
@@ -1060,31 +992,24 @@ impl AddAssign for RealAlgebraicNumber {
             .eval_generic(eval_point, EvalPoint::zero())
             .0;
         let resultant = resultant_lhs.resultant(resultant_rhs);
-        struct AddRootShrinker<'a> {
-            lhs_bounds_shrinker: BoundsShrinker<'a>,
-            rhs_bounds_shrinker: BoundsShrinker<'a>,
+        struct AddRootSelector<'a> {
+            lhs_interval_shrinker: IntervalShrinker<'a>,
+            rhs_interval_shrinker: IntervalShrinker<'a>,
         }
-        impl RootSelector for AddRootShrinker<'_> {
-            fn get_bounds(&self) -> Bounds<Ratio<BigInt>> {
-                let lower_bound =
-                    &*self.lhs_bounds_shrinker.lower_bound + &*self.rhs_bounds_shrinker.lower_bound;
-                let upper_bound =
-                    &*self.lhs_bounds_shrinker.upper_bound + &*self.rhs_bounds_shrinker.upper_bound;
-                Bounds {
-                    lower_bound,
-                    upper_bound,
-                }
+        impl RootSelector for AddRootSelector<'_> {
+            fn get_interval(&self) -> DyadicFractionInterval {
+                &*self.lhs_interval_shrinker.interval + &*self.rhs_interval_shrinker.interval
             }
-            fn shrink_bounds(&mut self) {
-                self.lhs_bounds_shrinker.shrink();
-                self.rhs_bounds_shrinker.shrink();
+            fn shrink_interval(&mut self) {
+                self.lhs_interval_shrinker.shrink();
+                self.rhs_interval_shrinker.shrink();
             }
         }
-        let lhs_bounds_shrinker = self.bounds_shrinker();
-        let rhs_bounds_shrinker = rhs.bounds_shrinker();
-        *self = AddRootShrinker {
-            lhs_bounds_shrinker,
-            rhs_bounds_shrinker,
+        let lhs_interval_shrinker = self.interval_shrinker();
+        let rhs_interval_shrinker = rhs.interval_shrinker();
+        *self = AddRootSelector {
+            lhs_interval_shrinker,
+            rhs_interval_shrinker,
         }
         .select_root(resultant);
     }
@@ -1311,36 +1236,24 @@ impl MulAssign for RealAlgebraicNumber {
         println!("resultant_rhs: {}", resultant_rhs);
         let resultant = resultant_lhs.resultant(resultant_rhs);
         println!("resultant: {}", resultant);
-        struct MulRootShrinker<'a> {
-            lhs_bounds_shrinker: BoundsShrinker<'a>,
-            rhs_bounds_shrinker: BoundsShrinker<'a>,
+        struct MulRootSelector<'a> {
+            lhs_interval_shrinker: IntervalShrinker<'a>,
+            rhs_interval_shrinker: IntervalShrinker<'a>,
         }
-        impl RootSelector for MulRootShrinker<'_> {
-            fn get_bounds(&self) -> Bounds<Ratio<BigInt>> {
-                let mut bounds = [
-                    &*self.lhs_bounds_shrinker.lower_bound * &*self.rhs_bounds_shrinker.lower_bound,
-                    &*self.lhs_bounds_shrinker.lower_bound * &*self.rhs_bounds_shrinker.upper_bound,
-                    &*self.lhs_bounds_shrinker.upper_bound * &*self.rhs_bounds_shrinker.lower_bound,
-                    &*self.lhs_bounds_shrinker.upper_bound * &*self.rhs_bounds_shrinker.upper_bound,
-                ];
-                bounds.sort_unstable();
-                let [lower_bound, _, _, upper_bound] = bounds;
-                assert!(lower_bound <= upper_bound);
-                Bounds {
-                    lower_bound,
-                    upper_bound,
-                }
+        impl RootSelector for MulRootSelector<'_> {
+            fn get_interval(&self) -> DyadicFractionInterval {
+                &*self.lhs_interval_shrinker.interval * &*self.rhs_interval_shrinker.interval
             }
-            fn shrink_bounds(&mut self) {
-                self.lhs_bounds_shrinker.shrink();
-                self.rhs_bounds_shrinker.shrink();
+            fn shrink_interval(&mut self) {
+                self.lhs_interval_shrinker.shrink();
+                self.rhs_interval_shrinker.shrink();
             }
         }
-        let lhs_bounds_shrinker = self.bounds_shrinker();
-        let rhs_bounds_shrinker = rhs.bounds_shrinker();
-        *self = MulRootShrinker {
-            lhs_bounds_shrinker,
-            rhs_bounds_shrinker,
+        let lhs_interval_shrinker = self.interval_shrinker();
+        let rhs_interval_shrinker = rhs.interval_shrinker();
+        *self = MulRootSelector {
+            lhs_interval_shrinker,
+            rhs_interval_shrinker,
         }
         .select_root(resultant);
     }
@@ -1543,50 +1456,42 @@ mod tests {
         Ratio::from(BigInt::from(v))
     }
 
+    fn bi(v: i128) -> BigInt {
+        BigInt::from(v)
+    }
+
     fn p(poly: &[i128]) -> Polynomial<BigInt> {
         poly.iter().copied().map(BigInt::from).collect()
     }
 
-    fn make_sqrt(
-        v: i128,
-        lower_bound: Ratio<BigInt>,
-        upper_bound: Ratio<BigInt>,
-    ) -> RealAlgebraicNumber {
+    fn make_sqrt(v: i128, interval: DyadicFractionInterval) -> RealAlgebraicNumber {
         let sqrt = v.sqrt();
         assert_ne!(
             sqrt * sqrt,
             v,
             "make_sqrt doesn't work with perfect squares"
         );
-        RealAlgebraicNumber::new_unchecked(p(&[-v, 0, 1]), lower_bound, upper_bound)
+        RealAlgebraicNumber::new_unchecked(p(&[-v, 0, 1]), interval)
     }
 
     #[test]
     fn test_debug() {
-        fn test_case(
-            poly: Polynomial<BigInt>,
-            lower_bound: Ratio<BigInt>,
-            upper_bound: Ratio<BigInt>,
-            expected: &str,
-        ) {
-            let real_algebraic_number =
-                RealAlgebraicNumber::new_unchecked(poly, lower_bound, upper_bound);
+        fn test_case(poly: Polynomial<BigInt>, interval: DyadicFractionInterval, expected: &str) {
+            let real_algebraic_number = RealAlgebraicNumber::new_unchecked(poly, interval);
             let string = format!("{:?}", real_algebraic_number);
             assert_eq!(&string, expected);
         }
 
         test_case(
             p(&[0, 1]),
-            ri(0),
-            ri(0),
-            "RealAlgebraicNumber { minimal_polynomial: 0 + 1*X, lower_bound: 0, upper_bound: 0 }",
+            DyadicFractionInterval::from_int(bi(0), 0),
+            "RealAlgebraicNumber { minimal_polynomial: 0 + 1*X, interval: DyadicFractionInterval { lower_bound_numer: 0, upper_bound_numer: 0, log2_denom: 0 } }",
         );
 
         test_case(
             p(&[-2, 0, 1]),
-            ri(1),
-            ri(2),
-            "RealAlgebraicNumber { minimal_polynomial: -2 + 0*X + 1*X^2, lower_bound: 1, upper_bound: 2 }",
+            DyadicFractionInterval::from_int_range(bi(1), bi(2), 0),
+            "RealAlgebraicNumber { minimal_polynomial: -2 + 0*X + 1*X^2, interval: DyadicFractionInterval { lower_bound_numer: 1, upper_bound_numer: 2, log2_denom: 0 } }",
         );
 
         test_case(
@@ -1609,8 +1514,7 @@ mod tests {
                 -96,
                 1,
             ]),
-            r(22_46827, 100_000),
-            r(22_4683, 10_000),
+            DyadicFractionInterval::from_ratio_range(r(22_46827, 100_000), r(22_4683, 10_000), 32),
             "RealAlgebraicNumber { minimal_polynomial: 10788246961 \
              + 1545510240*X \
              + -29925033224*X^2 \
@@ -1628,8 +1532,10 @@ mod tests {
              + 3928*X^14 \
              + -96*X^15 \
              + 1*X^16, \
-             lower_bound: 2246827/100000, \
-             upper_bound: 224683/10000 }",
+             interval: DyadicFractionInterval { \
+             lower_bound_numer: 96500484847, \
+             upper_bound_numer: 96500613697, \
+             log2_denom: 32 } }",
         );
     }
 
@@ -1642,11 +1548,13 @@ mod tests {
             assert_eq!(real_algebraic_number.neg().into_data(), expected);
         }
         test_case(
-            RealAlgebraicNumber::new_unchecked(p(&[-1, -2, 1]), ri(2), ri(3)),
+            RealAlgebraicNumber::new_unchecked(
+                p(&[-1, -2, 1]),
+                DyadicFractionInterval::from_int_range(bi(2), bi(3), 0),
+            ),
             RealAlgebraicNumberData {
                 minimal_polynomial: p(&[-1, 2, 1]),
-                lower_bound: ri(-3),
-                upper_bound: ri(-2),
+                interval: DyadicFractionInterval::from_int_range(bi(-3), bi(-2), 0),
             },
         );
         test_case(
@@ -1674,15 +1582,24 @@ mod tests {
         test_case(-1, Ordering::Less);
         test_case(r(-1, 12), Ordering::Less);
         test_case(
-            RealAlgebraicNumber::new_unchecked(p(&[1, 1]), ri(-1000), ri(1000)),
+            RealAlgebraicNumber::new_unchecked(
+                p(&[1, 1]),
+                DyadicFractionInterval::from_int_range(bi(-1000), bi(1000), 0),
+            ),
             Ordering::Less,
         );
         test_case(
-            RealAlgebraicNumber::new_unchecked(p(&[-1, 1, 1]), ri(-1), ri(1000)),
+            RealAlgebraicNumber::new_unchecked(
+                p(&[-1, 1, 1]),
+                DyadicFractionInterval::from_int_range(bi(-1), bi(1000), 0),
+            ),
             Ordering::Greater,
         );
         test_case(
-            RealAlgebraicNumber::new_unchecked(p(&[-3, 1, 1]), ri(-1000), ri(1)),
+            RealAlgebraicNumber::new_unchecked(
+                p(&[-3, 1, 1]),
+                DyadicFractionInterval::from_int_range(bi(-1000), bi(1), 0),
+            ),
             Ordering::Less,
         );
     }
@@ -1718,20 +1635,29 @@ mod tests {
         }
         test_case(1, 2, 1 + 2);
         test_case(
-            make_sqrt(2, ri(1), ri(2)),
-            make_sqrt(2, ri(1), ri(2)),
-            make_sqrt(8, ri(1), ri(3)),
+            make_sqrt(2, DyadicFractionInterval::from_int_range(bi(1), bi(2), 0)),
+            make_sqrt(2, DyadicFractionInterval::from_int_range(bi(1), bi(2), 0)),
+            make_sqrt(8, DyadicFractionInterval::from_int_range(bi(1), bi(3), 0)),
         );
         test_case(
-            make_sqrt(2, ri(1), ri(2)),
-            make_sqrt(3, ri(1), ri(2)),
-            RealAlgebraicNumber::new_unchecked(p(&[1, 0, -10, 0, 1]), ri(3), ri(4)),
+            make_sqrt(2, DyadicFractionInterval::from_int_range(bi(1), bi(2), 0)),
+            make_sqrt(3, DyadicFractionInterval::from_int_range(bi(1), bi(2), 0)),
+            RealAlgebraicNumber::new_unchecked(
+                p(&[1, 0, -10, 0, 1]),
+                DyadicFractionInterval::from_int_range(bi(3), bi(4), 0),
+            ),
         );
         test_case(
             // sqrt(5) - sqrt(3) + 1
-            RealAlgebraicNumber::new_unchecked(p(&[-11, 28, -10, -4, 1]), ri(1), ri(2)),
+            RealAlgebraicNumber::new_unchecked(
+                p(&[-11, 28, -10, -4, 1]),
+                DyadicFractionInterval::from_int_range(bi(1), bi(2), 0),
+            ),
             // sqrt(3) - sqrt(5) + 1 / 2
-            RealAlgebraicNumber::new_unchecked(p(&[1, 248, -232, -32, 16]), ri(-1), ri(0)),
+            RealAlgebraicNumber::new_unchecked(
+                p(&[1, 248, -232, -32, 16]),
+                DyadicFractionInterval::from_int_range(bi(-1), bi(0), 0),
+            ),
             r(3, 2),
         );
     }
@@ -1767,14 +1693,17 @@ mod tests {
         }
         test_case(1, 2, 1 - 2);
         test_case(
-            make_sqrt(2, ri(1), ri(2)),
-            make_sqrt(2, ri(-2), ri(-1)),
-            make_sqrt(8, ri(1), ri(3)),
+            make_sqrt(2, DyadicFractionInterval::from_int_range(bi(1), bi(2), 0)),
+            make_sqrt(2, DyadicFractionInterval::from_int_range(bi(-2), bi(-1), 0)),
+            make_sqrt(8, DyadicFractionInterval::from_int_range(bi(1), bi(3), 0)),
         );
         test_case(
-            make_sqrt(2, ri(1), ri(2)),
-            make_sqrt(3, ri(1), ri(2)),
-            RealAlgebraicNumber::new_unchecked(p(&[1, 0, -10, 0, 1]), ri(-1), ri(0)),
+            make_sqrt(2, DyadicFractionInterval::from_int_range(bi(1), bi(2), 0)),
+            make_sqrt(3, DyadicFractionInterval::from_int_range(bi(1), bi(2), 0)),
+            RealAlgebraicNumber::new_unchecked(
+                p(&[1, 0, -10, 0, 1]),
+                DyadicFractionInterval::from_int_range(bi(-1), bi(0), 0),
+            ),
         );
     }
 
@@ -1802,20 +1731,40 @@ mod tests {
         test_case(r(6, 5), 1, 2);
         test_case(r(4, 5), 0, 1);
         test_case(r(-1, 5), -1, 0);
-        test_case(make_sqrt(2, ri(1), ri(2)), 1, 2);
-        test_case(make_sqrt(2_000_000, ri(1000), ri(2000)), 1_414, 1_415);
         test_case(
-            make_sqrt(5_00000_00000, ri(1_00000), ri(3_00000)),
+            make_sqrt(2, DyadicFractionInterval::from_int_range(bi(1), bi(2), 0)),
+            1,
+            2,
+        );
+        test_case(
+            make_sqrt(
+                2_000_000,
+                DyadicFractionInterval::from_int_range(bi(1000), bi(2000), 0),
+            ),
+            1_414,
+            1_415,
+        );
+        test_case(
+            make_sqrt(
+                5_00000_00000,
+                DyadicFractionInterval::from_int_range(bi(1_00000), bi(3_00000), 0),
+            ),
             2_23606,
             2_23607,
         );
         test_case(
-            RealAlgebraicNumber::new_unchecked(p(&[1, 0, -10, 0, 1]), ri(-1), ri(0)),
+            RealAlgebraicNumber::new_unchecked(
+                p(&[1, 0, -10, 0, 1]),
+                DyadicFractionInterval::from_int_range(bi(-1), bi(0), 0),
+            ),
             -1,
             0,
         );
         test_case(
-            RealAlgebraicNumber::new_unchecked(p(&[1, 3, 2, 1]), ri(-1000), ri(1000)),
+            RealAlgebraicNumber::new_unchecked(
+                p(&[1, 3, 2, 1]),
+                DyadicFractionInterval::from_int_range(bi(-1000), bi(1000), 0),
+            ),
             -1,
             0,
         );
@@ -1851,14 +1800,26 @@ mod tests {
             );
         }
         test_case(1, 0, 0);
-        test_case(make_sqrt(2, ri(1), ri(2)), 0, 0);
-        test_case(0, make_sqrt(2, ri(1), ri(2)), 0);
-        test_case(1, 2, 2);
-        test_case(make_sqrt(2, ri(1), ri(2)), make_sqrt(2, ri(-2), ri(-1)), -2);
         test_case(
-            make_sqrt(2, ri(1), ri(2)),
-            make_sqrt(3, ri(1), ri(2)),
-            make_sqrt(6, ri(1), ri(10)),
+            make_sqrt(2, DyadicFractionInterval::from_int_range(bi(1), bi(2), 0)),
+            0,
+            0,
+        );
+        test_case(
+            0,
+            make_sqrt(2, DyadicFractionInterval::from_int_range(bi(1), bi(2), 0)),
+            0,
+        );
+        test_case(1, 2, 2);
+        test_case(
+            make_sqrt(2, DyadicFractionInterval::from_int_range(bi(1), bi(2), 0)),
+            make_sqrt(2, DyadicFractionInterval::from_int_range(bi(-2), bi(-1), 0)),
+            -2,
+        );
+        test_case(
+            make_sqrt(2, DyadicFractionInterval::from_int_range(bi(1), bi(2), 0)),
+            make_sqrt(3, DyadicFractionInterval::from_int_range(bi(1), bi(2), 0)),
+            make_sqrt(6, DyadicFractionInterval::from_int_range(bi(1), bi(10), 0)),
         );
     }
 
@@ -1887,67 +1848,30 @@ mod tests {
             );
         }
         test_case(1, 0, None);
-        test_case(make_sqrt(2, ri(1), ri(2)), 0, None);
-        test_case(0, make_sqrt(2, ri(1), ri(2)), Some(0.into()));
+        test_case(
+            make_sqrt(2, DyadicFractionInterval::from_int_range(bi(1), bi(2), 0)),
+            0,
+            None,
+        );
+        test_case(
+            0,
+            make_sqrt(2, DyadicFractionInterval::from_int_range(bi(1), bi(2), 0)),
+            Some(0.into()),
+        );
         test_case(1, 2, Some(r(1, 2).into()));
         test_case(
-            make_sqrt(2, ri(1), ri(2)),
-            make_sqrt(2, ri(-2), ri(-1)),
+            make_sqrt(2, DyadicFractionInterval::from_int_range(bi(1), bi(2), 0)),
+            make_sqrt(2, DyadicFractionInterval::from_int_range(bi(-2), bi(-1), 0)),
             Some((-1).into()),
         );
         test_case(
-            make_sqrt(2, ri(1), ri(2)),
-            make_sqrt(3, ri(1), ri(2)),
+            make_sqrt(2, DyadicFractionInterval::from_int_range(bi(1), bi(2), 0)),
+            make_sqrt(3, DyadicFractionInterval::from_int_range(bi(1), bi(2), 0)),
             Some(RealAlgebraicNumber::new_unchecked(
                 p(&[-2, 0, 3]),
-                ri(0),
-                ri(1),
+                DyadicFractionInterval::from_int_range(bi(0), bi(1), 0),
             )),
         );
-    }
-
-    #[test]
-    fn test_log2_bounds() {
-        fn test_case(input: Bounds<Ratio<BigInt>>, expected: Bounds<Ratio<BigInt>>) {
-            println!("input: {:?}", input);
-            println!("expected: {:?}", expected);
-            let result = log2_bounds(input);
-            println!("result: {:?}", result);
-            assert!(expected == result);
-        }
-        test_case(
-            Bounds {
-                lower_bound: ri(1),
-                upper_bound: ri(1),
-            },
-            Bounds {
-                lower_bound: ri(0),
-                upper_bound: ri(0),
-            },
-        );
-        unimplemented!("add more test cases");
-    }
-
-    #[test]
-    fn test_exp2_bounds() {
-        fn test_case(input: Bounds<Ratio<BigInt>>, expected: Bounds<Ratio<BigInt>>) {
-            println!("input: {:?}", input);
-            println!("expected: {:?}", expected);
-            let result = exp2_bounds(input);
-            println!("result: {:?}", result);
-            assert!(expected == result);
-        }
-        test_case(
-            Bounds {
-                lower_bound: ri(0),
-                upper_bound: ri(0),
-            },
-            Bounds {
-                lower_bound: ri(1),
-                upper_bound: ri(1),
-            },
-        );
-        unimplemented!("add more test cases");
     }
 
     #[test]
@@ -1968,12 +1892,19 @@ mod tests {
         }
         test_case(0, ri(0), None);
         test_case(1, ri(0), Some(1.into()));
-        test_case(make_sqrt(2, ri(1), ri(2)), ri(0), Some(1.into()));
+        test_case(
+            make_sqrt(2, DyadicFractionInterval::from_int_range(bi(1), bi(2), 0)),
+            ri(0),
+            Some(1.into()),
+        );
         test_case(r(2, 3), ri(1), Some(r(2, 3).into()));
         test_case(
-            make_sqrt(2, ri(1), ri(2)),
+            make_sqrt(2, DyadicFractionInterval::from_int_range(bi(1), bi(2), 0)),
             ri(1),
-            Some(make_sqrt(2, ri(1), ri(2))),
+            Some(make_sqrt(
+                2,
+                DyadicFractionInterval::from_int_range(bi(1), bi(2), 0),
+            )),
         );
         test_case(r(2, 3), ri(-1), Some(r(3, 2).into()));
         test_case(r(-2, 3), ri(-1), Some(r(-3, 2).into()));
@@ -1990,9 +1921,21 @@ mod tests {
         test_case(-2, ri(3), Some((-8).into()));
         test_case(r(-2, 3), ri(3), Some(r(-8, 27).into()));
         test_case(r(-2, 3), ri(-3), Some(r(-27, 8).into()));
-        test_case(make_sqrt(8, ri(2), ri(3)), r(-2, 3), Some(r(1, 2).into()));
-        test_case(make_sqrt(2, ri(1), ri(2)), ri(2), Some(2.into()));
-        test_case(make_sqrt(2, ri(1), ri(2)), ri(-2), Some(r(1, 2).into()));
+        test_case(
+            make_sqrt(8, DyadicFractionInterval::from_int_range(bi(2), bi(3), 0)),
+            r(-2, 3),
+            Some(r(1, 2).into()),
+        );
+        test_case(
+            make_sqrt(2, DyadicFractionInterval::from_int_range(bi(1), bi(2), 0)),
+            ri(2),
+            Some(2.into()),
+        );
+        test_case(
+            make_sqrt(2, DyadicFractionInterval::from_int_range(bi(1), bi(2), 0)),
+            ri(-2),
+            Some(r(1, 2).into()),
+        );
         unimplemented!("add more cases");
     }
 }
