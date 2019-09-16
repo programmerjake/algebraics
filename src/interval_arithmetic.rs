@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // See Notices.txt for copyright information
 
+use crate::traits::AlwaysExactDiv;
+use crate::traits::AlwaysExactDivAssign;
+use crate::traits::ExactDiv;
+use crate::traits::ExactDivAssign;
 use crate::traits::FloorLog2;
 use crate::util::DebugAsDisplay;
 use num_bigint::BigInt;
@@ -11,7 +15,6 @@ use num_traits::FromPrimitive;
 use num_traits::One;
 use num_traits::Pow;
 use num_traits::Signed;
-use num_traits::Unsigned;
 use num_traits::Zero;
 use std::borrow::Cow;
 use std::fmt;
@@ -234,11 +237,11 @@ impl DyadicFractionInterval {
     pub fn to_converted_log2_denom(&self, log2_denom: usize) -> Self {
         self.clone().into_converted_log2_denom(log2_denom)
     }
-    fn do_op_assign<Op: Fn(&mut BigInt, &mut BigInt, &BigInt, &BigInt, usize)>(
+    fn do_op_assign<Op: Fn(&mut BigInt, &mut BigInt, &BigInt, &BigInt, usize) -> R, R>(
         &mut self,
         rhs: Cow<DyadicFractionInterval>,
         op: Op,
-    ) {
+    ) -> R {
         if rhs.log2_denom >= self.log2_denom {
             let shift_amount = rhs.log2_denom - self.log2_denom;
             self.lower_bound_numer <<= shift_amount;
@@ -250,7 +253,7 @@ impl DyadicFractionInterval {
                 &rhs.lower_bound_numer,
                 &rhs.upper_bound_numer,
                 self.log2_denom,
-            );
+            )
         } else {
             let shift_amount = self.log2_denom - rhs.log2_denom;
             let rhs_lower_bound_numer;
@@ -271,7 +274,7 @@ impl DyadicFractionInterval {
                 &rhs_lower_bound_numer,
                 &rhs_upper_bound_numer,
                 self.log2_denom,
-            );
+            )
         }
     }
     fn do_add_assign(&mut self, rhs: Cow<DyadicFractionInterval>) {
@@ -357,6 +360,34 @@ impl DyadicFractionInterval {
                 *lhs_upper_bound_numer = -(-upper_bound.expect("known to exist") >> log2_denom);
             },
         );
+    }
+    fn do_checked_div_assign(&mut self, rhs: Cow<DyadicFractionInterval>) -> Result<(), ()> {
+        if let Some(recip) = rhs.checked_recip() {
+            *self *= recip;
+            Ok(())
+        } else {
+            Err(())
+        }
+    }
+    fn do_div_assign(&mut self, rhs: Cow<DyadicFractionInterval>) {
+        *self *= rhs.recip();
+    }
+    pub fn checked_recip(&self) -> Option<Self> {
+        if self.contains_zero() {
+            None
+        } else {
+            let dividend = BigInt::one() << (2 * self.log2_denom);
+            let lower_bound_numer = dividend.div_floor(&self.upper_bound_numer);
+            let upper_bound_numer = dividend.div_ceil(&self.lower_bound_numer);
+            Some(Self {
+                lower_bound_numer,
+                upper_bound_numer,
+                log2_denom: self.log2_denom,
+            })
+        }
+    }
+    pub fn recip(&self) -> Self {
+        self.checked_recip().expect("division by zero")
     }
     pub fn into_square(mut self) -> Self {
         let contains_zero = self.contains_zero();
@@ -901,6 +932,66 @@ forward_op_to_op_assign!(MulAssign, mul_assign, Mul, mul, DyadicFractionInterval
 forward_op_to_op_assign!(MulAssign, mul_assign, Mul, mul, Ratio<BigInt>);
 forward_op_to_op_assign!(MulAssign, mul_assign, Mul, mul, BigInt);
 
+macro_rules! forward_to_exact_div_assign {
+    ($rhs:ty) => {
+        impl DivAssign<$rhs> for DyadicFractionInterval {
+            fn div_assign(&mut self, rhs: $rhs) {
+                self.exact_div_assign(rhs);
+            }
+        }
+
+        impl AlwaysExactDiv<$rhs> for DyadicFractionInterval {}
+        impl<'a> AlwaysExactDiv<$rhs> for &'a DyadicFractionInterval {}
+        impl AlwaysExactDivAssign<$rhs> for DyadicFractionInterval {}
+
+        impl ExactDiv<$rhs> for DyadicFractionInterval {
+            type Output = DyadicFractionInterval;
+            fn exact_div(mut self, rhs: $rhs) -> DyadicFractionInterval {
+                self.exact_div_assign(rhs);
+                self
+            }
+            fn checked_exact_div(mut self, rhs: $rhs) -> Option<DyadicFractionInterval> {
+                if self.checked_exact_div_assign(rhs).is_ok() {
+                    Some(self)
+                } else {
+                    None
+                }
+            }
+        }
+
+        impl<'a> ExactDiv<$rhs> for &'a DyadicFractionInterval {
+            type Output = DyadicFractionInterval;
+            fn exact_div(self, rhs: $rhs) -> DyadicFractionInterval {
+                self.clone().exact_div(rhs)
+            }
+            fn checked_exact_div(self, rhs: $rhs) -> Option<DyadicFractionInterval> {
+                self.clone().checked_exact_div(rhs)
+            }
+        }
+    };
+}
+
+impl ExactDivAssign<DyadicFractionInterval> for DyadicFractionInterval {
+    fn exact_div_assign(&mut self, rhs: DyadicFractionInterval) {
+        self.do_div_assign(Cow::Owned(rhs))
+    }
+    fn checked_exact_div_assign(&mut self, rhs: DyadicFractionInterval) -> Result<(), ()> {
+        self.do_checked_div_assign(Cow::Owned(rhs))
+    }
+}
+
+impl ExactDivAssign<&'_ DyadicFractionInterval> for DyadicFractionInterval {
+    fn exact_div_assign(&mut self, rhs: &DyadicFractionInterval) {
+        self.do_div_assign(Cow::Borrowed(rhs))
+    }
+    fn checked_exact_div_assign(&mut self, rhs: &DyadicFractionInterval) -> Result<(), ()> {
+        self.do_checked_div_assign(Cow::Borrowed(rhs))
+    }
+}
+
+forward_to_exact_div_assign!(DyadicFractionInterval);
+forward_to_exact_div_assign!(&'_ DyadicFractionInterval);
+
 impl DivAssign<BigInt> for DyadicFractionInterval {
     fn div_assign(&mut self, rhs: BigInt) {
         self.do_mul_assign_ratio(&Ratio::new(BigInt::one(), rhs));
@@ -926,10 +1017,11 @@ impl DivAssign<&'_ Ratio<BigInt>> for DyadicFractionInterval {
 }
 
 forward_types_to_bigint!(DivAssign, div_assign, Div, div);
+forward_op_to_op_assign!(DivAssign, div_assign, Div, div, DyadicFractionInterval);
 forward_op_to_op_assign!(DivAssign, div_assign, Div, div, Ratio<BigInt>);
 forward_op_to_op_assign!(DivAssign, div_assign, Div, div, BigInt);
 
-impl<E: Unsigned + Integer> Pow<E> for DyadicFractionInterval {
+impl<E: Integer> Pow<E> for DyadicFractionInterval {
     type Output = DyadicFractionInterval;
     fn pow(mut self, mut exponent: E) -> DyadicFractionInterval {
         if exponent.is_zero() {
@@ -938,6 +1030,14 @@ impl<E: Unsigned + Integer> Pow<E> for DyadicFractionInterval {
         } else if exponent.is_one() {
             self
         } else {
+            let zero_exponent = E::zero();
+            if exponent < zero_exponent {
+                exponent = zero_exponent - exponent;
+                self = self.recip();
+                if exponent.is_one() {
+                    return self;
+                }
+            }
             let contains_zero = self.contains_zero();
             let DyadicFractionInterval {
                 lower_bound_numer: mut base_lower_bound_numer,
@@ -1004,7 +1104,7 @@ impl<E: Unsigned + Integer> Pow<E> for DyadicFractionInterval {
     }
 }
 
-impl<E: Unsigned + Integer> Pow<E> for &'_ DyadicFractionInterval {
+impl<E: Integer> Pow<E> for &'_ DyadicFractionInterval {
     type Output = DyadicFractionInterval;
     fn pow(self, exponent: E) -> DyadicFractionInterval {
         self.clone().pow(exponent)
@@ -1014,6 +1114,7 @@ impl<E: Unsigned + Integer> Pow<E> for &'_ DyadicFractionInterval {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::util::tests::test_checked_op_helper;
     use crate::util::tests::test_op_helper;
     use crate::util::tests::test_unary_op_helper;
     use num_traits::ToPrimitive;
@@ -1774,6 +1875,92 @@ mod tests {
     }
 
     #[test]
+    fn test_div() {
+        fn test_case(lhs: DFI, rhs: DFI, expected: Option<DFI>) {
+            test_checked_op_helper(
+                SameWrapper(lhs),
+                SameWrapper(rhs),
+                &expected.map(SameWrapper),
+                |SameWrapper(a), SameWrapper(b)| a.checked_exact_div_assign(b),
+                |SameWrapper(a), SameWrapper(b)| a.checked_exact_div_assign(b),
+                |SameWrapper(a), SameWrapper(b)| a.checked_exact_div(b).map(SameWrapper),
+                |SameWrapper(a), SameWrapper(b)| a.checked_exact_div(b).map(SameWrapper),
+                |SameWrapper(a), SameWrapper(b)| a.checked_exact_div(b).map(SameWrapper),
+                |SameWrapper(a), SameWrapper(b)| a.checked_exact_div(b).map(SameWrapper),
+            );
+        }
+        test_case(
+            DFI::new(bi(3), bi(5), 8),
+            DFI::new(bi(17), bi(97), 8),
+            Some(DFI::new(bi(7), bi(76), 8)),
+        );
+        test_case(
+            DFI::new(bi(-3), bi(5), 8),
+            DFI::new(bi(17), bi(97), 8),
+            Some(DFI::new(bi(-46), bi(76), 8)),
+        );
+        test_case(
+            DFI::new(bi(-3), bi(-5), 8),
+            DFI::new(bi(17), bi(97), 8),
+            Some(DFI::new(bi(-76), bi(-7), 8)),
+        );
+        test_case(
+            DFI::new(bi(3), bi(5), 8),
+            DFI::new(bi(-17), bi(97), 8),
+            None,
+        );
+        test_case(
+            DFI::new(bi(-3), bi(5), 8),
+            DFI::new(bi(-17), bi(97), 8),
+            None,
+        );
+        test_case(
+            DFI::new(bi(-3), bi(-5), 8),
+            DFI::new(bi(-17), bi(97), 8),
+            None,
+        );
+        test_case(
+            DFI::new(bi(3), bi(5), 8),
+            DFI::new(bi(-97), bi(17), 8),
+            None,
+        );
+        test_case(
+            DFI::new(bi(-3), bi(5), 8),
+            DFI::new(bi(-97), bi(17), 8),
+            None,
+        );
+        test_case(
+            DFI::new(bi(-3), bi(-5), 8),
+            DFI::new(bi(-97), bi(17), 8),
+            None,
+        );
+        test_case(
+            DFI::new(bi(3), bi(5), 8),
+            DFI::new(bi(-97), bi(-17), 8),
+            Some(DFI::new(bi(-76), bi(-7), 8)),
+        );
+        test_case(
+            DFI::new(bi(-3), bi(5), 8),
+            DFI::new(bi(-97), bi(-17), 8),
+            Some(DFI::new(bi(-76), bi(46), 8)),
+        );
+        test_case(
+            DFI::new(bi(-3), bi(-5), 8),
+            DFI::new(bi(-97), bi(-17), 8),
+            Some(DFI::new(bi(7), bi(76), 8)),
+        );
+        test_case(
+            DFI::from_int(bi(1), 64),
+            DFI::from_int(bi(3), 64),
+            Some(DFI::new(
+                bi(6_148_914_691_236_517_205),
+                bi(6_148_914_691_236_517_206),
+                64,
+            )),
+        );
+    }
+
+    #[test]
     fn test_div_int() {
         fn test_case(lhs: DFI, rhs: BigInt, expected: DFI) {
             test_op_helper(
@@ -1869,7 +2056,7 @@ mod tests {
 
     #[test]
     fn test_pow() {
-        fn test_case(lhs: DFI, rhs: u64, expected: DFI) {
+        fn test_case(lhs: DFI, rhs: i64, expected: DFI) {
             test_unary_op_helper(
                 SameWrapper(lhs),
                 &SameWrapper(expected),
@@ -1953,6 +2140,12 @@ mod tests {
             5,
             DFI::new(bi(-16807), bi(-3125), 0),
         );
+        test_case(DFI::from_int(bi(3), 8), -1, DFI::new(bi(85), bi(86), 8));
+        test_case(DFI::from_int(bi(3), 8), -2, DFI::new(bi(28), bi(29), 8));
+        test_case(DFI::from_int(bi(3), 8), -3, DFI::new(bi(9), bi(10), 8));
+        test_case(DFI::from_int(bi(3), 8), -4, DFI::new(bi(3), bi(4), 8));
+        test_case(DFI::from_int(bi(3), 8), -5, DFI::new(bi(0), bi(2), 8));
+        test_case(DFI::from_int(bi(3), 8), -6, DFI::new(bi(0), bi(1), 8));
     }
 
     #[test]
