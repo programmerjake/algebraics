@@ -748,7 +748,7 @@ impl RealAlgebraicNumber {
                     interval = interval.log();
                     interval *= &self.exponent;
                     unimplemented!("waiting on DyadicFractionInterval::exp()");
-                    // interval = interval.exp();
+                    // interval = interval.into_exp();
                     if lower_bound_is_zero {
                         interval.lower_bound_numer.set_zero();
                     }

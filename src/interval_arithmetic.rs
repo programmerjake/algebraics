@@ -15,6 +15,7 @@ use num_traits::FromPrimitive;
 use num_traits::One;
 use num_traits::Pow;
 use num_traits::Signed;
+use num_traits::ToPrimitive;
 use num_traits::Zero;
 use std::borrow::Cow;
 use std::fmt;
@@ -651,6 +652,84 @@ impl DyadicFractionInterval {
             .log_core(),
         );
         retval.into_converted_log2_denom(self.log2_denom)
+    }
+    pub fn into_exp(mut self) -> Self {
+        let original_log2_denom = self.log2_denom;
+        self.convert_log2_denom(original_log2_denom + 10);
+        let short_natural_log_of_2 = Self::natural_log_of_2(self.log2_denom);
+        let mut extra_bits = 0;
+        let mut calculate_needed_extra_bits = |v: &BigInt| {
+            if v.is_positive() {
+                extra_bits = extra_bits.max(
+                    v.div_floor(&short_natural_log_of_2.lower_bound_numer)
+                        .to_usize()
+                        .expect("input too big in exp()"),
+                );
+            }
+        };
+        calculate_needed_extra_bits(&self.lower_bound_numer);
+        calculate_needed_extra_bits(&self.upper_bound_numer);
+        let working_log2_denom = (original_log2_denom
+            + 32
+            + (original_log2_denom + 1)
+                .floor_log2()
+                .expect("known to not fail")
+                * 2)
+        .checked_add(extra_bits)
+        .expect("input too big in exp()");
+        self.convert_log2_denom(working_log2_denom);
+        let natural_log_of_2 = Self::natural_log_of_2(working_log2_denom);
+        let (floor_power_of_2_lower_bound, remainder) = self
+            .lower_bound_numer
+            .div_mod_floor(&natural_log_of_2.upper_bound_numer);
+        self.lower_bound_numer = remainder;
+        let (floor_power_of_2_upper_bound, remainder) = self
+            .upper_bound_numer
+            .div_mod_floor(&natural_log_of_2.lower_bound_numer);
+        self.upper_bound_numer = remainder;
+        let mut term = Self::one(working_log2_denom);
+        let mut retval = term.clone();
+        for i in 1..working_log2_denom {
+            term *= &self;
+            term /= i;
+            retval += &term;
+            if term.upper_bound_numer.is_one() || term.upper_bound_numer.is_zero() {
+                assert!(term.lower_bound_numer.is_zero());
+                break;
+            }
+        }
+        if let Some(shift_amount) = floor_power_of_2_lower_bound.abs().to_usize() {
+            if floor_power_of_2_lower_bound.is_negative() {
+                retval.lower_bound_numer >>= shift_amount;
+            } else {
+                retval.lower_bound_numer <<= shift_amount;
+            }
+        } else {
+            assert!(
+                floor_power_of_2_lower_bound.is_negative(),
+                "overflow: input too big for exp()"
+            );
+            retval.lower_bound_numer.set_zero();
+        }
+        if let Some(shift_amount) = floor_power_of_2_upper_bound.abs().to_usize() {
+            if floor_power_of_2_upper_bound.is_negative() {
+                retval.upper_bound_numer = -retval.upper_bound_numer;
+                retval.upper_bound_numer >>= shift_amount;
+                retval.upper_bound_numer = -retval.upper_bound_numer;
+            } else {
+                retval.upper_bound_numer <<= shift_amount;
+            }
+        } else {
+            assert!(
+                floor_power_of_2_upper_bound.is_negative(),
+                "overflow: input too big for exp()"
+            );
+            retval.upper_bound_numer.set_one();
+        }
+        retval.into_converted_log2_denom(original_log2_denom)
+    }
+    pub fn exp(&self) -> Self {
+        self.clone().into_exp()
     }
     /// use instead of .eq() since .eq() wouldn't have well defined results in all cases
     pub fn is_same(&self, rhs: &Self) -> bool {
@@ -2360,6 +2439,92 @@ mod tests {
             do_test(
                 i,
                 DFI::from_ratio(Ratio::new(BigInt::one(), BigInt::from(i)), 32),
+            );
+        }
+    }
+
+    #[test]
+    fn test_exp() {
+        assert_same!(
+            DFI::from_int_range(bi(0), bi(0), 64).exp(),
+            DFI::new(bi(18446744073709551616), bi(18446744073709551616), 64)
+        );
+        assert_same!(
+            DFI::from_int_range(bi(0), bi(1), 64).exp(),
+            DFI::new(bi(18446744073709551616), bi(50143449209799256683), 64)
+        );
+        assert_same!(
+            DFI::from_int_range(bi(1), bi(1), 64).exp(),
+            DFI::new(bi(50143449209799256682), bi(50143449209799256683), 64)
+        );
+        assert_same!(
+            DFI::from_int_range(bi(1), bi(1), 120).exp(),
+            DFI::new(
+                bi(3613216306821173191995746233763034355),
+                bi(3613216306821173191995746233763034356),
+                120
+            )
+        );
+        assert_same!(
+            DFI::from_ratio_range(r(1, 16), r(1, 16), 64).exp(),
+            DFI::new(bi(19636456851539679189), bi(19636456851539679190), 64)
+        );
+        assert_same!(
+            DFI::from_ratio_range(r(1, 16), r(5, 11), 64).exp(),
+            DFI::new(bi(19636456851539679189), bi(29062053985348969808), 64)
+        );
+        assert_same!(
+            DFI::from_ratio(r(12345, 20), 120).exp(),
+            DFI::new(
+                "15554943374427623479586295616005556713817814660873673636717540447365020\
+                 241010687483038422716174364856604938959636391301874371790367372240576361413166\
+                 945168943074910853869056633171038088299306405677231299055607307283566273703681\
+                 161420276716135018812123397822555186980209038935457373851383684897298980152385"
+                    .parse()
+                    .unwrap(),
+                "15554943374427623479586295616005556713817814660873673636717540447365020\
+                 241010687483038422716174364856604938959636391301874371790367372240576361413166\
+                 945168943074910853869056633171038088299306405677231299055607307283566273703681\
+                 161420276716135018812123397822555186980209038935457373851383684897298980152386"
+                    .parse()
+                    .unwrap(),
+                120
+            )
+        );
+
+        // check that we don't overflow where we don't need to
+        assert_same!(
+            DFI::from_int(bi(-99_999_999_999_999_999_999_999_999), 120).exp(),
+            DFI::new(bi(0), bi(1), 120)
+        );
+
+        for i in (1..30).rev() {
+            fn do_test(i: i64, input: DFI) {
+                assert!(input.log2_denom < 50);
+                println!("i = {}", i);
+                dbg!(&input);
+                let input_denom = 2.0f64.powi(input.log2_denom.try_into().unwrap());
+                let input_lower_bound = input.lower_bound_numer.to_f64().unwrap() / input_denom;
+                let input_upper_bound = input.upper_bound_numer.to_f64().unwrap() / input_denom;
+                let expected = DFI::from_ratio_range(
+                    Ratio::<BigInt>::from_float(input_lower_bound.exp()).unwrap(),
+                    Ratio::<BigInt>::from_float(input_upper_bound.exp()).unwrap(),
+                    input.log2_denom,
+                );
+                assert_same!(input.exp(), expected);
+            }
+            if i <= 3 {
+                // f64::exp loses precision really fast, skip in cases where f64::exp is not precise enough
+                do_test(i, DFI::from_int(BigInt::from(i), 32));
+            }
+            do_test(
+                i,
+                DFI::from_ratio(Ratio::new(BigInt::one(), BigInt::from(i)), 32),
+            );
+            do_test(i, DFI::from_int(BigInt::from(-i), 32));
+            do_test(
+                i,
+                DFI::from_ratio(Ratio::new(BigInt::one(), BigInt::from(-i)), 32),
             );
         }
     }
