@@ -133,7 +133,7 @@ impl ConstantCache {
 }
 
 /// inclusive interval of the form `[a / 2^n, b / 2^n]` where `a` and `b` are integers and `n` is an unsigned integer.
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Hash)]
 pub struct DyadicFractionInterval {
     pub lower_bound_numer: BigInt,
     pub upper_bound_numer: BigInt,
@@ -224,6 +224,24 @@ impl DyadicFractionInterval {
     }
     pub fn to_ratio_range(&self) -> (Ratio<BigInt>, Ratio<BigInt>) {
         self.clone().into_ratio_range()
+    }
+    pub fn into_lower_bound(self) -> Ratio<BigInt> {
+        Ratio::new(self.lower_bound_numer, BigInt::one() << self.log2_denom)
+    }
+    pub fn into_upper_bound(self) -> Ratio<BigInt> {
+        Ratio::new(self.upper_bound_numer, BigInt::one() << self.log2_denom)
+    }
+    pub fn lower_bound(&self) -> Ratio<BigInt> {
+        Ratio::new(
+            self.lower_bound_numer.clone(),
+            BigInt::one() << self.log2_denom,
+        )
+    }
+    pub fn upper_bound(&self) -> Ratio<BigInt> {
+        Ratio::new(
+            self.upper_bound_numer.clone(),
+            BigInt::one() << self.log2_denom,
+        )
     }
     pub fn convert_log2_denom(&mut self, log2_denom: usize) {
         convert_log2_denom_floor(&mut self.lower_bound_numer, self.log2_denom, log2_denom);
@@ -633,6 +651,69 @@ impl DyadicFractionInterval {
             .log_core(),
         );
         retval.into_converted_log2_denom(self.log2_denom)
+    }
+    /// use instead of .eq() since .eq() wouldn't have well defined results in all cases
+    pub fn is_same(&self, rhs: &Self) -> bool {
+        let Self {
+            lower_bound_numer,
+            upper_bound_numer,
+            log2_denom,
+        } = self;
+        *lower_bound_numer == rhs.lower_bound_numer
+            && *upper_bound_numer == rhs.upper_bound_numer
+            && *log2_denom == rhs.log2_denom
+    }
+    pub fn abs_assign(&mut self) {
+        let contains_zero = self.contains_zero();
+        if self.lower_bound_numer.is_negative() {
+            self.lower_bound_numer = -mem::replace(&mut self.lower_bound_numer, Default::default());
+        }
+        if self.upper_bound_numer.is_negative() {
+            self.upper_bound_numer = -mem::replace(&mut self.upper_bound_numer, Default::default());
+        }
+        if self.lower_bound_numer > self.upper_bound_numer {
+            mem::swap(&mut self.lower_bound_numer, &mut self.upper_bound_numer);
+        }
+        if contains_zero {
+            self.lower_bound_numer.set_zero();
+        }
+    }
+    pub fn into_abs(mut self) -> Self {
+        self.abs_assign();
+        self
+    }
+    pub fn abs(&self) -> Self {
+        self.clone().into_abs()
+    }
+    pub fn floor_assign(&mut self, new_log2_denom: usize) {
+        self.lower_bound_numer >>= self.log2_denom;
+        self.upper_bound_numer >>= self.log2_denom;
+        self.log2_denom = 0;
+        self.convert_log2_denom(new_log2_denom);
+    }
+    pub fn into_floor(mut self, new_log2_denom: usize) -> Self {
+        self.floor_assign(new_log2_denom);
+        self
+    }
+    pub fn floor(&self, new_log2_denom: usize) -> Self {
+        self.clone().into_floor(new_log2_denom)
+    }
+    pub fn ceil_assign(&mut self, new_log2_denom: usize) {
+        self.lower_bound_numer = -mem::replace(&mut self.lower_bound_numer, Default::default());
+        self.upper_bound_numer = -mem::replace(&mut self.upper_bound_numer, Default::default());
+        self.lower_bound_numer >>= self.log2_denom;
+        self.upper_bound_numer >>= self.log2_denom;
+        self.lower_bound_numer = -mem::replace(&mut self.lower_bound_numer, Default::default());
+        self.upper_bound_numer = -mem::replace(&mut self.upper_bound_numer, Default::default());
+        self.log2_denom = 0;
+        self.convert_log2_denom(new_log2_denom);
+    }
+    pub fn into_ceil(mut self, new_log2_denom: usize) -> Self {
+        self.ceil_assign(new_log2_denom);
+        self
+    }
+    pub fn ceil(&self, new_log2_denom: usize) -> Self {
+        self.clone().into_ceil(new_log2_denom)
     }
 }
 
@@ -1144,19 +1225,7 @@ mod tests {
 
     impl<T: Borrow<DFI>> PartialEq for SameWrapper<T> {
         fn eq(&self, rhs: &Self) -> bool {
-            let DFI {
-                lower_bound_numer: lhs_lower_bound_numer,
-                upper_bound_numer: lhs_upper_bound_numer,
-                log2_denom: lhs_log2_denom,
-            } = &**self;
-            let DFI {
-                lower_bound_numer: rhs_lower_bound_numer,
-                upper_bound_numer: rhs_upper_bound_numer,
-                log2_denom: rhs_log2_denom,
-            } = &**rhs;
-            lhs_lower_bound_numer == rhs_lower_bound_numer
-                && lhs_upper_bound_numer == rhs_upper_bound_numer
-                && lhs_log2_denom == rhs_log2_denom
+            self.is_same(rhs)
         }
     }
 
