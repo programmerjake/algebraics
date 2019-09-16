@@ -236,18 +236,8 @@ impl<'a> IntervalAndSignChanges<'a> {
             sign_changes
         } else {
             let at = get_interval_bound(&self.interval);
-            println!("get_sign_changes_helper: at = {}", at);
-            println!(
-                "polynomial: {}",
-                primitive_sturm_sequence
-                    .first()
-                    .map(Cow::Borrowed)
-                    .unwrap_or_else(|| Cow::Owned(Zero::zero()))
-            );
-            let sign_changes = dbg!(sign_changes_at(
-                primitive_sturm_sequence,
-                ValueOrInfinity::Value(&at)
-            ));
+            let sign_changes =
+                sign_changes_at(primitive_sturm_sequence, ValueOrInfinity::Value(&at));
             *get_sign_changes(self) = Some(sign_changes);
             sign_changes
         }
@@ -651,9 +641,6 @@ impl RealAlgebraicNumber {
         lazy_static! {
             static ref NEGATIVE_ONE_RATIO: Ratio<BigInt> = BigInt::from(-1).into();
         }
-        println!("checked_pow:");
-        println!("base: {:?}", base);
-        println!("exponent: {}", exponent);
         if exponent.is_zero() {
             if base.is_zero() {
                 None
@@ -698,16 +685,13 @@ impl RealAlgebraicNumber {
                 Sign::Positive
             };
             let exponent_sign = Sign::new(&exponent).expect("known to be non-zero");
-            println!("exponent_sign: {:?}", exponent_sign);
             let (exponent_numer, exponent_denom) = exponent.abs().into();
             let exponent_numer = exponent_numer
                 .to_usize()
                 .expect("exponent numerator too big");
-            println!("exponent_numer: {}", exponent_numer);
             let exponent_denom = exponent_denom
                 .to_usize()
                 .expect("exponent denominator too big");
-            println!("exponent_denom: {}", exponent_denom);
             if exponent_denom == 1 {
                 if let Some((mut numer, mut denom)) = base.to_rational().map(Into::into) {
                     if exponent_sign == Sign::Negative {
@@ -724,19 +708,15 @@ impl RealAlgebraicNumber {
             } else {
                 base.into_owned()
             };
-            println!("base: {:?}", base);
             let resultant_lhs: Polynomial<Polynomial<BigInt>> = base
                 .minimal_polynomial()
                 .iter()
                 .map(Polynomial::from)
                 .collect();
-            println!("resultant_lhs: {}", resultant_lhs);
             let resultant_rhs: Polynomial<Polynomial<BigInt>> =
                 Polynomial::make_monomial(-Polynomial::<BigInt>::one(), exponent_numer)
                     + Polynomial::make_monomial(BigInt::one(), exponent_denom);
-            println!("resultant_rhs: {}", resultant_rhs);
             let resultant = resultant_lhs.resultant(resultant_rhs);
-            println!("resultant: {}", resultant);
             struct PowRootSelector<'a> {
                 base: IntervalShrinker<'a>,
                 exponent: Ratio<BigInt>,
@@ -921,24 +901,19 @@ trait RootSelector: Sized {
                 primitive_sturm_sequence: factor.polynomial.into_primitive_sturm_sequence(),
             })
             .collect();
-        println!("factors: {:?}", factors);
         let mut factors_temp = Vec::with_capacity(factors.len());
         loop {
             let interval = self.get_interval();
             let (lower_bound, upper_bound) = interval.to_ratio_range();
-            println!("lower_bound: {}", lower_bound);
-            println!("upper_bound: {}", upper_bound);
             mem::swap(&mut factors, &mut factors_temp);
             factors.clear();
             let mut roots_left = 0;
             for factor in factors_temp.drain(..) {
-                dbg!(&factor);
                 let lower_bound_sign_changes = sign_changes_at(
                     &factor.primitive_sturm_sequence,
                     ValueOrInfinity::Value(&lower_bound),
                 );
                 if lower_bound_sign_changes.is_root {
-                    println!("found root: {}", lower_bound);
                     return lower_bound.into();
                 }
                 let upper_bound_sign_changes = sign_changes_at(
@@ -946,21 +921,17 @@ trait RootSelector: Sized {
                     ValueOrInfinity::Value(&upper_bound),
                 );
                 if upper_bound_sign_changes.is_root {
-                    println!("found root: {}", upper_bound);
                     return upper_bound.into();
                 }
                 if lower_bound_sign_changes.sign_change_count
                     != upper_bound_sign_changes.sign_change_count
                 {
-                    println!("retained: {:?}", factor);
                     let num_roots = distance(
                         lower_bound_sign_changes.sign_change_count,
                         upper_bound_sign_changes.sign_change_count,
                     );
-                    roots_left += dbg!(num_roots);
+                    roots_left += num_roots;
                     factors.push(factor);
-                } else {
-                    println!("discarded: {:?}", factor);
                 }
             }
             if roots_left <= 1 {
@@ -1188,7 +1159,7 @@ impl Signed for RealAlgebraicNumber {
 
 impl PartialEq for RealAlgebraicNumber {
     fn eq(&self, rhs: &RealAlgebraicNumber) -> bool {
-        (dbg!(self) - dbg!(rhs)).is_zero()
+        (self - rhs).is_zero()
     }
 }
 
@@ -1209,9 +1180,6 @@ impl Ord for RealAlgebraicNumber {
 impl MulAssign for RealAlgebraicNumber {
     fn mul_assign(&mut self, mut rhs: RealAlgebraicNumber) {
         #![allow(clippy::suspicious_op_assign_impl)] // we need to use other operators
-        println!("mul_assign:");
-        dbg!(&self);
-        dbg!(&rhs);
         if self.is_rational() && rhs.is_rational() {
             *self = (self.to_rational().expect("known to be rational")
                 * rhs.to_rational().expect("known to be rational"))
@@ -1236,15 +1204,12 @@ impl MulAssign for RealAlgebraicNumber {
             .rev()
             .map(|(power, coefficient)| Polynomial::make_monomial(coefficient, power))
             .collect();
-        println!("resultant_lhs: {}", resultant_lhs);
         let resultant_rhs: Polynomial<Polynomial<BigInt>> = rhs
             .minimal_polynomial()
             .iter()
             .map(Polynomial::from)
             .collect();
-        println!("resultant_rhs: {}", resultant_rhs);
         let resultant = resultant_lhs.resultant(resultant_rhs);
-        println!("resultant: {}", resultant);
         struct MulRootSelector<'a> {
             lhs_interval_shrinker: IntervalShrinker<'a>,
             rhs_interval_shrinker: IntervalShrinker<'a>,
