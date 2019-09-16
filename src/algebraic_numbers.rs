@@ -235,10 +235,19 @@ impl<'a> IntervalAndSignChanges<'a> {
         if let Some(sign_changes) = *get_sign_changes(self) {
             sign_changes
         } else {
-            let sign_changes = sign_changes_at(
-                primitive_sturm_sequence,
-                ValueOrInfinity::Value(&get_interval_bound(&self.interval)),
+            let at = get_interval_bound(&self.interval);
+            println!("get_sign_changes_helper: at = {}", at);
+            println!(
+                "polynomial: {}",
+                primitive_sturm_sequence
+                    .first()
+                    .map(Cow::Borrowed)
+                    .unwrap_or_else(|| Cow::Owned(Zero::zero()))
             );
+            let sign_changes = dbg!(sign_changes_at(
+                primitive_sturm_sequence,
+                ValueOrInfinity::Value(&at)
+            ));
             *get_sign_changes(self) = Some(sign_changes);
             sign_changes
         }
@@ -369,7 +378,8 @@ impl<'a> IntervalShrinker<'a> {
                     lower_bound_sign_changes.sign_change_count,
                     upper_bound_sign_changes.sign_change_count
                 ),
-                1
+                1,
+                "improper root count, lwoer"
             );
             let middle_numer =
                 (&self.interval.lower_bound_numer + &self.interval.upper_bound_numer) / 2i32;
@@ -747,8 +757,7 @@ impl RealAlgebraicNumber {
                     }
                     interval = interval.log();
                     interval *= &self.exponent;
-                    unimplemented!("waiting on DyadicFractionInterval::exp()");
-                    // interval = interval.into_exp();
+                    interval = interval.into_exp();
                     if lower_bound_is_zero {
                         interval.lower_bound_numer.set_zero();
                     }
@@ -1179,7 +1188,7 @@ impl Signed for RealAlgebraicNumber {
 
 impl PartialEq for RealAlgebraicNumber {
     fn eq(&self, rhs: &RealAlgebraicNumber) -> bool {
-        (self - rhs).is_zero()
+        (dbg!(self) - dbg!(rhs)).is_zero()
     }
 }
 
@@ -1936,6 +1945,24 @@ mod tests {
             ri(-2),
             Some(r(1, 2).into()),
         );
-        unimplemented!("add more cases");
+        test_case(
+            make_sqrt(5, DyadicFractionInterval::from_int_range(bi(1), bi(5), 0)),
+            r(5, 3),
+            Some(RealAlgebraicNumber::new_unchecked(
+                p(&[-3125, 0, 0, 0, 0, 0, 1]),
+                DyadicFractionInterval::from_int_range(bi(1), bi(20), 0),
+            )),
+        );
+        test_case(
+            RealAlgebraicNumber::new_unchecked(
+                p(&[5, -20, 16]),
+                DyadicFractionInterval::from_ratio_range(ri(0), r(1, 2), 1),
+            ),
+            r(1, 2),
+            Some(RealAlgebraicNumber::new_unchecked(
+                p(&[5, 0, -20, 0, 16]),
+                DyadicFractionInterval::from_ratio_range(r(1, 2), r(3, 4), 2),
+            )),
+        );
     }
 }
