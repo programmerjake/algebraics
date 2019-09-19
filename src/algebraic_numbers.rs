@@ -147,9 +147,11 @@ impl_from_int_or_ratio!(BigInt);
 
 #[derive(Copy, Clone, Debug)]
 enum ValueOrInfinity<T> {
+    #[allow(dead_code)]
     PositiveInfinity,
     Value(T),
     Zero,
+    #[allow(dead_code)]
     NegativeInfinity,
 }
 
