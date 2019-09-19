@@ -54,4 +54,15 @@ assert_eq!(
     &other_number.minimal_polynomial().to_string(),
     "2 + -8*X + -4*X^2 + 0*X^3 + 1*X^4"
 );
+
+// works with really big numbers
+let really_big = Number::from(1_00000_00000i64).pow(20) + Number::from(23);
+assert_eq!(
+    &really_big.to_integer_floor().to_string(),
+    "100000000000000000000000000000000000000000000\
+     000000000000000000000000000000000000000000000\
+     000000000000000000000000000000000000000000000\
+     000000000000000000000000000000000000000000000\
+     000000000000000000023"
+)
 ```
