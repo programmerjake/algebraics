@@ -172,7 +172,7 @@ impl<T: Integer + Clone + Signed + for<'a> Mul<&'a T, Output = T>> ExtendedGCD f
 /// Division with Remainder where division returns the Nearest representable result.
 ///
 /// Unsigned Integer Examples:
-/// ```
+/// ```ignored
 /// # use algebraics::traits::DivRemNearest;
 /// // Division by zero
 /// assert_eq!((0u32).checked_div_rem_nearest(&0), None);
@@ -182,7 +182,7 @@ impl<T: Integer + Clone + Signed + for<'a> Mul<&'a T, Output = T>> ExtendedGCD f
 /// ```
 ///
 /// Signed Integer Examples:
-/// ```
+/// ```ignored
 /// # use algebraics::traits::DivRemNearest;
 /// // Division by zero
 /// assert_eq!((0i32).checked_div_rem_nearest(&0), None);
@@ -197,7 +197,7 @@ impl<T: Integer + Clone + Signed + for<'a> Mul<&'a T, Output = T>> ExtendedGCD f
 /// ```
 ///
 /// Rational Examples:
-/// ```
+/// ```ignored
 /// # use algebraics::traits::DivRemNearest;
 /// # use num_rational::{BigRational, ParseRatioError};
 /// # use num_traits::Zero;
@@ -208,7 +208,8 @@ impl<T: Integer + Clone + Signed + for<'a> Mul<&'a T, Output = T>> ExtendedGCD f
 /// assert_eq!(ratio("3/4")?.div_rem_nearest(&ratio("-5/7")?), (ratio("-21/20")?, ratio("0")?));
 /// # Ok::<(), ParseRatioError>(())
 /// ```
-pub trait DivRemNearest<Rhs = Self>: Sized {
+// FIXME: unignore doctest when pub
+pub(crate) trait DivRemNearest<Rhs = Self>: Sized {
     type DivOutput;
     type RemOutput;
     fn checked_div_rem_nearest(&self, rhs: &Rhs) -> Option<(Self::DivOutput, Self::RemOutput)>;
@@ -477,7 +478,7 @@ impl TrailingZeros for BigInt {
     }
 }
 
-pub trait IsolatedRealRoot<T: PolynomialCoefficient + Integer> {
+pub(crate) trait IsolatedRealRoot<T: PolynomialCoefficient + Integer> {
     fn root_polynomial(&self) -> &Polynomial<T>;
     fn multiplicity(&self) -> usize;
     fn lower_bound(&self) -> &Ratio<T>;
@@ -748,6 +749,15 @@ impl_exact_div_for_int!(isize, checked_div_rem);
 
 impl_exact_div_for_int!(BigInt, bigint_checked_div_rem);
 impl_exact_div_for_int!(BigUint, bigint_checked_div_rem);
+
+pub trait IntervalUnion<Rhs> {
+    type Output;
+    fn interval_union(self, rhs: Rhs) -> Self::Output;
+}
+
+pub trait IntervalUnionAssign<Rhs> {
+    fn interval_union_assign(&mut self, rhs: Rhs);
+}
 
 #[cfg(test)]
 mod tests {

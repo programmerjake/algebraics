@@ -262,12 +262,18 @@ impl<'a> IntervalAndSignChanges<'a> {
             DyadicFractionInterval::upper_bound,
         )
     }
+    fn set_to_dyadic_fraction(&mut self, numer: BigInt, sign_changes: SignChanges) {
+        *self.interval =
+            DyadicFractionInterval::from_dyadic_fraction(numer, self.interval.log2_denom());
+        self.lower_bound_sign_changes = Some(sign_changes);
+        self.upper_bound_sign_changes = Some(sign_changes);
+    }
     fn set_lower_bound(&mut self, lower_bound_numer: BigInt, sign_changes: SignChanges) {
-        self.interval.lower_bound_numer = lower_bound_numer;
+        self.interval.set_lower_bound_numer(lower_bound_numer);
         self.lower_bound_sign_changes = Some(sign_changes);
     }
     fn set_upper_bound(&mut self, upper_bound_numer: BigInt, sign_changes: SignChanges) {
-        self.interval.upper_bound_numer = upper_bound_numer;
+        self.interval.set_upper_bound_numer(upper_bound_numer);
         self.upper_bound_sign_changes = Some(sign_changes);
     }
 }
@@ -330,7 +336,7 @@ impl<'a> IntervalShrinker<'a> {
         )
     }
     fn shrink(&mut self) -> IntervalShrinkResult {
-        let range_size = &self.interval.upper_bound_numer - &self.interval.lower_bound_numer;
+        let range_size = self.interval.upper_bound_numer() - self.interval.lower_bound_numer();
         assert!(!range_size.is_negative());
         if range_size.is_zero() {
             IntervalShrinkResult::Exact
@@ -340,7 +346,7 @@ impl<'a> IntervalShrinker<'a> {
                 static ref RANGE_SIZE_CUTOFF: BigInt = 16.into();
             }
             if range_size < *RANGE_SIZE_CUTOFF {
-                let log2_denom = self.interval.log2_denom;
+                let log2_denom = self.interval.log2_denom();
                 self.interval.convert_log2_denom(log2_denom + 1);
             }
             let lower_bound_sign_changes = self
@@ -348,7 +354,7 @@ impl<'a> IntervalShrinker<'a> {
                 .get_lower_bound_sign_changes(&self.primitive_sturm_sequence);
             if lower_bound_sign_changes.is_root {
                 self.interval.set_upper_bound(
-                    self.interval.lower_bound_numer.clone(),
+                    self.interval.lower_bound_numer().clone(),
                     lower_bound_sign_changes,
                 );
                 return IntervalShrinkResult::Exact;
@@ -358,7 +364,7 @@ impl<'a> IntervalShrinker<'a> {
                 .get_upper_bound_sign_changes(&self.primitive_sturm_sequence);
             if upper_bound_sign_changes.is_root {
                 self.interval.set_lower_bound(
-                    self.interval.upper_bound_numer.clone(),
+                    self.interval.upper_bound_numer().clone(),
                     upper_bound_sign_changes,
                 );
                 return IntervalShrinkResult::Exact;
@@ -372,10 +378,10 @@ impl<'a> IntervalShrinker<'a> {
                 "improper root count, lwoer"
             );
             let middle_numer =
-                (&self.interval.lower_bound_numer + &self.interval.upper_bound_numer) / 2i32;
+                (self.interval.lower_bound_numer() + self.interval.upper_bound_numer()) / 2i32;
             let middle = Ratio::new(
                 middle_numer.clone(),
-                BigInt::one() << self.interval.log2_denom,
+                BigInt::one() << self.interval.log2_denom(),
             );
             let middle_sign_changes = sign_changes_at(
                 &self.primitive_sturm_sequence,
@@ -383,9 +389,7 @@ impl<'a> IntervalShrinker<'a> {
             );
             if middle_sign_changes.is_root {
                 self.interval
-                    .set_lower_bound(middle_numer.clone(), middle_sign_changes);
-                self.interval
-                    .set_upper_bound(middle_numer, middle_sign_changes);
+                    .set_to_dyadic_fraction(middle_numer, middle_sign_changes);
                 return IntervalShrinkResult::Exact;
             }
             if middle_sign_changes.sign_change_count == lower_bound_sign_changes.sign_change_count {
@@ -474,9 +478,10 @@ impl RealAlgebraicNumber {
         } else {
             let mut interval_shrinker = self.interval_shrinker();
             loop {
-                let floor_interval = interval_shrinker.interval.floor(0);
-                if floor_interval.lower_bound_numer == floor_interval.upper_bound_numer {
-                    return floor_interval.lower_bound_numer;
+                let (floor_interval_lower_bound_numer, floor_interval_upper_bound_numer, _) =
+                    interval_shrinker.interval.floor(0).destructure();
+                if floor_interval_lower_bound_numer == floor_interval_upper_bound_numer {
+                    return floor_interval_lower_bound_numer;
                 }
                 interval_shrinker.shrink();
             }
@@ -502,9 +507,10 @@ impl RealAlgebraicNumber {
         } else {
             let mut interval_shrinker = self.interval_shrinker();
             loop {
-                let floor_interval = interval_shrinker.interval.floor(0);
-                if floor_interval.lower_bound_numer == floor_interval.upper_bound_numer {
-                    return self - RealAlgebraicNumber::from(floor_interval.lower_bound_numer);
+                let (floor_interval_lower_bound_numer, floor_interval_upper_bound_numer, _) =
+                    interval_shrinker.interval.floor(0).destructure();
+                if floor_interval_lower_bound_numer == floor_interval_upper_bound_numer {
+                    return self - RealAlgebraicNumber::from(floor_interval_lower_bound_numer);
                 }
                 interval_shrinker.shrink();
             }
@@ -533,9 +539,9 @@ impl RealAlgebraicNumber {
     pub fn cmp_with_zero(&self) -> Ordering {
         if self.is_zero() {
             Ordering::Equal
-        } else if self.interval().lower_bound_numer.is_positive() {
+        } else if self.interval().lower_bound_numer().is_positive() {
             Ordering::Greater
-        } else if self.interval().upper_bound_numer.is_negative() {
+        } else if self.interval().upper_bound_numer().is_negative() {
             Ordering::Less
         } else if let Some(value) = self.to_rational() {
             value.cmp(&Ratio::zero())
@@ -600,13 +606,13 @@ impl RealAlgebraicNumber {
         let mut value = self.clone();
         match sign {
             Sign::Negative => {
-                if value.interval().upper_bound_numer.is_positive() {
-                    value.data.interval.upper_bound_numer.set_zero();
+                if value.interval().upper_bound_numer().is_positive() {
+                    value.data.interval.set_upper_bound_to_zero();
                 }
             }
             Sign::Positive => {
-                if value.interval().lower_bound_numer.is_negative() {
-                    value.data.interval.lower_bound_numer.set_zero();
+                if value.interval().lower_bound_numer().is_negative() {
+                    value.data.interval.set_lower_bound_to_zero();
                 }
             }
         }
@@ -725,21 +731,19 @@ impl RealAlgebraicNumber {
             impl RootSelector for PowRootSelector<'_> {
                 fn get_interval(&self) -> DyadicFractionInterval {
                     let mut interval = self.base.interval.abs();
-                    let lower_bound_is_zero = interval.lower_bound_numer.is_zero();
-                    if interval.upper_bound_numer.is_zero() {
+                    let lower_bound_is_zero = interval.lower_bound_numer().is_zero();
+                    if interval.upper_bound_numer().is_zero() {
                         assert!(lower_bound_is_zero);
                         return interval;
                     }
                     if lower_bound_is_zero {
-                        interval
-                            .lower_bound_numer
-                            .clone_from(&interval.upper_bound_numer);
+                        interval.set_to_upper_bound();
                     }
                     interval = interval.log();
                     interval *= &self.exponent;
                     interval = interval.into_exp();
                     if lower_bound_is_zero {
-                        interval.lower_bound_numer.set_zero();
+                        interval.set_lower_bound_to_zero();
                     }
                     match self.result_sign {
                         Sign::Positive => interval,
@@ -1100,11 +1104,13 @@ impl<'a, 'b> Sub<&'a RealAlgebraicNumber> for &'b RealAlgebraicNumber {
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
-pub enum RealAlgebraicNumberParseError {}
+pub struct RealAlgebraicNumberParseError {
+    private: (),
+}
 
 impl fmt::Display for RealAlgebraicNumberParseError {
     fn fmt(&self, _f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {}
+        unimplemented!()
     }
 }
 

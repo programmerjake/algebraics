@@ -19,14 +19,14 @@ use std::slice;
 use std::vec;
 
 mod private {
-    pub trait SealedData {}
+    pub(crate) trait SealedData {}
 
     impl<T> SealedData for Vec<T> {}
     impl<'a, T> SealedData for &'a [T] {}
     impl<'a, T> SealedData for &'a mut [T] {}
 }
 
-pub trait Array2DData:
+pub(crate) trait Array2DData:
     Sized + private::SealedData + Borrow<[<Self as Array2DData>::Element]>
 {
     type Element: Sized;
@@ -105,7 +105,7 @@ impl<'a, T: Sized> Array2DData for &'a mut [T] {
 /// The alternate display format (using `"{:#}"`) is a reStructuredText table
 ///
 /// Examples:
-/// ```
+/// ```ignored
 /// # use algebraics::array2d::Array2DOwned;
 /// // Note: using strings to demonstrate `Display`, numbers are normally used
 /// let mut array = Array2DOwned::from_array(
@@ -153,8 +153,9 @@ impl<'a, T: Sized> Array2DData for &'a mut [T] {
 ///      +--------+----+----+"
 /// );
 /// ```
+// FIXME: unignore doctest when pub
 #[derive(Copy, Clone, Hash, Eq, PartialEq, Debug)]
-pub struct Array2DBase<Data: Array2DData> {
+pub(crate) struct Array2DBase<Data: Array2DData> {
     x_size: usize,
     y_size: usize,
     stride: Data::StrideType,
@@ -171,7 +172,7 @@ fn get_index_unchecked(stride: usize, x: usize, y: usize) -> usize {
     x * stride + y
 }
 
-pub trait Array2DSliceBound {
+pub(crate) trait Array2DSliceBound {
     fn to_slice_bound(self) -> (Bound<usize>, Bound<usize>);
 }
 
@@ -218,7 +219,7 @@ impl_array2d_slice_bound!((Bound<&usize>, Bound<&usize>));
 
 impl<Data: Array2DData> Array2DBase<Data> {
     /// data is a column-major 2D array
-    pub fn from_array(x_size: usize, y_size: usize, data: Data) -> Self {
+    pub(crate) fn from_array(x_size: usize, y_size: usize, data: Data) -> Self {
         assert_eq!(x_size * y_size, data.borrow().len());
         Self {
             x_size,
@@ -227,13 +228,13 @@ impl<Data: Array2DData> Array2DBase<Data> {
             data,
         }
     }
-    pub fn x_size(&self) -> usize {
+    pub(crate) fn x_size(&self) -> usize {
         self.x_size
     }
-    pub fn y_size(&self) -> usize {
+    pub(crate) fn y_size(&self) -> usize {
         self.y_size
     }
-    pub fn size(&self) -> (usize, usize) {
+    pub(crate) fn size(&self) -> (usize, usize) {
         (self.x_size, self.y_size)
     }
     fn stride(&self) -> usize {
@@ -275,7 +276,7 @@ impl<Data: Array2DData> Array2DBase<Data> {
             data_offset: get_index_unchecked(self.stride(), x_start, y_start),
         }
     }
-    pub fn slice<XB: Array2DSliceBound, YB: Array2DSliceBound>(
+    pub(crate) fn slice<XB: Array2DSliceBound, YB: Array2DSliceBound>(
         &self,
         x_bound: XB,
         y_bound: YB,
@@ -292,7 +293,7 @@ impl<Data: Array2DData> Array2DBase<Data> {
             data: &self.data.borrow()[data_offset..],
         }
     }
-    pub fn slice_mut<XB: Array2DSliceBound, YB: Array2DSliceBound>(
+    pub(crate) fn slice_mut<XB: Array2DSliceBound, YB: Array2DSliceBound>(
         &mut self,
         x_bound: XB,
         y_bound: YB,
@@ -312,17 +313,17 @@ impl<Data: Array2DData> Array2DBase<Data> {
             data: &mut self.data.borrow_mut()[data_offset..],
         }
     }
-    pub fn positions(&self) -> Positions {
+    pub(crate) fn positions(&self) -> Positions {
         Positions::new(self.x_size, self.y_size)
     }
-    pub fn iter(&self) -> Iter<Data::Element> {
+    pub(crate) fn iter(&self) -> Iter<Data::Element> {
         Iter {
             positions: self.positions(),
             stride: self.stride(),
             data: self.data.borrow(),
         }
     }
-    pub fn iter_mut(&mut self) -> IterMut<Data::Element>
+    pub(crate) fn iter_mut(&mut self) -> IterMut<Data::Element>
     where
         Data: BorrowMut<[<Data as Array2DData>::Element]>,
     {
@@ -335,13 +336,13 @@ impl<Data: Array2DData> Array2DBase<Data> {
             },
         }
     }
-    pub fn to_owned(&self) -> Array2DOwned<Data::Element>
+    pub(crate) fn to_owned(&self) -> Array2DOwned<Data::Element>
     where
         Data::Element: Clone,
     {
         Array2DBase::from_array(self.x_size, self.y_size, self.iter().cloned().collect())
     }
-    pub fn swap_elements(&mut self, (x1, y1): (usize, usize), (x2, y2): (usize, usize))
+    pub(crate) fn swap_elements(&mut self, (x1, y1): (usize, usize), (x2, y2): (usize, usize))
     where
         Data: BorrowMut<[<Data as Array2DData>::Element]>,
     {
@@ -352,7 +353,7 @@ impl<Data: Array2DData> Array2DBase<Data> {
 }
 
 impl<T> Array2DBase<Vec<T>> {
-    pub fn new_with_positions<F: FnMut(usize, usize) -> T>(
+    pub(crate) fn new_with_positions<F: FnMut(usize, usize) -> T>(
         x_size: usize,
         y_size: usize,
         mut f: F,
@@ -365,13 +366,13 @@ impl<T> Array2DBase<Vec<T>> {
                 .collect(),
         )
     }
-    pub fn new_with<F: FnMut() -> T>(x_size: usize, y_size: usize, f: F) -> Self {
+    pub(crate) fn new_with<F: FnMut() -> T>(x_size: usize, y_size: usize, f: F) -> Self {
         let len = x_size * y_size;
         let mut data = Vec::with_capacity(len);
         data.resize_with(len, f);
         Self::from_array(x_size, y_size, data)
     }
-    pub fn new(x_size: usize, y_size: usize, value: T) -> Self
+    pub(crate) fn new(x_size: usize, y_size: usize, value: T) -> Self
     where
         T: Clone,
     {
@@ -380,13 +381,13 @@ impl<T> Array2DBase<Vec<T>> {
         data.resize(len, value);
         Self::from_array(x_size, y_size, data)
     }
-    pub fn into_data(self) -> Vec<T> {
+    pub(crate) fn into_data(self) -> Vec<T> {
         self.data
     }
-    pub fn data(&self) -> &[T] {
+    pub(crate) fn data(&self) -> &[T] {
         &*self.data
     }
-    pub fn data_mut(&mut self) -> &mut [T] {
+    pub(crate) fn data_mut(&mut self) -> &mut [T] {
         &mut *self.data
     }
 }
@@ -494,13 +495,13 @@ impl<T: fmt::Display + Clone, Data: Array2DData<Element = T>> fmt::Display for A
     }
 }
 
-pub type Array2DOwned<T> = Array2DBase<Vec<T>>;
-pub type Array2DSlice<'a, T> = Array2DBase<&'a [T]>;
-pub type Array2DMutSlice<'a, T> = Array2DBase<&'a mut [T]>;
+pub(crate) type Array2DOwned<T> = Array2DBase<Vec<T>>;
+pub(crate) type Array2DSlice<'a, T> = Array2DBase<&'a [T]>;
+pub(crate) type Array2DMutSlice<'a, T> = Array2DBase<&'a mut [T]>;
 
 /// column-major 2D positions iterator
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
-pub struct Positions {
+pub(crate) struct Positions {
     x: usize,
     y: usize,
     y_size: usize,
@@ -521,7 +522,7 @@ impl Default for Positions {
 }
 
 impl Positions {
-    pub fn new(x_size: usize, y_size: usize) -> Self {
+    pub(crate) fn new(x_size: usize, y_size: usize) -> Self {
         if x_size == 0 || y_size == 0 {
             Self::default()
         } else {
@@ -534,16 +535,16 @@ impl Positions {
             }
         }
     }
-    pub fn is_finished(&self) -> bool {
+    pub(crate) fn is_finished(&self) -> bool {
         self.x == self.rev_x && self.y == self.after_rev_y
     }
-    pub fn pos(&self) -> Option<(usize, usize)> {
+    pub(crate) fn pos(&self) -> Option<(usize, usize)> {
         if self.is_finished() {
             return None;
         }
         Some((self.x, self.y))
     }
-    pub fn rev_pos(&self) -> Option<(usize, usize)> {
+    pub(crate) fn rev_pos(&self) -> Option<(usize, usize)> {
         if self.is_finished() {
             return None;
         }
@@ -631,17 +632,17 @@ macro_rules! impl_positions_wrapper {
 }
 
 #[derive(Copy, Clone, Debug)]
-pub struct IterWithPositions<'a, T> {
+pub(crate) struct IterWithPositions<'a, T> {
     positions: Positions,
     stride: usize,
     data: &'a [T],
 }
 
 impl<'a, T> IterWithPositions<'a, T> {
-    pub fn positions(&self) -> Positions {
+    pub(crate) fn positions(&self) -> Positions {
         self.positions
     }
-    pub fn without_positions(self) -> Iter<'a, T> {
+    pub(crate) fn without_positions(self) -> Iter<'a, T> {
         let IterWithPositions {
             positions,
             stride,
@@ -664,16 +665,16 @@ impl<'a, T> IterWithPositions<'a, T> {
 impl_positions_wrapper!(('a, T), IterWithPositions, ((usize, usize), &'a T));
 
 #[derive(Debug)]
-pub struct IterMutWithPositions<'a, T: 'a> {
+pub(crate) struct IterMutWithPositions<'a, T: 'a> {
     positions: Positions,
     data: IterOwnedData<slice::IterMut<'a, T>>,
 }
 
 impl<'a, T: 'a> IterMutWithPositions<'a, T> {
-    pub fn positions(&self) -> Positions {
+    pub(crate) fn positions(&self) -> Positions {
         self.positions
     }
-    pub fn without_positions(self) -> IterMut<'a, T> {
+    pub(crate) fn without_positions(self) -> IterMut<'a, T> {
         let IterMutWithPositions { positions, data } = self;
         IterMut { positions, data }
     }
@@ -688,17 +689,17 @@ impl<'a, T: 'a> IterMutWithPositions<'a, T> {
 impl_positions_wrapper!(('a, T), IterMutWithPositions, ((usize, usize), &'a mut T));
 
 #[derive(Copy, Clone, Debug)]
-pub struct Iter<'a, T> {
+pub(crate) struct Iter<'a, T> {
     positions: Positions,
     stride: usize,
     data: &'a [T],
 }
 
 impl<'a, T> Iter<'a, T> {
-    pub fn positions(&self) -> Positions {
+    pub(crate) fn positions(&self) -> Positions {
         self.positions
     }
-    pub fn with_positions(self) -> IterWithPositions<'a, T> {
+    pub(crate) fn with_positions(self) -> IterWithPositions<'a, T> {
         let Iter {
             positions,
             stride,
@@ -742,16 +743,16 @@ impl<Iter: Iterator + DoubleEndedIterator + ExactSizeIterator> IterOwnedData<Ite
 }
 
 #[derive(Debug)]
-pub struct IterMut<'a, T: 'a> {
+pub(crate) struct IterMut<'a, T: 'a> {
     positions: Positions,
     data: IterOwnedData<slice::IterMut<'a, T>>,
 }
 
 impl<'a, T: 'a> IterMut<'a, T> {
-    pub fn positions(&self) -> Positions {
+    pub(crate) fn positions(&self) -> Positions {
         self.positions
     }
-    pub fn with_positions(self) -> IterMutWithPositions<'a, T> {
+    pub(crate) fn with_positions(self) -> IterMutWithPositions<'a, T> {
         let IterMut { positions, data } = self;
         IterMutWithPositions { positions, data }
     }
@@ -766,16 +767,16 @@ impl<'a, T: 'a> IterMut<'a, T> {
 impl_positions_wrapper!(('a, T), IterMut, &'a mut T);
 
 #[derive(Debug)]
-pub struct IntoIterWithPositions<T> {
+pub(crate) struct IntoIterWithPositions<T> {
     positions: Positions,
     data: IterOwnedData<vec::IntoIter<T>>,
 }
 
 impl<T> IntoIterWithPositions<T> {
-    pub fn positions(&self) -> Positions {
+    pub(crate) fn positions(&self) -> Positions {
         self.positions
     }
-    pub fn without_positions(self) -> IntoIter<T> {
+    pub(crate) fn without_positions(self) -> IntoIter<T> {
         let IntoIterWithPositions { positions, data } = self;
         IntoIter { positions, data }
     }
@@ -790,16 +791,16 @@ impl<T> IntoIterWithPositions<T> {
 impl_positions_wrapper!((T), IntoIterWithPositions, ((usize, usize), T));
 
 #[derive(Debug)]
-pub struct IntoIter<T> {
+pub(crate) struct IntoIter<T> {
     positions: Positions,
     data: IterOwnedData<vec::IntoIter<T>>,
 }
 
 impl<T> IntoIter<T> {
-    pub fn positions(&self) -> Positions {
+    pub(crate) fn positions(&self) -> Positions {
         self.positions
     }
-    pub fn with_positions(self) -> IntoIterWithPositions<T> {
+    pub(crate) fn with_positions(self) -> IntoIterWithPositions<T> {
         let IntoIter { positions, data } = self;
         IntoIterWithPositions { positions, data }
     }

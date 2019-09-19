@@ -15,7 +15,7 @@ use std::ops::Add;
 use std::ops::Mul;
 use std::ops::RangeTo;
 
-pub fn inner_product<'a, L, R, T>(a: Array2DSlice<'a, L>, b: Array2DSlice<'a, R>) -> T
+pub(crate) fn inner_product<'a, L, R, T>(a: Array2DSlice<'a, L>, b: Array2DSlice<'a, R>) -> T
 where
     T: Zero + Add<Output = T>,
     for<'l, 'r> &'l L: Mul<&'r R, Output = T>,
@@ -32,7 +32,7 @@ where
     retval.unwrap_or_else(Zero::zero)
 }
 
-pub fn gram_schmidt_calculate_column<T>(
+pub(crate) fn gram_schmidt_calculate_column<T>(
     input_basis: Array2DSlice<T>,
     basis: &mut Array2DOwned<Ratio<T>>,
     column: usize,
@@ -59,7 +59,7 @@ pub fn gram_schmidt_calculate_column<T>(
     }
 }
 
-pub fn gram_schmidt<T>(input_basis: Array2DSlice<T>) -> Array2DOwned<Ratio<T>>
+pub(crate) fn gram_schmidt<T>(input_basis: Array2DSlice<T>) -> Array2DOwned<Ratio<T>>
 where
     T: Clone + Integer + NumAssign,
 {
@@ -111,7 +111,7 @@ where
     }
 }
 
-pub fn lll_reduce_with_delta<T>(basis: Array2DOwned<T>, delta: Ratio<T>) -> Array2DOwned<T>
+pub(crate) fn lll_reduce_with_delta<T>(basis: Array2DOwned<T>, delta: Ratio<T>) -> Array2DOwned<T>
 where
     T: Clone + Integer + NumAssign + NumRef + FromPrimitive + Signed,
 {
@@ -166,7 +166,7 @@ where
     state.basis
 }
 
-pub fn lll_reduce<T>(basis: Array2DOwned<T>) -> Array2DOwned<T>
+pub(crate) fn lll_reduce<T>(basis: Array2DOwned<T>) -> Array2DOwned<T>
 where
     T: Clone + Integer + NumAssign + NumRef + FromPrimitive + Signed,
 {

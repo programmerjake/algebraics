@@ -412,7 +412,7 @@ impl fmt::Display for ExactInexactInt {
 }
 
 impl Polynomial<BigInt> {
-    pub(crate) fn factor_square_free_polynomial_with_rng<R: Rng + ?Sized>(
+    fn factor_square_free_polynomial_with_rng<R: Rng + ?Sized>(
         &self,
         rng: &mut R,
     ) -> Vec<Polynomial<BigInt>> {

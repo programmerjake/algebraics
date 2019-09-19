@@ -102,7 +102,7 @@ mod tests {
     use std::collections::HashSet;
 
     #[test]
-    pub fn test_same_degree_factorization() {
+    pub(crate) fn test_same_degree_factorization() {
         fn make_poly(
             poly: &[i32],
             modulus: KnownOddPrime<i32>,

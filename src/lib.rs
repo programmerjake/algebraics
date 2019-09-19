@@ -5,13 +5,13 @@
 extern crate lazy_static;
 
 pub mod algebraic_numbers;
-pub mod array2d;
+pub(crate) mod array2d;
 pub mod interval_arithmetic;
-pub mod lattice;
+pub(crate) mod lattice;
 pub mod mod_int;
 pub mod polynomial;
 pub mod prelude;
-pub mod quadratic_numbers;
+pub(crate) mod quadratic_numbers;
 pub mod traits;
 pub mod util;
 

@@ -6,6 +6,8 @@ use crate::traits::AlwaysExactDivAssign;
 use crate::traits::ExactDiv;
 use crate::traits::ExactDivAssign;
 use crate::traits::FloorLog2;
+use crate::traits::IntervalUnion;
+use crate::traits::IntervalUnionAssign;
 use crate::util::DebugAsDisplay;
 use num_bigint::BigInt;
 use num_bigint::BigUint;
@@ -136,13 +138,14 @@ impl ConstantCache {
 /// inclusive interval of the form `[a / 2^n, b / 2^n]` where `a` and `b` are integers and `n` is an unsigned integer.
 #[derive(Clone, Default, Hash)]
 pub struct DyadicFractionInterval {
-    pub lower_bound_numer: BigInt,
-    pub upper_bound_numer: BigInt,
-    pub log2_denom: usize,
+    lower_bound_numer: BigInt,
+    upper_bound_numer: BigInt,
+    log2_denom: usize,
 }
 
 impl DyadicFractionInterval {
     pub fn new(lower_bound_numer: BigInt, upper_bound_numer: BigInt, log2_denom: usize) -> Self {
+        assert!(lower_bound_numer <= upper_bound_numer);
         Self {
             lower_bound_numer,
             upper_bound_numer,
@@ -154,6 +157,7 @@ impl DyadicFractionInterval {
         upper_bound: Ratio<BigInt>,
         log2_denom: usize,
     ) -> Self {
+        assert!(lower_bound <= upper_bound);
         let denom = BigInt::one() << log2_denom;
         let lower_bound_numer = (lower_bound * &denom).floor().to_integer();
         let upper_bound_numer = (upper_bound * denom).ceil().to_integer();
@@ -243,6 +247,45 @@ impl DyadicFractionInterval {
             self.upper_bound_numer.clone(),
             BigInt::one() << self.log2_denom,
         )
+    }
+    pub fn log2_denom(&self) -> usize {
+        self.log2_denom
+    }
+    pub fn lower_bound_numer(&self) -> &BigInt {
+        &self.lower_bound_numer
+    }
+    pub fn upper_bound_numer(&self) -> &BigInt {
+        &self.upper_bound_numer
+    }
+    /// convert to a tuple `(self.lower_bound_numer, self.upper_bound_numer, self.log2_denom)`
+    pub fn destructure(self) -> (BigInt, BigInt, usize) {
+        (
+            self.lower_bound_numer,
+            self.upper_bound_numer,
+            self.log2_denom,
+        )
+    }
+    pub fn set_to_lower_bound(&mut self) {
+        self.upper_bound_numer.clone_from(&self.lower_bound_numer);
+    }
+    pub fn set_to_upper_bound(&mut self) {
+        self.lower_bound_numer.clone_from(&self.upper_bound_numer);
+    }
+    pub fn set_lower_bound_numer(&mut self, lower_bound_numer: BigInt) {
+        assert!(lower_bound_numer <= self.upper_bound_numer);
+        self.lower_bound_numer = lower_bound_numer;
+    }
+    pub fn set_upper_bound_numer(&mut self, upper_bound_numer: BigInt) {
+        assert!(self.lower_bound_numer <= upper_bound_numer);
+        self.upper_bound_numer = upper_bound_numer;
+    }
+    pub fn set_lower_bound_to_zero(&mut self) {
+        assert!(!self.upper_bound_numer.is_negative());
+        self.lower_bound_numer.set_zero();
+    }
+    pub fn set_upper_bound_to_zero(&mut self) {
+        assert!(!self.lower_bound_numer.is_positive());
+        self.upper_bound_numer.set_zero();
     }
     pub fn convert_log2_denom(&mut self, log2_denom: usize) {
         convert_log2_denom_floor(&mut self.lower_bound_numer, self.log2_denom, log2_denom);
@@ -524,7 +567,7 @@ impl DyadicFractionInterval {
             Self::from_int(2i32.into(), log2_denom).into_sqrt()
         })
     }
-    pub fn pi(log2_denom: usize) -> Self {
+    pub(crate) fn pi(log2_denom: usize) -> Self {
         lazy_static! {
             static ref CACHE: ConstantCache = ConstantCache::new();
         }
@@ -928,15 +971,6 @@ macro_rules! forward_types_to_bigint {
         forward_type_to_bigint!($op_assign_trait, $op_assign, $op_trait, $op, i128);
         forward_type_to_bigint!($op_assign_trait, $op_assign, $op_trait, $op, isize);
     };
-}
-
-pub trait IntervalUnion<Rhs> {
-    type Output;
-    fn interval_union(self, rhs: Rhs) -> Self::Output;
-}
-
-pub trait IntervalUnionAssign<Rhs> {
-    fn interval_union_assign(&mut self, rhs: Rhs);
 }
 
 impl IntervalUnionAssign<DyadicFractionInterval> for DyadicFractionInterval {

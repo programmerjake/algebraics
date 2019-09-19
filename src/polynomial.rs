@@ -1424,7 +1424,7 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
             },
         )
     }
-    pub fn reduce_multiple_roots(&mut self)
+    pub(crate) fn reduce_multiple_roots(&mut self)
     where
         T: PolynomialDivSupported + PolynomialReducingFactorSupported,
     {

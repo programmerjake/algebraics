@@ -75,7 +75,7 @@ impl<T: PolynomialCoefficient> CheckedMul for Polynomial<T> {
     }
 }
 
-pub(crate) fn mul_assign_by_element_nonnormalized<T: PolynomialCoefficient>(
+fn mul_assign_by_element_nonnormalized<T: PolynomialCoefficient>(
     lhs: &mut Polynomial<T>,
     rhs: &T::Element,
 ) {

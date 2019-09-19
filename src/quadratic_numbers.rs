@@ -30,10 +30,10 @@ use std::ops::Rem;
 use std::ops::Sub;
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default)]
-pub struct QuadraticPolynomial<T> {
-    pub constant_term: T,
-    pub linear_term: T,
-    pub quadratic_term: T,
+pub(crate) struct QuadraticPolynomial<T> {
+    pub(crate) constant_term: T,
+    pub(crate) linear_term: T,
+    pub(crate) quadratic_term: T,
 }
 
 impl<T: Zero + PolynomialCoefficient> From<QuadraticPolynomial<T>> for Polynomial<T> {
@@ -68,7 +68,7 @@ where
 }
 
 impl<T> QuadraticPolynomial<T> {
-    pub fn discriminant(&self) -> T
+    pub(crate) fn discriminant(&self) -> T
     where
         for<'a> &'a T: Mul<Output = T>,
         u8: Into<T>,
@@ -77,13 +77,13 @@ impl<T> QuadraticPolynomial<T> {
         &self.linear_term * &self.linear_term
             - &self.quadratic_term * &self.constant_term * 4.into()
     }
-    pub fn swapped_roots<'a>(&'a self) -> Self
+    pub(crate) fn swapped_roots<'a>(&'a self) -> Self
     where
         &'a T: Neg<Output = T>,
     {
         -self
     }
-    pub fn into_swapped_roots(self) -> Self
+    pub(crate) fn into_swapped_roots(self) -> Self
     where
         T: Neg<Output = T>,
     {
@@ -91,7 +91,7 @@ impl<T> QuadraticPolynomial<T> {
     }
 }
 
-pub type BigQuadraticPolynomial = QuadraticPolynomial<BigInt>;
+pub(crate) type BigQuadraticPolynomial = QuadraticPolynomial<BigInt>;
 
 /// quadratic number (root of quadratic polynomial)
 ///
@@ -104,7 +104,7 @@ pub type BigQuadraticPolynomial = QuadraticPolynomial<BigInt>;
 /// the more negative root can be represented by negating the polynomial terms.
 ///
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
-pub struct RealQuadraticNumber {
+pub(crate) struct RealQuadraticNumber {
     poly: BigQuadraticPolynomial,
 }
 
@@ -200,7 +200,7 @@ from_ratio!(isize);
 from_ratio!(BigInt);
 
 #[derive(Copy, Clone, Debug)]
-pub struct NonQuadraticResult;
+pub(crate) struct NonQuadraticResult;
 
 impl fmt::Display for NonQuadraticResult {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -287,7 +287,7 @@ fn add_rational_with_real_quadratic_number(
 }
 
 impl RealQuadraticNumber {
-    pub fn new(poly: BigQuadraticPolynomial) -> Option<Self> {
+    pub(crate) fn new(poly: BigQuadraticPolynomial) -> Option<Self> {
         if (poly.quadratic_term.is_zero() && poly.linear_term.is_zero())
             || poly.discriminant().is_negative()
         {
@@ -296,19 +296,19 @@ impl RealQuadraticNumber {
             Some(Self { poly }.into_reduced())
         }
     }
-    pub fn constant_term(&self) -> &BigInt {
+    pub(crate) fn constant_term(&self) -> &BigInt {
         &self.poly.constant_term
     }
-    pub fn linear_term(&self) -> &BigInt {
+    pub(crate) fn linear_term(&self) -> &BigInt {
         &self.poly.linear_term
     }
-    pub fn quadratic_term(&self) -> &BigInt {
+    pub(crate) fn quadratic_term(&self) -> &BigInt {
         &self.poly.quadratic_term
     }
-    pub fn polynomial(&self) -> &BigQuadraticPolynomial {
+    pub(crate) fn polynomial(&self) -> &BigQuadraticPolynomial {
         &self.poly
     }
-    pub fn into_polynomial(self) -> BigQuadraticPolynomial {
+    pub(crate) fn into_polynomial(self) -> BigQuadraticPolynomial {
         self.poly
     }
     fn from_negated_integer(negated_value: BigInt) -> Self {
@@ -320,7 +320,7 @@ impl RealQuadraticNumber {
             },
         }
     }
-    pub fn from_integer(value: BigInt) -> Self {
+    pub(crate) fn from_integer(value: BigInt) -> Self {
         Self::from_negated_integer(-value)
     }
     fn from_negated_reduced_ratio(negated_numerator: BigInt, denominator: BigInt) -> Self {
@@ -355,7 +355,7 @@ impl RealQuadraticNumber {
         }
         Self::from_negated_reduced_ratio(numerator / neg_gcd, denominator / gcd)
     }
-    pub fn from_ratio_checked(
+    pub(crate) fn from_ratio_checked(
         numerator: BigInt,
         denominator: BigInt,
     ) -> Result<Self, NonQuadraticResult> {
@@ -364,31 +364,31 @@ impl RealQuadraticNumber {
         }
         Ok(Self::from_ratio_non_inf(numerator, denominator))
     }
-    pub fn from_ratio(numerator: BigInt, denominator: BigInt) -> Self {
+    pub(crate) fn from_ratio(numerator: BigInt, denominator: BigInt) -> Self {
         assert!(!denominator.is_zero(), "denominator is zero");
         Self::from_ratio_non_inf(numerator, denominator)
     }
-    pub fn is_ratio(&self) -> bool {
+    pub(crate) fn is_ratio(&self) -> bool {
         self.quadratic_term().is_zero()
     }
-    pub fn is_integer(&self) -> bool {
+    pub(crate) fn is_integer(&self) -> bool {
         self.is_ratio() && self.linear_term().is_one()
     }
-    pub fn to_integer(&self) -> Option<BigInt> {
+    pub(crate) fn to_integer(&self) -> Option<BigInt> {
         if self.is_integer() {
             Some(-self.constant_term())
         } else {
             None
         }
     }
-    pub fn to_tuple_ratio(&self) -> Option<(BigInt, BigInt)> {
+    pub(crate) fn to_tuple_ratio(&self) -> Option<(BigInt, BigInt)> {
         if self.is_ratio() {
             Some((-self.constant_term(), self.linear_term().clone()))
         } else {
             None
         }
     }
-    pub fn to_ratio(&self) -> Option<BigRational> {
+    pub(crate) fn to_ratio(&self) -> Option<BigRational> {
         self.to_tuple_ratio()
             .map(|(numer, denom)| BigRational::new_raw(numer, denom))
     }
@@ -418,7 +418,7 @@ impl RealQuadraticNumber {
         }
         self
     }
-    pub fn checked_add(&self, rhs: &Self) -> Result<Self, NonQuadraticResult> {
+    pub(crate) fn checked_add(&self, rhs: &Self) -> Result<Self, NonQuadraticResult> {
         if let Some((lhs_numerator, lhs_denominator)) = self.to_tuple_ratio() {
             return Ok(add_rational_with_real_quadratic_number(
                 lhs_numerator,
@@ -438,10 +438,10 @@ impl RealQuadraticNumber {
         )?;
         unimplemented!()
     }
-    pub fn checked_sub(&self, rhs: &Self) -> Result<Self, NonQuadraticResult> {
+    pub(crate) fn checked_sub(&self, rhs: &Self) -> Result<Self, NonQuadraticResult> {
         self.checked_add(&-rhs)
     }
-    pub fn checked_recip(&self) -> Result<Self, NonQuadraticResult> {
+    pub(crate) fn checked_recip(&self) -> Result<Self, NonQuadraticResult> {
         if self.is_ratio() {
             return Self::from_negated_reduced_ratio_checked(
                 self.linear_term().clone(),
@@ -450,16 +450,16 @@ impl RealQuadraticNumber {
         }
         unimplemented!()
     }
-    pub fn checked_rem(&self, rhs: &Self) -> Result<Self, NonQuadraticResult> {
+    pub(crate) fn checked_rem(&self, rhs: &Self) -> Result<Self, NonQuadraticResult> {
         unimplemented!()
     }
-    pub fn checked_mul(&self, rhs: &Self) -> Result<Self, NonQuadraticResult> {
+    pub(crate) fn checked_mul(&self, rhs: &Self) -> Result<Self, NonQuadraticResult> {
         unimplemented!()
     }
-    pub fn checked_div(&self, rhs: &Self) -> Result<Self, NonQuadraticResult> {
+    pub(crate) fn checked_div(&self, rhs: &Self) -> Result<Self, NonQuadraticResult> {
         unimplemented!()
     }
-    pub fn to_f64(&self) -> Option<f64> {
+    pub(crate) fn to_f64(&self) -> Option<f64> {
         Some(if self.is_ratio() {
             -self.constant_term().to_f64()? / self.linear_term().to_f64()?
         } else {
@@ -486,7 +486,7 @@ impl Neg for &'_ RealQuadraticNumber {
     }
 }
 
-pub struct FromStrRadixError;
+pub(crate) struct FromStrRadixError;
 
 impl Num for RealQuadraticNumber {
     type FromStrRadixErr = FromStrRadixError;
