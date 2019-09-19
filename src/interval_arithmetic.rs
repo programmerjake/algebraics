@@ -1891,7 +1891,12 @@ mod tests {
             DFI::new(bi(-291), bi(485), 0),
         );
         test_case(
-            DFI::new(bi(-3), bi(-5), 0),
+            DFI::new(bi(-5), bi(3), 0),
+            DFI::new(bi(17), bi(97), 0),
+            DFI::new(bi(-485), bi(291), 0),
+        );
+        test_case(
+            DFI::new(bi(-5), bi(-3), 0),
             DFI::new(bi(17), bi(97), 0),
             DFI::new(bi(-485), bi(-51), 0),
         );
@@ -1906,23 +1911,53 @@ mod tests {
             DFI::new(bi(-291), bi(485), 0),
         );
         test_case(
-            DFI::new(bi(-3), bi(-5), 0),
+            DFI::new(bi(-5), bi(3), 0),
+            DFI::new(bi(-17), bi(97), 0),
+            DFI::new(bi(-485), bi(291), 0),
+        );
+        test_case(
+            DFI::new(bi(-5), bi(-3), 0),
             DFI::new(bi(-17), bi(97), 0),
             DFI::new(bi(-485), bi(85), 0),
         );
         test_case(
             DFI::new(bi(3), bi(5), 0),
-            DFI::new(bi(-17), bi(-97), 0),
+            DFI::new(bi(-97), bi(17), 0),
+            DFI::new(bi(-485), bi(85), 0),
+        );
+        test_case(
+            DFI::new(bi(-3), bi(5), 0),
+            DFI::new(bi(-97), bi(17), 0),
+            DFI::new(bi(-485), bi(291), 0),
+        );
+        test_case(
+            DFI::new(bi(-5), bi(3), 0),
+            DFI::new(bi(-97), bi(17), 0),
+            DFI::new(bi(-291), bi(485), 0),
+        );
+        test_case(
+            DFI::new(bi(-5), bi(-3), 0),
+            DFI::new(bi(-97), bi(17), 0),
+            DFI::new(bi(-85), bi(485), 0),
+        );
+        test_case(
+            DFI::new(bi(3), bi(5), 0),
+            DFI::new(bi(-97), bi(-17), 0),
             DFI::new(bi(-485), bi(-51), 0),
         );
         test_case(
             DFI::new(bi(-3), bi(5), 0),
-            DFI::new(bi(-17), bi(-97), 0),
+            DFI::new(bi(-97), bi(-17), 0),
             DFI::new(bi(-485), bi(291), 0),
         );
         test_case(
-            DFI::new(bi(-3), bi(-5), 0),
-            DFI::new(bi(-17), bi(-97), 0),
+            DFI::new(bi(-5), bi(3), 0),
+            DFI::new(bi(-97), bi(-17), 0),
+            DFI::new(bi(-291), bi(485), 0),
+        );
+        test_case(
+            DFI::new(bi(-5), bi(-3), 0),
+            DFI::new(bi(-97), bi(-17), 0),
             DFI::new(bi(51), bi(485), 0),
         );
         test_case(
@@ -2048,7 +2083,12 @@ mod tests {
             Some(DFI::new(bi(-46), bi(76), 8)),
         );
         test_case(
-            DFI::new(bi(-3), bi(-5), 8),
+            DFI::new(bi(-5), bi(3), 8),
+            DFI::new(bi(17), bi(97), 8),
+            Some(DFI::new(bi(-76), bi(46), 8)),
+        );
+        test_case(
+            DFI::new(bi(-5), bi(-3), 8),
             DFI::new(bi(17), bi(97), 8),
             Some(DFI::new(bi(-76), bi(-7), 8)),
         );
@@ -2063,7 +2103,12 @@ mod tests {
             None,
         );
         test_case(
-            DFI::new(bi(-3), bi(-5), 8),
+            DFI::new(bi(-5), bi(3), 8),
+            DFI::new(bi(-17), bi(97), 8),
+            None,
+        );
+        test_case(
+            DFI::new(bi(-5), bi(-3), 8),
             DFI::new(bi(-17), bi(97), 8),
             None,
         );
@@ -2078,7 +2123,12 @@ mod tests {
             None,
         );
         test_case(
-            DFI::new(bi(-3), bi(-5), 8),
+            DFI::new(bi(-5), bi(3), 8),
+            DFI::new(bi(-97), bi(17), 8),
+            None,
+        );
+        test_case(
+            DFI::new(bi(-5), bi(-3), 8),
             DFI::new(bi(-97), bi(17), 8),
             None,
         );
@@ -2093,7 +2143,12 @@ mod tests {
             Some(DFI::new(bi(-76), bi(46), 8)),
         );
         test_case(
-            DFI::new(bi(-3), bi(-5), 8),
+            DFI::new(bi(-5), bi(3), 8),
+            DFI::new(bi(-97), bi(-17), 8),
+            Some(DFI::new(bi(-46), bi(76), 8)),
+        );
+        test_case(
+            DFI::new(bi(-5), bi(-3), 8),
             DFI::new(bi(-97), bi(-17), 8),
             Some(DFI::new(bi(7), bi(76), 8)),
         );
@@ -2447,31 +2502,51 @@ mod tests {
     fn test_exp() {
         assert_same!(
             DFI::from_int_range(bi(0), bi(0), 64).exp(),
-            DFI::new(bi(18446744073709551616), bi(18446744073709551616), 64)
+            DFI::new(
+                bi(18_446_744_073_709_551_616),
+                bi(18_446_744_073_709_551_616),
+                64
+            )
         );
         assert_same!(
             DFI::from_int_range(bi(0), bi(1), 64).exp(),
-            DFI::new(bi(18446744073709551616), bi(50143449209799256683), 64)
+            DFI::new(
+                bi(18_446_744_073_709_551_616),
+                bi(50_143_449_209_799_256_683),
+                64
+            )
         );
         assert_same!(
             DFI::from_int_range(bi(1), bi(1), 64).exp(),
-            DFI::new(bi(50143449209799256682), bi(50143449209799256683), 64)
+            DFI::new(
+                bi(50_143_449_209_799_256_682),
+                bi(50_143_449_209_799_256_683),
+                64
+            )
         );
         assert_same!(
             DFI::from_int_range(bi(1), bi(1), 120).exp(),
             DFI::new(
-                bi(3613216306821173191995746233763034355),
-                bi(3613216306821173191995746233763034356),
+                bi(3_613_216_306_821_173_191_995_746_233_763_034_355),
+                bi(3_613_216_306_821_173_191_995_746_233_763_034_356),
                 120
             )
         );
         assert_same!(
             DFI::from_ratio_range(r(1, 16), r(1, 16), 64).exp(),
-            DFI::new(bi(19636456851539679189), bi(19636456851539679190), 64)
+            DFI::new(
+                bi(19_636_456_851_539_679_189),
+                bi(19_636_456_851_539_679_190),
+                64
+            )
         );
         assert_same!(
             DFI::from_ratio_range(r(1, 16), r(5, 11), 64).exp(),
-            DFI::new(bi(19636456851539679189), bi(29062053985348969808), 64)
+            DFI::new(
+                bi(19_636_456_851_539_679_189),
+                bi(29_062_053_985_348_969_808),
+                64
+            )
         );
         assert_same!(
             DFI::from_ratio(r(12345, 20), 120).exp(),
