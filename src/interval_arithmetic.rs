@@ -567,6 +567,7 @@ impl DyadicFractionInterval {
             Self::from_int(2i32.into(), log2_denom).into_sqrt()
         })
     }
+    #[allow(dead_code)] // FIXME: remove when implemented
     pub(crate) fn pi(log2_denom: usize) -> Self {
         lazy_static! {
             static ref CACHE: ConstantCache = ConstantCache::new();

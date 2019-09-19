@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // See Notices.txt for copyright information
 
+// FIXME: remove when module made public again
+#![allow(dead_code)]
+
 use crate::array2d::Array2DOwned;
 use crate::array2d::Array2DSlice;
 use num_integer::Integer;

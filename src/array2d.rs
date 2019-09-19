@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // See Notices.txt for copyright information
 
+// FIXME: remove when module made public again
+#![allow(dead_code)]
+
 use std::borrow::Borrow;
 use std::borrow::BorrowMut;
 use std::fmt;

@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // See Notices.txt for copyright information
 
+// FIXME: remove when module made public again
+#![allow(dead_code)]
+
 use crate::polynomial::Polynomial;
 use crate::polynomial::PolynomialCoefficient;
 use crate::traits::GCD;
@@ -432,7 +435,7 @@ impl RealQuadraticNumber {
                 self.clone(),
             ));
         }
-        let sqrts_sum_diff = add_sub_sqrts(
+        let _sqrts_sum_diff = add_sub_sqrts(
             self.poly.discriminant() * rhs.quadratic_term().abs() * 2,
             rhs.poly.discriminant() * self.quadratic_term().abs() * 2,
         )?;
@@ -450,13 +453,13 @@ impl RealQuadraticNumber {
         }
         unimplemented!()
     }
-    pub(crate) fn checked_rem(&self, rhs: &Self) -> Result<Self, NonQuadraticResult> {
+    pub(crate) fn checked_rem(&self, _rhs: &Self) -> Result<Self, NonQuadraticResult> {
         unimplemented!()
     }
-    pub(crate) fn checked_mul(&self, rhs: &Self) -> Result<Self, NonQuadraticResult> {
+    pub(crate) fn checked_mul(&self, _rhs: &Self) -> Result<Self, NonQuadraticResult> {
         unimplemented!()
     }
-    pub(crate) fn checked_div(&self, rhs: &Self) -> Result<Self, NonQuadraticResult> {
+    pub(crate) fn checked_div(&self, _rhs: &Self) -> Result<Self, NonQuadraticResult> {
         unimplemented!()
     }
     pub(crate) fn to_f64(&self) -> Option<f64> {
@@ -490,7 +493,7 @@ pub(crate) struct FromStrRadixError;
 
 impl Num for RealQuadraticNumber {
     type FromStrRadixErr = FromStrRadixError;
-    fn from_str_radix(str: &str, radix: u32) -> Result<Self, FromStrRadixError> {
+    fn from_str_radix(_str: &str, _radix: u32) -> Result<Self, FromStrRadixError> {
         unimplemented!()
     }
 }
