@@ -9,6 +9,7 @@ license = "LGPL-2.1-or-later"
 description = "algebraic numbers library"
 keywords = ["algebraic-numbers", "arbitrary-precision", "polynomials", "real-numbers", "exact-arithmetic"]
 repository = "https://salsa.debian.org/Kazan-team/algebraics"
+readme = "README.md"
 
 [dependencies]
 num-traits = "0.2"
