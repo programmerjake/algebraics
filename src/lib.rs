@@ -16,3 +16,12 @@ pub mod traits;
 pub mod util;
 
 pub use algebraic_numbers::RealAlgebraicNumber;
+
+macro_rules! doctest {
+    ($x:expr) => {
+        #[doc = $x]
+        extern {}
+    };
+}
+
+doctest!(include_str!("../README.md"));
