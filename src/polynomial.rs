@@ -1424,13 +1424,6 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
             },
         )
     }
-    pub(crate) fn reduce_multiple_roots(&mut self)
-    where
-        T: PolynomialDivSupported + PolynomialReducingFactorSupported,
-    {
-        let derivative = self.derivative();
-        *self /= GCD::gcd(self, &derivative);
-    }
     fn convert_to_derivative(&mut self) {
         if self.is_empty() {
             return;
