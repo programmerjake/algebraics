@@ -39,6 +39,23 @@ use std::ops::RemAssign;
 use std::ops::Sub;
 use std::ops::SubAssign;
 
+pub trait IntoRationalExponent {
+    fn into_rational_exponent(self) -> Ratio<BigInt>;
+}
+
+impl<T: IntoRationalExponent + Clone> IntoRationalExponent for &'_ T {
+    fn into_rational_exponent(self) -> Ratio<BigInt> {
+        (*self).clone().into_rational_exponent()
+    }
+}
+
+impl<N: Into<BigInt>, D: Into<BigInt>> IntoRationalExponent for (N, D) {
+    fn into_rational_exponent(self) -> Ratio<BigInt> {
+        let (numer, denom) = self;
+        Ratio::new(numer.into(), denom.into())
+    }
+}
+
 #[derive(Clone)]
 pub struct RealAlgebraicNumberData {
     pub minimal_polynomial: Polynomial<BigInt>,
@@ -111,6 +128,12 @@ macro_rules! impl_from_int_or_ratio {
             }
         }
 
+        impl IntoRationalExponent for $t {
+            fn into_rational_exponent(self) -> Ratio<BigInt> {
+                BigInt::from(self).into()
+            }
+        }
+
         impl From<Ratio<$t>> for RealAlgebraicNumber {
             fn from(value: Ratio<$t>) -> Self {
                 let (numer, denom) = value.into();
@@ -125,6 +148,13 @@ macro_rules! impl_from_int_or_ratio {
                     [neg_numer, denom].into(),
                     DyadicFractionInterval::from_ratio(ratio, 0),
                 )
+            }
+        }
+
+        impl IntoRationalExponent for Ratio<$t> {
+            fn into_rational_exponent(self) -> Ratio<BigInt> {
+                let (numer, denom) = self.into();
+                Ratio::new_raw(numer.into(), denom.into())
             }
         }
     };
@@ -766,11 +796,11 @@ impl RealAlgebraicNumber {
             )
         }
     }
-    pub fn checked_into_pow<E: Into<Ratio<BigInt>>>(self, exponent: E) -> Option<Self> {
-        Self::checked_pow_impl(Cow::Owned(self), exponent.into())
+    pub fn checked_into_pow<E: IntoRationalExponent>(self, exponent: E) -> Option<Self> {
+        Self::checked_pow_impl(Cow::Owned(self), exponent.into_rational_exponent())
     }
-    pub fn checked_pow<E: Into<Ratio<BigInt>>>(&self, exponent: E) -> Option<Self> {
-        Self::checked_pow_impl(Cow::Borrowed(self), exponent.into())
+    pub fn checked_pow<E: IntoRationalExponent>(&self, exponent: E) -> Option<Self> {
+        Self::checked_pow_impl(Cow::Borrowed(self), exponent.into_rational_exponent())
     }
 }
 
@@ -1409,17 +1439,19 @@ impl<'a, 'b> Rem<&'a RealAlgebraicNumber> for &'b RealAlgebraicNumber {
     }
 }
 
-impl<E: Into<Ratio<BigInt>>> Pow<E> for RealAlgebraicNumber {
+impl<E: IntoRationalExponent> Pow<E> for RealAlgebraicNumber {
     type Output = RealAlgebraicNumber;
     fn pow(self, exponent: E) -> RealAlgebraicNumber {
-        self.checked_into_pow(exponent).expect("checked_pow failed")
+        self.checked_into_pow(exponent.into_rational_exponent())
+            .expect("checked_pow failed")
     }
 }
 
-impl<E: Into<Ratio<BigInt>>> Pow<E> for &'_ RealAlgebraicNumber {
+impl<E: IntoRationalExponent> Pow<E> for &'_ RealAlgebraicNumber {
     type Output = RealAlgebraicNumber;
     fn pow(self, exponent: E) -> RealAlgebraicNumber {
-        self.checked_pow(exponent).expect("checked_pow failed")
+        self.checked_pow(exponent.into_rational_exponent())
+            .expect("checked_pow failed")
     }
 }
 
