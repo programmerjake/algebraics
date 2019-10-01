@@ -11,6 +11,7 @@ pub(crate) mod lattice;
 pub mod mod_int;
 pub mod polynomial;
 pub mod prelude;
+pub mod python;
 pub(crate) mod quadratic_numbers;
 pub mod traits;
 pub mod util;

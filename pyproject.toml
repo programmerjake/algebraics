@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# See Notices.txt for copyright information
+[build-system]
+requires = ["maturin"]
+build-backend = "maturin"
+
+[tool.maturin]
+bindings = "pyo3"
+cargo-extra-args = "--features python-extension"
