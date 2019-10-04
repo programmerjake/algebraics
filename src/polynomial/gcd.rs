@@ -142,7 +142,8 @@ impl<T: PolynomialCoefficient + for<'a> ExactDiv<&'a T, Output = T>> Polynomial<
                             T::make_one_coefficient_from_element(Cow::Borrowed(&v.elements[0]));
                         psi = -one.clone();
                         beta = if delta.is_odd() { -one } else { one };
-                    } else if i > 1 {
+                    } else {
+                        assert!(i > 1);
                         let f = u
                             .nonzero_highest_power_coefficient()
                             .expect("known to be non-zero");
@@ -155,8 +156,6 @@ impl<T: PolynomialCoefficient + for<'a> ExactDiv<&'a T, Output = T>> Polynomial<
                         beta = f
                             .neg()
                             .mul(T::coefficient_pow_usize(psi.clone(), delta - 1));
-                    } else {
-                        unreachable!()
                     }
                     let r = r.exact_div(&beta);
                     let l = v
