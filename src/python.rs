@@ -4,10 +4,16 @@
 #![cfg(feature = "python-extension")]
 
 use crate::algebraic_numbers::RealAlgebraicNumber;
+use crate::traits::ExactDivAssign;
 use num_bigint::BigInt;
 use num_bigint::Sign;
+use num_traits::Signed;
 use num_traits::ToPrimitive;
 use num_traits::Zero;
+use pyo3::basic::CompareOp;
+use pyo3::exceptions::TypeError;
+use pyo3::exceptions::ValueError;
+use pyo3::exceptions::ZeroDivisionError;
 use pyo3::prelude::*;
 use pyo3::types::IntoPyDict;
 use pyo3::types::PyAny;
@@ -15,7 +21,9 @@ use pyo3::types::PyBytes;
 use pyo3::types::PyInt;
 use pyo3::types::PyType;
 use pyo3::PyNativeType;
+use pyo3::PyNumberProtocol;
 use pyo3::PyObjectProtocol;
+use std::sync::Arc;
 
 // TODO: Switch to using BigInt's python conversions once they are implemented
 // see https://github.com/PyO3/pyo3/issues/543
@@ -66,19 +74,31 @@ impl FromPyObject<'_> for PyBigInt {
 }
 
 #[pyclass(name=RealAlgebraicNumber, module="algebraics")]
+#[derive(Clone)]
 struct RealAlgebraicNumberPy {
-    value: RealAlgebraicNumber,
+    value: Arc<RealAlgebraicNumber>,
 }
 
-#[pymethods(PyObjectProtocol)]
-impl RealAlgebraicNumberPy {
-    #[new]
-    fn pynew(obj: &PyRawObject, value: Option<&PyInt>) -> PyResult<()> {
+impl FromPyObject<'_> for RealAlgebraicNumberPy {
+    fn extract(value: &PyAny) -> PyResult<Self> {
+        if let Ok(value) = value.downcast_ref::<RealAlgebraicNumberPy>() {
+            return Ok(value.clone());
+        }
+        let value = value.extract::<Option<&PyInt>>()?;
         let value = match value {
             None => RealAlgebraicNumber::zero(),
             Some(value) => RealAlgebraicNumber::from(value.extract::<PyBigInt>()?.0),
-        };
-        obj.init(RealAlgebraicNumberPy { value });
+        }
+        .into();
+        Ok(RealAlgebraicNumberPy { value })
+    }
+}
+
+#[pymethods(PyObjectProtocol, PyNumberProtocol)]
+impl RealAlgebraicNumberPy {
+    #[new]
+    fn pynew(obj: &PyRawObject, value: RealAlgebraicNumberPy) -> PyResult<()> {
+        obj.init(value);
         Ok(())
     }
     // FIXME: implement rest of methods
@@ -89,6 +109,97 @@ impl PyObjectProtocol for RealAlgebraicNumberPy {
     fn __repr__(&self) -> PyResult<String> {
         Ok(format!("{:?}", self.value))
     }
+    fn __richcmp__(&self, other: &PyAny, op: CompareOp) -> PyResult<bool> {
+        let py = other.py();
+        let other = other.extract::<RealAlgebraicNumberPy>()?;
+        Ok(py.allow_threads(|| match op {
+            CompareOp::Lt => self.value < other.value,
+            CompareOp::Le => self.value <= other.value,
+            CompareOp::Eq => self.value == other.value,
+            CompareOp::Ne => self.value != other.value,
+            CompareOp::Gt => self.value > other.value,
+            CompareOp::Ge => self.value >= other.value,
+        }))
+    }
+}
+
+#[pyproto]
+impl PyNumberProtocol for RealAlgebraicNumberPy {
+    fn __add__(lhs: &PyAny, rhs: RealAlgebraicNumberPy) -> PyResult<RealAlgebraicNumberPy> {
+        let py = lhs.py();
+        let mut lhs = lhs.extract::<RealAlgebraicNumberPy>()?;
+        Ok(py.allow_threads(|| {
+            *Arc::make_mut(&mut lhs.value) += &*rhs.value;
+            lhs
+        }))
+    }
+    fn __sub__(lhs: &PyAny, rhs: RealAlgebraicNumberPy) -> PyResult<RealAlgebraicNumberPy> {
+        let py = lhs.py();
+        let mut lhs = lhs.extract::<RealAlgebraicNumberPy>()?;
+        Ok(py.allow_threads(|| {
+            *Arc::make_mut(&mut lhs.value) -= &*rhs.value;
+            lhs
+        }))
+    }
+    fn __mul__(lhs: &PyAny, rhs: RealAlgebraicNumberPy) -> PyResult<RealAlgebraicNumberPy> {
+        let py = lhs.py();
+        let mut lhs = lhs.extract::<RealAlgebraicNumberPy>()?;
+        Ok(py.allow_threads(|| {
+            *Arc::make_mut(&mut lhs.value) *= &*rhs.value;
+            lhs
+        }))
+    }
+    fn __truediv__(lhs: &PyAny, rhs: RealAlgebraicNumberPy) -> PyResult<RealAlgebraicNumberPy> {
+        let py = lhs.py();
+        let mut lhs = lhs.extract::<RealAlgebraicNumberPy>()?;
+        py.allow_threads(|| -> Result<RealAlgebraicNumberPy, ()> {
+            Arc::make_mut(&mut lhs.value).checked_exact_div_assign(&*rhs.value)?;
+            Ok(lhs)
+        })
+        .map_err(|()| ZeroDivisionError::py_err("can't divide RealAlgebraicNumber by zero"))
+    }
+    fn __pow__(
+        lhs: RealAlgebraicNumberPy,
+        rhs: RealAlgebraicNumberPy,
+        modulus: &PyAny,
+    ) -> PyResult<RealAlgebraicNumberPy> {
+        let py = modulus.py();
+        if !modulus.is_none() {
+            return Err(TypeError::py_err(
+                "3 argument pow() not allowed for RealAlgebraicNumber",
+            ));
+        }
+        py.allow_threads(|| -> Result<RealAlgebraicNumberPy, &'static str> {
+            if let Some(rhs) = rhs.value.to_rational() {
+                Ok(RealAlgebraicNumberPy {
+                    value: lhs
+                        .value
+                        .checked_pow(rhs)
+                        .ok_or("pow() failed for RealAlgebraicNumber")?
+                        .into(),
+                })
+            } else {
+                Err("exponent must be rational for RealAlgebraicNumber")
+            }
+        })
+        .map_err(ValueError::py_err)
+    }
+
+    // Unary arithmetic
+    fn __neg__(&self) -> PyResult<RealAlgebraicNumberPy> {
+        Ok(Python::acquire_gil()
+            .python()
+            .allow_threads(|| RealAlgebraicNumberPy {
+                value: Arc::from(-&*self.value),
+            }))
+    }
+    fn __abs__(&self) -> PyResult<RealAlgebraicNumberPy> {
+        Ok(Python::acquire_gil()
+            .python()
+            .allow_threads(|| RealAlgebraicNumberPy {
+                value: self.value.abs().into(),
+            }))
+    }
 }
 
 #[pymodule]
@@ -97,3 +208,5 @@ fn algebraics(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<RealAlgebraicNumberPy>()?;
     Ok(())
 }
+
+// FIXME: add tests
