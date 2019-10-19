@@ -6,79 +6,18 @@
 use crate::algebraic_numbers::RealAlgebraicNumber;
 use crate::traits::ExactDivAssign;
 use num_bigint::BigInt;
-use num_bigint::Sign;
 use num_traits::Signed;
-use num_traits::ToPrimitive;
 use num_traits::Zero;
 use pyo3::basic::CompareOp;
 use pyo3::exceptions::TypeError;
 use pyo3::exceptions::ValueError;
 use pyo3::exceptions::ZeroDivisionError;
 use pyo3::prelude::*;
-use pyo3::types::IntoPyDict;
 use pyo3::types::PyAny;
-use pyo3::types::PyBytes;
-use pyo3::types::PyInt;
-use pyo3::types::PyType;
-use pyo3::FromPy;
 use pyo3::PyNativeType;
 use pyo3::PyNumberProtocol;
 use pyo3::PyObjectProtocol;
 use std::sync::Arc;
-
-// TODO: Switch to using BigInt's python conversions once they are implemented
-// see https://github.com/PyO3/pyo3/issues/543
-#[derive(Clone, Debug)]
-pub struct PyBigInt(pub BigInt);
-
-impl ToPyObject for PyBigInt {
-    fn to_object(&self, py: Python) -> PyObject {
-        if let Some(value) = self.0.to_i64() {
-            value.to_object(py)
-        } else {
-            let (sign, bytes) = self.0.to_bytes_le();
-            let int_type: &PyType = py.get_type::<PyInt>();
-            let retval = int_type
-                .call_method1("from_bytes", (bytes, "little"))
-                .unwrap()
-                .downcast_ref::<PyInt>()
-                .unwrap();
-            if sign == Sign::Minus {
-                retval.call_method0("__neg__").unwrap().to_object(py)
-            } else {
-                retval.to_object(py)
-            }
-        }
-    }
-}
-
-impl FromPy<PyBigInt> for PyObject {
-    fn from_py(value: PyBigInt, py: Python) -> Self {
-        value.to_object(py)
-    }
-}
-
-impl FromPyObject<'_> for PyBigInt {
-    fn extract(ob: &PyAny) -> PyResult<Self> {
-        let value = ob.downcast_ref::<PyInt>()?;
-        if let Ok(value) = value.extract::<i64>() {
-            Ok(PyBigInt(value.into()))
-        } else {
-            let mut len = 32;
-            let bytes = loop {
-                match value.call_method(
-                    "to_bytes",
-                    (len, "little"),
-                    Some([("signed", true)].into_py_dict(ob.py())),
-                ) {
-                    Ok(bytes) => break bytes.downcast_ref::<PyBytes>()?,
-                    Err(_) => len *= 2,
-                }
-            };
-            Ok(PyBigInt(BigInt::from_signed_bytes_le(bytes.as_bytes())))
-        }
-    }
-}
 
 #[pyclass(name=RealAlgebraicNumber, module="algebraics")]
 #[derive(Clone)]
@@ -91,10 +30,10 @@ impl FromPyObject<'_> for RealAlgebraicNumberPy {
         if let Ok(value) = value.downcast_ref::<RealAlgebraicNumberPy>() {
             return Ok(value.clone());
         }
-        let value = value.extract::<Option<&PyInt>>()?;
+        let value = value.extract::<Option<BigInt>>()?;
         let value = match value {
             None => RealAlgebraicNumber::zero(),
-            Some(value) => RealAlgebraicNumber::from(value.extract::<PyBigInt>()?.0),
+            Some(value) => RealAlgebraicNumber::from(value),
         }
         .into();
         Ok(RealAlgebraicNumberPy { value })
@@ -109,37 +48,30 @@ impl RealAlgebraicNumberPy {
             value: RealAlgebraicNumber::zero().into(),
         }));
     }
-    fn __trunc__(&self) -> PyBigInt {
+    fn __trunc__(&self) -> BigInt {
         let gil = Python::acquire_gil();
         let py = gil.python();
-        py.allow_threads(|| PyBigInt(self.value.to_integer_trunc()))
+        py.allow_threads(|| self.value.to_integer_trunc())
     }
-    fn __floor__(&self) -> PyBigInt {
+    fn __floor__(&self) -> BigInt {
         let gil = Python::acquire_gil();
         let py = gil.python();
-        py.allow_threads(|| PyBigInt(self.value.to_integer_floor()))
+        py.allow_threads(|| self.value.to_integer_floor())
     }
-    fn __ceil__(&self) -> PyBigInt {
+    fn __ceil__(&self) -> BigInt {
         let gil = Python::acquire_gil();
         let py = gil.python();
-        py.allow_threads(|| PyBigInt(self.value.to_integer_ceil()))
+        py.allow_threads(|| self.value.to_integer_ceil())
     }
-    fn to_integer(&self) -> Option<PyBigInt> {
-        self.value.to_integer().map(PyBigInt)
+    fn to_integer(&self) -> Option<BigInt> {
+        self.value.to_integer()
     }
-    fn to_rational(&self) -> Option<(PyBigInt, PyBigInt)> {
-        self.value.to_rational().map(|value| {
-            let (numer, denom) = value.into();
-            (PyBigInt(numer), PyBigInt(denom))
-        })
+    fn to_rational(&self) -> Option<(BigInt, BigInt)> {
+        self.value.to_rational().map(Into::into)
     }
     #[getter]
-    fn minimal_polynomial(&self) -> Vec<PyBigInt> {
-        self.value
-            .minimal_polynomial()
-            .iter()
-            .map(PyBigInt)
-            .collect()
+    fn minimal_polynomial(&self) -> Vec<BigInt> {
+        self.value.minimal_polynomial().iter().collect()
     }
     #[getter]
     fn degree(&self) -> usize {
@@ -270,5 +202,3 @@ fn algebraics(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<RealAlgebraicNumberPy>()?;
     Ok(())
 }
-
-// FIXME: add tests

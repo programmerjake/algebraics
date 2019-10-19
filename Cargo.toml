@@ -27,4 +27,12 @@ num-rational = "0.2"
 rand = "0.5"
 rand_pcg = "0.1.1"
 lazy_static = "1.4"
-pyo3 = { version = "0.8.0", optional = true }
+
+[dependencies.pyo3]
+# switch back to PyO3/pyo3 when
+# https://github.com/PyO3/pyo3/pull/630 lands;
+# switch to crates.io version once new version is published
+git = "https://github.com/programmerjake/pyo3.git"
+rev = "f55037c3779521520971cd528b05680b283e440c"
+optional = true
+features = ["num-bigint"]
