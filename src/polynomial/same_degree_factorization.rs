@@ -54,7 +54,7 @@ where
             .to_bigint()
             .expect("can't convert modulus/characteristic to BigInt");
         let polynomial_exponent = (bigint_characteristic.pow(factor_degree) - 1u32) / 2u32;
-        let coefficient_uniform = Uniform::new(V::zero(), characteristic.clone());
+        let coefficient_uniform = Uniform::new(V::zero(), characteristic);
         let mut retval = Vec::new();
         let mut factoring_stack = vec![self.clone()];
         while let Some(mut polynomial) = factoring_stack.pop() {

@@ -1237,7 +1237,7 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
         T: GCD<Output = T> + PartialOrd,
     {
         if let Some(mut retval) = self.iter().fold(None, |lhs: Option<T>, rhs| match lhs {
-            None => Some(rhs.clone()),
+            None => Some(rhs),
             Some(lhs) => Some(lhs.gcd(&rhs)),
         }) {
             let c = self
