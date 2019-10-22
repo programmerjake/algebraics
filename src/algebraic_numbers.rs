@@ -623,6 +623,32 @@ impl RealAlgebraicNumber {
     pub fn trunc(&self) -> Self {
         self.to_integer_trunc().into()
     }
+    /// shrinks the interval till it doesn't contain zero
+    #[must_use]
+    fn remove_zero_from_interval(&mut self) -> Option<(Sign, IntervalShrinker)> {
+        let sign = match self.cmp_with_zero() {
+            Ordering::Equal => return None,
+            Ordering::Less => Sign::Negative,
+            Ordering::Greater => Sign::Positive,
+        };
+        match sign {
+            Sign::Negative => {
+                if self.interval().upper_bound_numer().is_positive() {
+                    self.data.interval.set_upper_bound_to_zero();
+                }
+            }
+            Sign::Positive => {
+                if self.interval().lower_bound_numer().is_negative() {
+                    self.data.interval.set_lower_bound_to_zero();
+                }
+            }
+        }
+        let mut interval_shrinker = self.interval_shrinker();
+        while interval_shrinker.interval.contains_zero() {
+            interval_shrinker.shrink();
+        }
+        Some((sign, interval_shrinker))
+    }
     pub fn checked_recip(&self) -> Option<Self> {
         if let Some(value) = self.to_rational() {
             if value.is_zero() {
@@ -630,28 +656,10 @@ impl RealAlgebraicNumber {
             }
             return Some(value.recip().into());
         }
-        let sign = match self.cmp_with_zero() {
-            Ordering::Equal => unreachable!("already checked for zero"),
-            Ordering::Less => Sign::Negative,
-            Ordering::Greater => Sign::Positive,
-        };
         let mut value = self.clone();
-        match sign {
-            Sign::Negative => {
-                if value.interval().upper_bound_numer().is_positive() {
-                    value.data.interval.set_upper_bound_to_zero();
-                }
-            }
-            Sign::Positive => {
-                if value.interval().lower_bound_numer().is_negative() {
-                    value.data.interval.set_lower_bound_to_zero();
-                }
-            }
-        }
-        let mut interval_shrinker = value.interval_shrinker();
-        while interval_shrinker.interval.contains_zero() {
-            interval_shrinker.shrink();
-        }
+        value
+            .remove_zero_from_interval()
+            .expect("known to be non-zero");
         let RealAlgebraicNumberData {
             minimal_polynomial,
             interval,
