@@ -2,7 +2,7 @@
 # See Notices.txt for copyright information
 [package]
 name = "algebraics"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Jacob Lifshay <programmerjake@gmail.com>"]
 edition = "2018"
 license = "LGPL-2.1-or-later"
@@ -10,6 +10,7 @@ description = "algebraic numbers library"
 keywords = ["algebraic-numbers", "arbitrary-precision", "polynomials", "real-numbers", "exact-arithmetic"]
 repository = "https://salsa.debian.org/Kazan-team/algebraics"
 readme = "README.md"
+categories = ["algorithms", "data-structures", "science"]
 
 [dependencies]
 num-traits = "0.2"
