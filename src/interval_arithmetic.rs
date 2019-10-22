@@ -3,6 +3,7 @@
 
 use crate::traits::AlwaysExactDiv;
 use crate::traits::AlwaysExactDivAssign;
+use crate::traits::CeilLog2;
 use crate::traits::ExactDiv;
 use crate::traits::ExactDivAssign;
 use crate::traits::FloorLog2;
@@ -837,6 +838,16 @@ impl DyadicFractionInterval {
     }
     pub fn ceil(&self, new_log2_denom: usize) -> Self {
         self.clone().into_ceil(new_log2_denom)
+    }
+    pub(crate) fn floor_log2(&self) -> Option<(i64, i64)> {
+        let lower_bound = self.lower_bound_numer.floor_log2()? as i64 - self.log2_denom as i64;
+        let upper_bound = self.upper_bound_numer.floor_log2()? as i64 - self.log2_denom as i64;
+        Some((lower_bound, upper_bound))
+    }
+    pub(crate) fn ceil_log2(&self) -> Option<(i64, i64)> {
+        let lower_bound = self.lower_bound_numer.ceil_log2()? as i64 - self.log2_denom as i64;
+        let upper_bound = self.upper_bound_numer.ceil_log2()? as i64 - self.log2_denom as i64;
+        Some((lower_bound, upper_bound))
     }
 }
 
