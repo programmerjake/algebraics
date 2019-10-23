@@ -93,6 +93,20 @@ impl RealAlgebraicNumberPy {
             })
             .ok_or_else(get_div_by_zero_error)
     }
+    /// returns `floor(log2(self))`
+    fn floor_log2(&self) -> PyResult<i64> {
+        Python::acquire_gil()
+            .python()
+            .allow_threads(|| self.value.checked_floor_log2())
+            .ok_or_else(get_floor_ceil_log2_error)
+    }
+    /// returns `ceil(log2(self))`
+    fn ceil_log2(&self) -> PyResult<i64> {
+        Python::acquire_gil()
+            .python()
+            .allow_threads(|| self.value.checked_ceil_log2())
+            .ok_or_else(get_floor_ceil_log2_error)
+    }
 }
 
 #[pyproto]
@@ -116,6 +130,10 @@ impl PyObjectProtocol for RealAlgebraicNumberPy {
 
 fn get_div_by_zero_error() -> PyErr {
     ZeroDivisionError::py_err("can't divide RealAlgebraicNumber by zero")
+}
+
+fn get_floor_ceil_log2_error() -> PyErr {
+    ValueError::py_err("can't extract base-2 logarithm of zero or negative RealAlgebraicNumber")
 }
 
 #[pyproto]

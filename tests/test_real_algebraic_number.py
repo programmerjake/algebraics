@@ -227,6 +227,28 @@ class TestRealAlgebraicNumber(unittest.TestCase):
         self.assertEqual(abs(RealAlgebraicNumber(1)), 1)
         self.assertEqual(abs(RealAlgebraicNumber(-2)), 2)
 
+    def test_floor_ceil_log2(self):
+        with self.assertRaises(ValueError):
+            RealAlgebraicNumber(0).floor_log2()
+        with self.assertRaises(ValueError):
+            RealAlgebraicNumber(0).ceil_log2()
+        with self.assertRaises(ValueError):
+            RealAlgebraicNumber(-1).floor_log2()
+        with self.assertRaises(ValueError):
+            RealAlgebraicNumber(-1).ceil_log2()
+        self.assertEqual(RealAlgebraicNumber(1).floor_log2(), 0)
+        self.assertEqual(RealAlgebraicNumber(1).ceil_log2(), 0)
+        self.assertEqual(RealAlgebraicNumber(2).floor_log2(), 1)
+        self.assertEqual(RealAlgebraicNumber(2).ceil_log2(), 1)
+        self.assertEqual(RealAlgebraicNumber(3).floor_log2(), 1)
+        self.assertEqual(RealAlgebraicNumber(3).ceil_log2(), 2)
+        self.assertEqual(RealAlgebraicNumber(4).floor_log2(), 2)
+        self.assertEqual(RealAlgebraicNumber(4).ceil_log2(), 2)
+        self.assertEqual((RealAlgebraicNumber(1) / 4).floor_log2(), -2)
+        self.assertEqual((RealAlgebraicNumber(1) / 4).ceil_log2(), -2)
+        self.assertEqual((RealAlgebraicNumber(1) / 3).floor_log2(), -2)
+        self.assertEqual((RealAlgebraicNumber(1) / 3).ceil_log2(), -1)
+
 
 if __name__ == '__main__':
     unittest.main()
