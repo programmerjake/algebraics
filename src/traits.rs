@@ -560,7 +560,6 @@ pub trait ExactDivAssign<Rhs = Self>: ExactDiv<Rhs, Output = Self> {
             panic!("exact division failed");
         }
     }
-    #[must_use]
     fn checked_exact_div_assign(&mut self, rhs: Rhs) -> Result<(), ()>;
 }
 

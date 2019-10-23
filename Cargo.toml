@@ -10,6 +10,7 @@ description = "algebraic numbers library"
 keywords = ["algebraic-numbers", "arbitrary-precision", "polynomials", "real-numbers", "exact-arithmetic"]
 repository = "https://salsa.debian.org/Kazan-team/algebraics"
 readme = "README.md"
+categories = ["algorithms", "data-structures", "science"]
 
 [features]
 default = []

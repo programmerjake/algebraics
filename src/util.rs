@@ -634,7 +634,7 @@ pub trait IsPseudoPrime:
             return false;
         }
         let sqrt = self.sqrt();
-        if sqrt.clone() * sqrt.clone() == *self {
+        if sqrt.clone() * sqrt == *self {
             return false;
         }
         if let Some(value) = self.to_u128() {

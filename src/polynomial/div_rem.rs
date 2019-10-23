@@ -470,7 +470,11 @@ impl<'a, T: PolynomialCoefficient + for<'b> ExactDiv<&'b T, Output = T>> ExactDi
 }
 
 impl<T: PolynomialDivSupported> Polynomial<T> {
-    pub fn checked_powmod<E: Clone + Integer>(&self, exponent: E, modulus: &Self) -> Option<Self> {
+    pub fn checked_powmod<E: Clone + Integer>(
+        &self,
+        mut exponent: E,
+        modulus: &Self,
+    ) -> Option<Self> {
         if exponent < Zero::zero() {
             return None;
         }
@@ -481,7 +485,6 @@ impl<T: PolynomialDivSupported> Polynomial<T> {
         if exponent.is_one() {
             return Some(base);
         }
-        let mut exponent = exponent.clone();
         let mut retval: Option<Self> = None;
         loop {
             if exponent.is_odd() {

@@ -5,8 +5,10 @@ use crate::interval_arithmetic::DyadicFractionInterval;
 use crate::polynomial::Polynomial;
 use crate::traits::AlwaysExactDiv;
 use crate::traits::AlwaysExactDivAssign;
+use crate::traits::CeilLog2;
 use crate::traits::ExactDiv;
 use crate::traits::ExactDivAssign;
+use crate::traits::FloorLog2;
 use crate::util::DebugAsDisplay;
 use crate::util::Sign;
 use num_bigint::BigInt;
@@ -623,6 +625,32 @@ impl RealAlgebraicNumber {
     pub fn trunc(&self) -> Self {
         self.to_integer_trunc().into()
     }
+    /// shrinks the interval till it doesn't contain zero
+    #[must_use]
+    fn remove_zero_from_interval(&mut self) -> Option<(Sign, IntervalShrinker)> {
+        let sign = match self.cmp_with_zero() {
+            Ordering::Equal => return None,
+            Ordering::Less => Sign::Negative,
+            Ordering::Greater => Sign::Positive,
+        };
+        match sign {
+            Sign::Negative => {
+                if self.interval().upper_bound_numer().is_positive() {
+                    self.data.interval.set_upper_bound_to_zero();
+                }
+            }
+            Sign::Positive => {
+                if self.interval().lower_bound_numer().is_negative() {
+                    self.data.interval.set_lower_bound_to_zero();
+                }
+            }
+        }
+        let mut interval_shrinker = self.interval_shrinker();
+        while interval_shrinker.interval.contains_zero() {
+            interval_shrinker.shrink();
+        }
+        Some((sign, interval_shrinker))
+    }
     pub fn checked_recip(&self) -> Option<Self> {
         if let Some(value) = self.to_rational() {
             if value.is_zero() {
@@ -630,28 +658,10 @@ impl RealAlgebraicNumber {
             }
             return Some(value.recip().into());
         }
-        let sign = match self.cmp_with_zero() {
-            Ordering::Equal => unreachable!("already checked for zero"),
-            Ordering::Less => Sign::Negative,
-            Ordering::Greater => Sign::Positive,
-        };
         let mut value = self.clone();
-        match sign {
-            Sign::Negative => {
-                if value.interval().upper_bound_numer().is_positive() {
-                    value.data.interval.set_upper_bound_to_zero();
-                }
-            }
-            Sign::Positive => {
-                if value.interval().lower_bound_numer().is_negative() {
-                    value.data.interval.set_lower_bound_to_zero();
-                }
-            }
-        }
-        let mut interval_shrinker = value.interval_shrinker();
-        while interval_shrinker.interval.contains_zero() {
-            interval_shrinker.shrink();
-        }
+        value
+            .remove_zero_from_interval()
+            .expect("known to be non-zero");
         let RealAlgebraicNumberData {
             minimal_polynomial,
             interval,
@@ -801,6 +811,65 @@ impl RealAlgebraicNumber {
     }
     pub fn checked_pow<E: IntoRationalExponent>(&self, exponent: E) -> Option<Self> {
         Self::checked_pow_impl(Cow::Borrowed(self), exponent.into_rational_exponent())
+    }
+    /// returns `Some(log2(self))` if self is a power of 2, otherwise `None`
+    pub fn to_integer_log2(&self) -> Option<i64> {
+        let (numer, denom) = self.to_rational()?.into();
+        if denom.is_one() {
+            let retval = numer.floor_log2()?;
+            if retval == numer.ceil_log2().expect("known to be positive") {
+                return Some(retval.to_i64().expect("overflow"));
+            }
+        } else if numer.is_one() {
+            let retval = denom.floor_log2().expect("known to be positive");
+            if retval == denom.ceil_log2().expect("known to be positive") {
+                return Some(-retval.to_i64().expect("overflow"));
+            }
+        }
+        None
+    }
+    fn do_checked_floor_ceil_log2<
+        FloorCeilLog2: Fn(&DyadicFractionInterval) -> Option<(i64, i64)>,
+    >(
+        value: Cow<Self>,
+        floor_ceil_log2: FloorCeilLog2,
+    ) -> Option<i64> {
+        if !value.is_positive() {
+            return None;
+        }
+        if let Some(retval) = value.to_integer_log2() {
+            Some(retval)
+        } else {
+            let mut value = value.into_owned();
+            let mut interval_shrinker = value
+                .remove_zero_from_interval()
+                .expect("known to be positive")
+                .1;
+            loop {
+                let (retval_lower_bound, retval_upper_bound) =
+                    floor_ceil_log2(&interval_shrinker.interval).expect("known to be positive");
+                if retval_lower_bound == retval_upper_bound {
+                    return Some(retval_lower_bound);
+                }
+                interval_shrinker.shrink();
+            }
+        }
+    }
+    /// returns `Some(floor(log2(self)))` if `self` is positive, otherwise `None`
+    pub fn into_checked_floor_log2(self) -> Option<i64> {
+        Self::do_checked_floor_ceil_log2(Cow::Owned(self), DyadicFractionInterval::floor_log2)
+    }
+    /// returns `Some(floor(log2(self)))` if `self` is positive, otherwise `None`
+    pub fn checked_floor_log2(&self) -> Option<i64> {
+        Self::do_checked_floor_ceil_log2(Cow::Borrowed(self), DyadicFractionInterval::floor_log2)
+    }
+    /// returns `Some(ceil(log2(self)))` if `self` is positive, otherwise `None`
+    pub fn into_checked_ceil_log2(self) -> Option<i64> {
+        Self::do_checked_floor_ceil_log2(Cow::Owned(self), DyadicFractionInterval::ceil_log2)
+    }
+    /// returns `Some(floor(log2(self)))` if `self` is positive, otherwise `None`
+    pub fn checked_ceil_log2(&self) -> Option<i64> {
+        Self::do_checked_floor_ceil_log2(Cow::Borrowed(self), DyadicFractionInterval::ceil_log2)
     }
 }
 
@@ -1968,6 +2037,103 @@ mod tests {
                 p(&[5, 0, -20, 0, 16]),
                 DyadicFractionInterval::from_ratio_range(r(1, 2), r(3, 4), 2),
             )),
+        );
+    }
+
+    #[test]
+    fn test_integer_floor_ceil_log2() {
+        fn test_case<V: Into<RealAlgebraicNumber>>(
+            value: V,
+            expected_integer_log2: Option<i64>,
+            expected_floor_log2: Option<i64>,
+            expected_ceil_log2: Option<i64>,
+        ) {
+            let value = value.into();
+            println!("value: {:?}", value);
+            println!("expected_integer_log2: {:?}", expected_integer_log2);
+            println!("expected_floor_log2: {:?}", expected_floor_log2);
+            println!("expected_ceil_log2: {:?}", expected_ceil_log2);
+            let integer_log2 = value.to_integer_log2();
+            println!("integer_log2: {:?}", integer_log2);
+            let floor_log2 = value.checked_floor_log2();
+            println!("floor_log2: {:?}", floor_log2);
+            let ceil_log2 = value.into_checked_ceil_log2();
+            println!("ceil_log2: {:?}", ceil_log2);
+            assert!(expected_integer_log2 == integer_log2);
+            assert!(expected_floor_log2 == floor_log2);
+            assert!(expected_ceil_log2 == ceil_log2);
+        }
+        test_case(1, Some(0), Some(0), Some(0));
+        test_case(16, Some(4), Some(4), Some(4));
+        test_case(r(1, 16), Some(-4), Some(-4), Some(-4));
+        test_case(r(6, 5), None, Some(0), Some(1));
+        test_case(r(-6, 5), None, None, None);
+        test_case(0, None, None, None);
+        test_case(r(4, 5), None, Some(-1), Some(0));
+        test_case(r(-1, 5), None, None, None);
+        test_case(
+            make_sqrt(2, DyadicFractionInterval::from_int_range(bi(1), bi(2), 0)),
+            None,
+            Some(0),
+            Some(1),
+        );
+        test_case(
+            make_sqrt(
+                2_000_000,
+                DyadicFractionInterval::from_int_range(bi(1000), bi(2000), 0),
+            ),
+            None,
+            Some(10),
+            Some(11),
+        );
+        test_case(
+            make_sqrt(
+                200_000_000_000_000_000_000_000_000_000,
+                DyadicFractionInterval::from_int_range(
+                    bi(1000),
+                    bi(200_000_000_000_000_000_000),
+                    0,
+                ),
+            ),
+            None,
+            Some(48),
+            Some(49),
+        );
+        test_case(
+            make_sqrt(
+                5_00000_00000,
+                DyadicFractionInterval::from_int_range(bi(1_00000), bi(3_00000), 0),
+            ),
+            None,
+            Some(17),
+            Some(18),
+        );
+        test_case(
+            RealAlgebraicNumber::new_unchecked(
+                p(&[1, 0, -10, 0, 1]),
+                DyadicFractionInterval::from_int_range(bi(-1), bi(0), 0),
+            ),
+            None,
+            None,
+            None,
+        );
+        test_case(
+            RealAlgebraicNumber::new_unchecked(
+                p(&[1, 0, -10, 0, 1]),
+                DyadicFractionInterval::from_int_range(bi(0), bi(1), 0),
+            ),
+            None,
+            Some(-2),
+            Some(-1),
+        );
+        test_case(
+            RealAlgebraicNumber::new_unchecked(
+                p(&[-1, 3, -2, 1]),
+                DyadicFractionInterval::from_int_range(bi(-1000), bi(1000), 0),
+            ),
+            None,
+            Some(-2),
+            Some(-1),
         );
     }
 }
