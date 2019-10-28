@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // See Notices.txt for copyright information
 
-#![cfg(feature = "python-extension")]
+#![cfg(feature = "python")]
 
 use crate::algebraic_numbers::RealAlgebraicNumber;
 use crate::traits::ExactDivAssign;

@@ -14,7 +14,8 @@ categories = ["algorithms", "data-structures", "science"]
 
 [features]
 default = []
-python-extension = ["pyo3", "pyo3/extension-module"]
+python = ["pyo3"]
+python-extension = ["python", "pyo3/extension-module"]
 
 [lib]
 name = "algebraics"
