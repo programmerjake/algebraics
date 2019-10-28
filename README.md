@@ -1,8 +1,9 @@
-[Algebraic Numbers](https://en.wikipedia.org/wiki/Algebraic_number) Library
+## [Algebraic Numbers](https://en.wikipedia.org/wiki/Algebraic_number) Library
 
 Use when you need exact arithmetic, speed is not critical, and rational numbers aren't good enough.
 
-Example:
+## Example:
+
 ```rust
 use algebraics::prelude::*;
 use algebraics::RealAlgebraicNumber as Number;
@@ -65,4 +66,33 @@ assert_eq!(
      000000000000000000000000000000000000000000000\
      000000000000000000023"
 )
+```
+
+## Python support
+
+Using algebraics from Python:
+
+```bash
+python3 -m pip install algebraics==0.1.2
+```
+
+```python
+from algebraics import RealAlgebraicNumber
+sqrt_2 = 2 ** (RealAlgebraicNumber(1) / 2)
+assert sqrt_2 * sqrt_2 == 2
+```
+
+Using algebraics in your own Rust project:
+
+```toml
+[dependencies.algebraics]
+version = "0.1.2"
+features = ["python"]
+```
+
+Developing algebraics:
+
+```bash
+cargo install maturin
+maturin develop --cargo-extra-args="--features python-extension"
 ```

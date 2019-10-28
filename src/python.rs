@@ -19,6 +19,44 @@ use pyo3::PyNumberProtocol;
 use pyo3::PyObjectProtocol;
 use std::sync::Arc;
 
+impl FromPyObject<'_> for RealAlgebraicNumber {
+    fn extract(value: &PyAny) -> PyResult<Self> {
+        Ok((*RealAlgebraicNumberPy::extract(value)?.value).clone())
+    }
+}
+
+impl<'a> FromPyObject<'a> for &'a RealAlgebraicNumber {
+    fn extract(value: &'a PyAny) -> PyResult<Self> {
+        let result = RealAlgebraicNumberPy::extract(value)?.value.clone();
+        let result: &'a _ = value.py().register_any(result);
+        Ok(&**result)
+    }
+}
+
+impl IntoPy<PyObject> for RealAlgebraicNumber {
+    fn into_py(self, py: Python) -> PyObject {
+        RealAlgebraicNumberPy {
+            value: Arc::new(self),
+        }
+        .into_py(py)
+    }
+}
+
+impl IntoPy<PyObject> for &'_ RealAlgebraicNumber {
+    fn into_py(self, py: Python) -> PyObject {
+        RealAlgebraicNumberPy {
+            value: Arc::new(self.clone()),
+        }
+        .into_py(py)
+    }
+}
+
+impl ToPyObject for RealAlgebraicNumber {
+    fn to_object(&self, py: Python) -> PyObject {
+        self.into_py(py)
+    }
+}
+
 #[pyclass(name=RealAlgebraicNumber, module="algebraics")]
 #[derive(Clone)]
 struct RealAlgebraicNumberPy {
@@ -219,4 +257,34 @@ impl PyNumberProtocol for RealAlgebraicNumberPy {
 fn algebraics(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<RealAlgebraicNumberPy>()?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn conversion_compile_test() {
+        #![allow(dead_code)]
+
+        #[pyfunction]
+        fn identity_ref_result(v: &RealAlgebraicNumber) -> PyResult<&RealAlgebraicNumber> {
+            Ok(v)
+        }
+
+        #[pyfunction]
+        fn identity_result(v: RealAlgebraicNumber) -> PyResult<RealAlgebraicNumber> {
+            Ok(v)
+        }
+
+        #[pyfunction]
+        fn identity_ref(v: &RealAlgebraicNumber) -> &RealAlgebraicNumber {
+            v
+        }
+
+        #[pyfunction]
+        fn identity(v: RealAlgebraicNumber) -> RealAlgebraicNumber {
+            v
+        }
+    }
 }
