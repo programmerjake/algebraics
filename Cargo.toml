@@ -30,8 +30,6 @@ rand_pcg = "0.1.1"
 lazy_static = "1.4"
 
 [dependencies.pyo3]
-# switch to crates.io version once new version is published
-git = "https://github.com/PyO3/pyo3.git"
-rev = "6a89a904e3ce01e9cd3087a540b3604de4119e34"
+version = "0.8.2"
 optional = true
 features = ["num-bigint"]
