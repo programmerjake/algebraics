@@ -3,20 +3,16 @@
 
 #![cfg(feature = "python")]
 
-use crate::algebraic_numbers::RealAlgebraicNumber;
-use crate::traits::ExactDivAssign;
+use crate::{algebraic_numbers::RealAlgebraicNumber, traits::ExactDivAssign};
 use num_bigint::BigInt;
-use num_traits::Signed;
-use num_traits::Zero;
-use pyo3::basic::CompareOp;
-use pyo3::exceptions::TypeError;
-use pyo3::exceptions::ValueError;
-use pyo3::exceptions::ZeroDivisionError;
-use pyo3::prelude::*;
-use pyo3::types::PyAny;
-use pyo3::PyNativeType;
-use pyo3::PyNumberProtocol;
-use pyo3::PyObjectProtocol;
+use num_traits::{Signed, Zero};
+use pyo3::{
+    basic::CompareOp,
+    exceptions::{TypeError, ValueError, ZeroDivisionError},
+    prelude::*,
+    types::PyAny,
+    PyNativeType, PyNumberProtocol, PyObjectProtocol,
+};
 use std::sync::Arc;
 
 impl FromPyObject<'_> for RealAlgebraicNumber {
@@ -81,10 +77,10 @@ impl FromPyObject<'_> for RealAlgebraicNumberPy {
 #[pymethods(PyObjectProtocol, PyNumberProtocol)]
 impl RealAlgebraicNumberPy {
     #[new]
-    fn pynew(obj: &PyRawObject, value: Option<RealAlgebraicNumberPy>) {
-        obj.init(value.unwrap_or_else(|| RealAlgebraicNumberPy {
+    fn pynew(value: Option<RealAlgebraicNumberPy>) -> RealAlgebraicNumberPy {
+        value.unwrap_or_else(|| RealAlgebraicNumberPy {
             value: RealAlgebraicNumber::zero().into(),
-        }));
+        })
     }
     fn __trunc__(&self) -> BigInt {
         let gil = Python::acquire_gil();
