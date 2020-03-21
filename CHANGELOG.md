@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Changed
 
-* Update PyO3 from v0.8.2 to v0.9.0-alpha1
+* Update PyO3 from v0.8.2 to v0.9.0
 
 ## [0.1.2]
 
