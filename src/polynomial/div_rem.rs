@@ -1,22 +1,21 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // See Notices.txt for copyright information
 
-use crate::polynomial::Polynomial;
-use crate::polynomial::PolynomialCoefficient;
-use crate::polynomial::PolynomialCoefficientElement;
-use crate::polynomial::PolynomialDivSupported;
-use crate::polynomial::PseudoDivRem;
-use crate::traits::ExactDiv;
-use crate::traits::ExactDivAssign;
+use crate::{
+    polynomial::{
+        Polynomial, PolynomialCoefficient, PolynomialCoefficientElement, PolynomialDivSupported,
+        PseudoDivRem,
+    },
+    traits::{ExactDiv, ExactDivAssign},
+};
 use num_integer::Integer;
-use num_traits::CheckedDiv;
-use num_traits::CheckedRem;
-use num_traits::Zero;
-use std::borrow::Borrow;
-use std::borrow::Cow;
-use std::convert::identity;
-use std::mem;
-use std::ops::{Div, DivAssign, Mul, Rem, RemAssign, SubAssign};
+use num_traits::{CheckedDiv, CheckedRem, Zero};
+use std::{
+    borrow::{Borrow, Cow},
+    convert::identity,
+    mem,
+    ops::{Div, DivAssign, Mul, Rem, RemAssign, SubAssign},
+};
 
 fn quotient_len(numerator_len: usize, denominator_len: usize) -> Option<usize> {
     debug_assert_ne!(denominator_len, 0);
@@ -511,8 +510,7 @@ impl<T: PolynomialDivSupported> Polynomial<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::util::tests::test_op_helper;
-    use crate::util::DebugAsDisplay;
+    use crate::util::{tests::test_op_helper, DebugAsDisplay};
     use num_bigint::BigInt;
     use num_integer::Integer;
     use num_rational::Ratio;

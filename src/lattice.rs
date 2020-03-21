@@ -4,19 +4,14 @@
 // FIXME: remove when module made public again
 #![allow(dead_code)]
 
-use crate::array2d::Array2DOwned;
-use crate::array2d::Array2DSlice;
+use crate::array2d::{Array2DOwned, Array2DSlice};
 use num_integer::Integer;
 use num_rational::Ratio;
-use num_traits::FromPrimitive;
-use num_traits::NumAssign;
-use num_traits::NumRef;
-use num_traits::Signed;
-use num_traits::Zero;
-use std::cmp::Ordering;
-use std::ops::Add;
-use std::ops::Mul;
-use std::ops::RangeTo;
+use num_traits::{FromPrimitive, NumAssign, NumRef, Signed, Zero};
+use std::{
+    cmp::Ordering,
+    ops::{Add, Mul, RangeTo},
+};
 
 pub(crate) fn inner_product<'a, L, R, T>(a: Array2DSlice<'a, L>, b: Array2DSlice<'a, R>) -> T
 where
@@ -186,8 +181,7 @@ where
 mod tests {
     use super::*;
     use num_bigint::BigInt;
-    use num_traits::One;
-    use num_traits::Pow;
+    use num_traits::{One, Pow};
 
     #[test]
     fn test_gram_schmidt() {

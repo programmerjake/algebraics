@@ -1,38 +1,30 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // See Notices.txt for copyright information
 
-use crate::mod_int::KnownOddPrime;
-use crate::mod_int::ModularInteger;
-use crate::mod_int::Modulus;
-use crate::polynomial::Polynomial;
-use crate::polynomial::PolynomialCoefficient;
-use crate::polynomial::PolynomialDivSupported;
-use crate::polynomial::PolynomialFactor;
-use crate::polynomial::PolynomialFactors;
-use crate::polynomial::PolynomialReducingFactorSupported;
-use crate::traits::ExactDiv;
-use crate::traits::ExtendedGCD;
-use crate::traits::ExtendedGCDResult;
-use crate::util::for_subsets_of_size;
-use crate::util::next_prime_i32;
-use crate::util::ContinueBreak;
-use crate::util::LeafOrNodePair;
-use crate::util::PrintTree;
-use crate::util::PrintTreeData;
+use crate::{
+    mod_int::{KnownOddPrime, ModularInteger, Modulus},
+    polynomial::{
+        Polynomial, PolynomialCoefficient, PolynomialDivSupported, PolynomialFactor,
+        PolynomialFactors, PolynomialReducingFactorSupported,
+    },
+    traits::{ExactDiv, ExtendedGCD, ExtendedGCDResult},
+    util::{
+        for_subsets_of_size, next_prime_i32, ContinueBreak, LeafOrNodePair, PrintTree,
+        PrintTreeData,
+    },
+};
 use num_bigint::BigInt;
 use num_integer::Integer;
 use num_rational::Ratio;
-use num_traits::One;
-use num_traits::Signed;
-use rand::Rng;
-use rand::SeedableRng;
+use num_traits::{One, Signed};
+use rand::{Rng, SeedableRng};
 use rand_pcg::Pcg64Mcg;
-use std::cmp::Ordering;
-use std::collections::BinaryHeap;
-use std::fmt;
-use std::mem;
-use std::ops::Add;
-use std::ops::AddAssign;
+use std::{
+    cmp::Ordering,
+    collections::BinaryHeap,
+    fmt, mem,
+    ops::{Add, AddAssign},
+};
 
 struct FactorTreeInteriorNode<T: PolynomialCoefficient> {
     left: FactorTreeNode<T>,
@@ -678,10 +670,8 @@ impl Polynomial<BigInt> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use num_traits::One;
-    use num_traits::Pow;
-    use std::collections::HashSet;
-    use std::ops::Mul;
+    use num_traits::{One, Pow};
+    use std::{collections::HashSet, ops::Mul};
 
     fn p(coefficients: Vec<i128>) -> Polynomial<BigInt> {
         coefficients.into_iter().map(BigInt::from).collect()

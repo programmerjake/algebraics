@@ -1,25 +1,19 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // See Notices.txt for copyright information
-use crate::mod_int::ModularInteger;
-use crate::mod_int::ModularReducePow;
-use crate::mod_int::Modulus;
-use crate::traits::CharacteristicZero;
-use crate::traits::FloorLog2;
-use crate::traits::RingCharacteristic;
-use crate::traits::TrailingZeros;
-use num_integer::Integer;
-use num_integer::Roots;
-use num_traits::FromPrimitive;
-use num_traits::One;
-use num_traits::ToPrimitive;
-use num_traits::Zero;
-use std::cmp::Ordering;
-use std::fmt;
-use std::iter;
-use std::ops::MulAssign;
-use std::ops::Range;
-use std::ops::Shr;
-use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Neg, Not};
+use crate::{
+    mod_int::{ModularInteger, ModularReducePow, Modulus},
+    traits::{CharacteristicZero, FloorLog2, RingCharacteristic, TrailingZeros},
+};
+use num_integer::{Integer, Roots};
+use num_traits::{FromPrimitive, One, ToPrimitive, Zero};
+use std::{
+    cmp::Ordering,
+    fmt, iter,
+    ops::{
+        BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, MulAssign, Neg, Not, Range,
+        Shr,
+    },
+};
 
 /// the list of prime numbers that fit in `u16`
 pub(crate) const PRIMES_THAT_FIT_IN_U16: &[u16; 6542] = &[

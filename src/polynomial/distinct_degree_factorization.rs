@@ -1,17 +1,14 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // See Notices.txt for copyright information
 
-use crate::mod_int::ModularInteger;
-use crate::mod_int::ModularReducePow;
-use crate::mod_int::Modulus;
-use crate::mod_int::PrimeModulus;
-use crate::polynomial::Polynomial;
-use crate::traits::ExtendedGCD;
-use crate::traits::GCD;
+use crate::{
+    mod_int::{ModularInteger, ModularReducePow, Modulus, PrimeModulus},
+    polynomial::Polynomial,
+    traits::{ExtendedGCD, GCD},
+};
 use num_integer::Integer;
 use num_traits::Zero;
-use std::fmt;
-use std::hash::Hash;
+use std::{fmt, hash::Hash};
 
 impl<V, M> Polynomial<ModularInteger<V, M>>
 where

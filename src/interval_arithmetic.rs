@@ -1,39 +1,23 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // See Notices.txt for copyright information
 
-use crate::traits::AlwaysExactDiv;
-use crate::traits::AlwaysExactDivAssign;
-use crate::traits::CeilLog2;
-use crate::traits::ExactDiv;
-use crate::traits::ExactDivAssign;
-use crate::traits::FloorLog2;
-use crate::traits::IntervalUnion;
-use crate::traits::IntervalUnionAssign;
-use crate::util::DebugAsDisplay;
-use num_bigint::BigInt;
-use num_bigint::BigUint;
+use crate::{
+    traits::{
+        AlwaysExactDiv, AlwaysExactDivAssign, CeilLog2, ExactDiv, ExactDivAssign, FloorLog2,
+        IntervalUnion, IntervalUnionAssign,
+    },
+    util::DebugAsDisplay,
+};
+use num_bigint::{BigInt, BigUint};
 use num_integer::Integer;
 use num_rational::Ratio;
-use num_traits::FromPrimitive;
-use num_traits::One;
-use num_traits::Pow;
-use num_traits::Signed;
-use num_traits::ToPrimitive;
-use num_traits::Zero;
-use std::borrow::Cow;
-use std::fmt;
-use std::mem;
-use std::ops::Add;
-use std::ops::AddAssign;
-use std::ops::Div;
-use std::ops::DivAssign;
-use std::ops::Mul;
-use std::ops::MulAssign;
-use std::ops::Neg;
-use std::ops::Sub;
-use std::ops::SubAssign;
-use std::sync::Arc;
-use std::sync::RwLock;
+use num_traits::{FromPrimitive, One, Pow, Signed, ToPrimitive, Zero};
+use std::{
+    borrow::Cow,
+    fmt, mem,
+    ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign},
+    sync::{Arc, RwLock},
+};
 
 fn convert_log2_denom_floor(numer: &mut BigInt, old_log2_denom: usize, new_log2_denom: usize) {
     if new_log2_denom >= old_log2_denom {
@@ -1320,15 +1304,13 @@ impl<E: Integer> Pow<E> for &'_ DyadicFractionInterval {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::util::tests::test_checked_op_helper;
-    use crate::util::tests::test_op_helper;
-    use crate::util::tests::test_unary_op_helper;
+    use crate::util::tests::{test_checked_op_helper, test_op_helper, test_unary_op_helper};
     use num_traits::ToPrimitive;
-    use std::borrow::Borrow;
-    use std::borrow::BorrowMut;
-    use std::convert::TryInto;
-    use std::ops::Deref;
-    use std::ops::DerefMut;
+    use std::{
+        borrow::{Borrow, BorrowMut},
+        convert::TryInto,
+        ops::{Deref, DerefMut},
+    };
 
     type DFI = DyadicFractionInterval;
 

@@ -2,21 +2,16 @@
 // See Notices.txt for copyright information
 
 // use super::util::{pairwise_op_eq_move, pairwise_op_eq_ref, pairwise_op_ref_ref};
-use crate::polynomial::Polynomial;
-use crate::polynomial::PolynomialCoefficient;
-use crate::traits::ExactDiv;
-use crate::traits::GCDAndLCM;
-use crate::traits::GCD;
-use num_traits::CheckedAdd;
-use num_traits::CheckedSub;
-use num_traits::One;
-use num_traits::Zero;
-use std::borrow::Cow;
-use std::mem;
-use std::ops::Neg;
-use std::ops::Sub;
-use std::ops::SubAssign;
-use std::ops::{Add, AddAssign};
+use crate::{
+    polynomial::{Polynomial, PolynomialCoefficient},
+    traits::{ExactDiv, GCDAndLCM, GCD},
+};
+use num_traits::{CheckedAdd, CheckedSub, One, Zero};
+use std::{
+    borrow::Cow,
+    mem,
+    ops::{Add, AddAssign, Neg, Sub, SubAssign},
+};
 
 fn add_sub_assign<T: PolynomialCoefficient, AddSubAssign: Fn(&mut T::Element, T::Element)>(
     lhs: &mut Polynomial<T>,

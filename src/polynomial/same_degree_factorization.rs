@@ -1,23 +1,19 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // See Notices.txt for copyright information
 
-use crate::mod_int::ModularInteger;
-use crate::mod_int::ModularReducePow;
-use crate::mod_int::OddPrimeModulus;
-use crate::polynomial::Polynomial;
-use crate::traits::ExactDivAssign;
-use crate::traits::ExtendedGCD;
-use crate::traits::GCD;
+use crate::{
+    mod_int::{ModularInteger, ModularReducePow, OddPrimeModulus},
+    polynomial::Polynomial,
+    traits::{ExactDivAssign, ExtendedGCD, GCD},
+};
 use num_bigint::ToBigInt;
 use num_integer::Integer;
 use num_traits::Pow;
-use rand::distributions::uniform::SampleUniform;
-use rand::distributions::Distribution;
-use rand::distributions::Uniform;
-use rand::Rng;
-use std::fmt;
-use std::hash::Hash;
-use std::iter;
+use rand::{
+    distributions::{uniform::SampleUniform, Distribution, Uniform},
+    Rng,
+};
+use std::{fmt, hash::Hash, iter};
 
 impl<V, M> Polynomial<ModularInteger<V, M>>
 where

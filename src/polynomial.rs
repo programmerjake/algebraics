@@ -1,32 +1,22 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // See Notices.txt for copyright information
-use crate::traits::AlwaysExactDivAssign;
-use crate::traits::CharacteristicZero;
-use crate::traits::ExactDiv;
-use crate::traits::ExactDivAssign;
-use crate::traits::GCDAndLCM;
-use crate::traits::RingCharacteristic;
-use crate::traits::GCD;
+use crate::traits::{
+    AlwaysExactDivAssign, CharacteristicZero, ExactDiv, ExactDivAssign, GCDAndLCM,
+    RingCharacteristic, GCD,
+};
 use num_bigint::BigInt;
 use num_integer::Integer;
 use num_rational::Ratio;
-use num_traits::FromPrimitive;
-use num_traits::NumAssign;
-use num_traits::One;
-use num_traits::Pow;
-use num_traits::Signed;
-use num_traits::ToPrimitive;
-use num_traits::Zero;
-use std::borrow::Cow;
-use std::error::Error;
-use std::fmt;
-use std::hash;
-use std::iter::FromIterator;
-use std::mem;
-use std::ops::Neg;
-use std::ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign};
-use std::slice;
-use std::vec;
+use num_traits::{FromPrimitive, NumAssign, One, Pow, Signed, ToPrimitive, Zero};
+use std::{
+    borrow::Cow,
+    error::Error,
+    fmt, hash,
+    iter::FromIterator,
+    mem,
+    ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign},
+    slice, vec,
+};
 
 mod add_sub;
 mod distinct_degree_factorization;

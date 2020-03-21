@@ -4,22 +4,16 @@
 // FIXME: remove when module made public again
 #![allow(dead_code)]
 
-use std::borrow::Borrow;
-use std::borrow::BorrowMut;
-use std::fmt;
-use std::iter::FusedIterator;
-use std::ops::Bound;
-use std::ops::Index;
-use std::ops::IndexMut;
-use std::ops::Range;
-use std::ops::RangeBounds;
-use std::ops::RangeFrom;
-use std::ops::RangeFull;
-use std::ops::RangeInclusive;
-use std::ops::RangeTo;
-use std::ops::RangeToInclusive;
-use std::slice;
-use std::vec;
+use std::{
+    borrow::{Borrow, BorrowMut},
+    fmt,
+    iter::FusedIterator,
+    ops::{
+        Bound, Index, IndexMut, Range, RangeBounds, RangeFrom, RangeFull, RangeInclusive, RangeTo,
+        RangeToInclusive,
+    },
+    slice, vec,
+};
 
 mod private {
     pub(crate) trait SealedData {}

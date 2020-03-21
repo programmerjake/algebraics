@@ -1,44 +1,26 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // See Notices.txt for copyright information
 
-use crate::polynomial::DivisorIsOne;
-use crate::polynomial::PolynomialCoefficient;
-use crate::polynomial::PolynomialReducingFactorSupported;
-use crate::traits::AlwaysExactDiv;
-use crate::traits::AlwaysExactDivAssign;
-use crate::traits::ExactDiv;
-use crate::traits::ExactDivAssign;
-use crate::traits::ExtendedGCD;
-use crate::traits::ExtendedGCDResult;
-use crate::traits::GCD;
-use crate::util::BaseAndExponent;
-use num_bigint::BigInt;
-use num_bigint::BigUint;
+use crate::{
+    polynomial::{DivisorIsOne, PolynomialCoefficient, PolynomialReducingFactorSupported},
+    traits::{
+        AlwaysExactDiv, AlwaysExactDivAssign, ExactDiv, ExactDivAssign, ExtendedGCD,
+        ExtendedGCDResult, GCD,
+    },
+    util::BaseAndExponent,
+};
+use num_bigint::{BigInt, BigUint};
 use num_integer::Integer;
-use num_traits::CheckedAdd;
-use num_traits::CheckedDiv;
-use num_traits::CheckedMul;
-use num_traits::CheckedSub;
-use num_traits::FromPrimitive;
-use num_traits::One;
-use num_traits::ToPrimitive;
-use num_traits::Zero;
-use std::borrow::Borrow;
-use std::borrow::Cow;
-use std::convert::identity;
-use std::convert::TryInto;
-use std::fmt;
-use std::hash::Hash;
-use std::ops::Add;
-use std::ops::AddAssign;
-use std::ops::Deref;
-use std::ops::Div;
-use std::ops::DivAssign;
-use std::ops::Mul;
-use std::ops::MulAssign;
-use std::ops::Neg;
-use std::ops::Sub;
-use std::ops::SubAssign;
+use num_traits::{
+    CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, FromPrimitive, One, ToPrimitive, Zero,
+};
+use std::{
+    borrow::{Borrow, Cow},
+    convert::{identity, TryInto},
+    fmt,
+    hash::Hash,
+    ops::{Add, AddAssign, Deref, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign},
+};
 
 pub trait ModularReduce: Clone + Eq {
     fn modular_reduce_assign<M: Modulus<Self>>(&mut self, modulus: M);
@@ -1272,8 +1254,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::util::tests::test_op_helper;
-    use crate::util::tests::test_unary_op_helper;
+    use crate::util::tests::{test_op_helper, test_unary_op_helper};
 
     fn test_overflow_for_type<
         T: Modulus<T> + ModularReduce + Sub<Output = T> + Copy + Into<BigInt> + fmt::Debug,

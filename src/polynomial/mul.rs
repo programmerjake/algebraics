@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // See Notices.txt for copyright information
 
-use crate::polynomial::Polynomial;
-use crate::polynomial::PolynomialCoefficient;
+use crate::polynomial::{Polynomial, PolynomialCoefficient};
 use num_integer::Integer;
-use num_traits::CheckedMul;
-use num_traits::Pow;
-use num_traits::{One, Zero};
-use std::borrow::Cow;
-use std::ops::{AddAssign, Mul, MulAssign};
+use num_traits::{CheckedMul, One, Pow, Zero};
+use std::{
+    borrow::Cow,
+    ops::{AddAssign, Mul, MulAssign},
+};
 
 impl<'a, T: PolynomialCoefficient> Mul for &'a Polynomial<T> {
     type Output = Polynomial<T>;

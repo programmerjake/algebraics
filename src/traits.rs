@@ -1,19 +1,14 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // See Notices.txt for copyright information
-use crate::polynomial::Polynomial;
-use crate::polynomial::PolynomialCoefficient;
+use crate::polynomial::{Polynomial, PolynomialCoefficient};
 use num_bigint::{BigInt, BigUint};
 use num_integer::Integer;
 use num_rational::Ratio;
-use num_traits::CheckedRem;
-use num_traits::NumAssign;
-use num_traits::One;
-use num_traits::{CheckedDiv, CheckedMul, Signed, ToPrimitive, Zero};
-use std::fmt;
-use std::ops::Add;
-use std::ops::Div;
-use std::ops::DivAssign;
-use std::ops::Mul;
+use num_traits::{CheckedDiv, CheckedMul, CheckedRem, NumAssign, One, Signed, ToPrimitive, Zero};
+use std::{
+    fmt,
+    ops::{Add, Div, DivAssign, Mul},
+};
 
 /// GCD and LCM
 ///

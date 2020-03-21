@@ -4,33 +4,22 @@
 // FIXME: remove when module made public again
 #![allow(dead_code)]
 
-use crate::polynomial::Polynomial;
-use crate::polynomial::PolynomialCoefficient;
-use crate::traits::GCD;
-use num_bigint::BigUint;
-use num_bigint::{BigInt, Sign};
-use num_rational::BigRational;
-use num_rational::Ratio;
-use num_traits::cast::ToPrimitive;
-use num_traits::CheckedAdd;
-use num_traits::CheckedDiv;
-use num_traits::CheckedMul;
-use num_traits::CheckedRem;
-use num_traits::CheckedSub;
-use num_traits::Num;
-use num_traits::One;
-use num_traits::Signed;
-use num_traits::Zero;
-use std::cmp::Ordering;
-use std::error::Error;
-use std::fmt;
-use std::mem;
-use std::ops::Add;
-use std::ops::Div;
-use std::ops::Mul;
-use std::ops::Neg;
-use std::ops::Rem;
-use std::ops::Sub;
+use crate::{
+    polynomial::{Polynomial, PolynomialCoefficient},
+    traits::GCD,
+};
+use num_bigint::{BigInt, BigUint, Sign};
+use num_rational::{BigRational, Ratio};
+use num_traits::{
+    cast::ToPrimitive, CheckedAdd, CheckedDiv, CheckedMul, CheckedRem, CheckedSub, Num, One,
+    Signed, Zero,
+};
+use std::{
+    cmp::Ordering,
+    error::Error,
+    fmt, mem,
+    ops::{Add, Div, Mul, Neg, Rem, Sub},
+};
 
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug, Default)]
 pub(crate) struct QuadraticPolynomial<T> {

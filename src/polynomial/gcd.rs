@@ -1,21 +1,17 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // See Notices.txt for copyright information
-use crate::polynomial::Polynomial;
-use crate::polynomial::PolynomialCoefficient;
-use crate::polynomial::PolynomialDivSupported;
-use crate::polynomial::PolynomialReducingFactorSupported;
-use crate::polynomial::PseudoDivRem;
-use crate::traits::ExactDiv;
-use crate::traits::ExactDivAssign;
-use crate::traits::ExtendedGCD;
-use crate::traits::ExtendedGCDAndLCM;
-use crate::traits::ExtendedGCDResult;
-use crate::traits::GCDAndLCM;
-use crate::traits::GCD;
+use crate::{
+    polynomial::{
+        Polynomial, PolynomialCoefficient, PolynomialDivSupported,
+        PolynomialReducingFactorSupported, PseudoDivRem,
+    },
+    traits::{
+        ExactDiv, ExactDivAssign, ExtendedGCD, ExtendedGCDAndLCM, ExtendedGCDResult, GCDAndLCM, GCD,
+    },
+};
 use num_integer::Integer;
 use num_traits::Zero;
-use std::borrow::Cow;
-use std::mem;
+use std::{borrow::Cow, mem};
 
 /// computes factor * base.pow(exponent_positive_part - exponent_negative_part)
 fn exact_mul_by_signed_power<T: PolynomialCoefficient + for<'a> ExactDiv<&'a T, Output = T>>(
