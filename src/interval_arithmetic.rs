@@ -31,7 +31,7 @@ fn convert_log2_denom_ceil(numer: &mut BigInt, old_log2_denom: usize, new_log2_d
     if new_log2_denom >= old_log2_denom {
         *numer <<= new_log2_denom - old_log2_denom;
     } else {
-        let mut numer_value = mem::replace(numer, Default::default());
+        let mut numer_value = mem::take(numer);
         numer_value = -numer_value;
         numer_value >>= old_log2_denom - new_log2_denom;
         numer_value = -numer_value;
@@ -202,7 +202,7 @@ impl DyadicFractionInterval {
     pub fn set_negative_one(&mut self) {
         self.lower_bound_numer.set_one();
         self.lower_bound_numer <<= self.log2_denom;
-        self.lower_bound_numer = -mem::replace(&mut self.lower_bound_numer, Default::default());
+        self.lower_bound_numer = -mem::take(&mut self.lower_bound_numer);
         self.upper_bound_numer.clone_from(&self.lower_bound_numer);
     }
     pub fn into_ratio_range(self) -> (Ratio<BigInt>, Ratio<BigInt>) {
@@ -462,7 +462,7 @@ impl DyadicFractionInterval {
         self
     }
     pub fn square_assign(&mut self) {
-        *self = mem::replace(self, Default::default()).into_square();
+        *self = mem::take(self).into_square();
     }
     pub fn square(&self) -> Self {
         self.clone().into_square()
@@ -493,7 +493,7 @@ impl DyadicFractionInterval {
         }
     }
     pub fn sqrt_assign(&mut self) {
-        *self = mem::replace(self, Default::default()).into_sqrt();
+        *self = mem::take(self).into_sqrt();
     }
     pub fn into_sqrt(self) -> Self {
         Self::do_sqrt(Cow::Owned(self))
@@ -774,10 +774,10 @@ impl DyadicFractionInterval {
     pub fn abs_assign(&mut self) {
         let contains_zero = self.contains_zero();
         if self.lower_bound_numer.is_negative() {
-            self.lower_bound_numer = -mem::replace(&mut self.lower_bound_numer, Default::default());
+            self.lower_bound_numer = -mem::take(&mut self.lower_bound_numer);
         }
         if self.upper_bound_numer.is_negative() {
-            self.upper_bound_numer = -mem::replace(&mut self.upper_bound_numer, Default::default());
+            self.upper_bound_numer = -mem::take(&mut self.upper_bound_numer);
         }
         if self.lower_bound_numer > self.upper_bound_numer {
             mem::swap(&mut self.lower_bound_numer, &mut self.upper_bound_numer);
@@ -807,12 +807,12 @@ impl DyadicFractionInterval {
         self.clone().into_floor(new_log2_denom)
     }
     pub fn ceil_assign(&mut self, new_log2_denom: usize) {
-        self.lower_bound_numer = -mem::replace(&mut self.lower_bound_numer, Default::default());
-        self.upper_bound_numer = -mem::replace(&mut self.upper_bound_numer, Default::default());
+        self.lower_bound_numer = -mem::take(&mut self.lower_bound_numer);
+        self.upper_bound_numer = -mem::take(&mut self.upper_bound_numer);
         self.lower_bound_numer >>= self.log2_denom;
         self.upper_bound_numer >>= self.log2_denom;
-        self.lower_bound_numer = -mem::replace(&mut self.lower_bound_numer, Default::default());
-        self.upper_bound_numer = -mem::replace(&mut self.upper_bound_numer, Default::default());
+        self.lower_bound_numer = -mem::take(&mut self.lower_bound_numer);
+        self.upper_bound_numer = -mem::take(&mut self.upper_bound_numer);
         self.log2_denom = 0;
         self.convert_log2_denom(new_log2_denom);
     }

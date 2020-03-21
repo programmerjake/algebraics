@@ -238,14 +238,10 @@ impl FactorTreeInteriorNode<ModularInteger<BigInt, BigInt>> {
         }
         let old_left_product = set_modulus(self.left.product(), new_modulus);
         let old_right_product = set_modulus(self.right.product(), new_modulus);
-        let old_left_bezout_coefficient = set_modulus(
-            mem::replace(&mut self.left_bezout_coefficient, Default::default()),
-            new_modulus,
-        );
-        let old_right_bezout_coefficient = set_modulus(
-            mem::replace(&mut self.right_bezout_coefficient, Default::default()),
-            new_modulus,
-        );
+        let old_left_bezout_coefficient =
+            set_modulus(mem::take(&mut self.left_bezout_coefficient), new_modulus);
+        let old_right_bezout_coefficient =
+            set_modulus(mem::take(&mut self.right_bezout_coefficient), new_modulus);
         let error = &new_product - &old_left_product * &old_right_product;
         let (quotient, remainder) =
             (&old_left_bezout_coefficient * &error).div_rem(&old_right_product);
