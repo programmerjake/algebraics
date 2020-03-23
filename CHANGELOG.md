@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Changed
 
+* add changes here
+
+## [0.2.0]
+
+### Changed
+
 * Update PyO3 from v0.8.2 to v0.9.0
 
 ## [0.1.2]
@@ -33,6 +39,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 * Initial release
 
-[Unreleased]: https://salsa.debian.org/Kazan-team/algebraics/-/compare/v0.1.2...master
+[Unreleased]: https://salsa.debian.org/Kazan-team/algebraics/-/compare/v0.2.0...master
+[0.2.0]: https://salsa.debian.org/Kazan-team/algebraics/-/compare/v0.1.2...v0.2.0
 [0.1.2]: https://salsa.debian.org/Kazan-team/algebraics/-/compare/v0.1.1...v0.1.2
 [0.1.1]: https://salsa.debian.org/Kazan-team/algebraics/-/compare/v0.1.0...v0.1.1

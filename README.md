@@ -73,7 +73,7 @@ assert_eq!(
 Using algebraics from Python:
 
 ```bash
-python3 -m pip install algebraics==0.1.2
+python3 -m pip install algebraics
 ```
 
 ```python
@@ -86,8 +86,7 @@ Using algebraics in your own Rust project:
 
 ```toml
 [dependencies.algebraics]
-version = "0.1.2"
-features = ["python"]
+version = "0.2"
 ```
 
 Developing algebraics:
