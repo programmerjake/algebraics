@@ -5,6 +5,7 @@ use num_bigint::{BigInt, BigUint};
 use num_integer::Integer;
 use num_rational::Ratio;
 use num_traits::{CheckedDiv, CheckedMul, CheckedRem, NumAssign, One, Signed, ToPrimitive, Zero};
+use std::convert::TryInto;
 use std::{
     fmt,
     ops::{Add, Div, DivAssign, Mul},
@@ -401,7 +402,7 @@ impl CeilLog2 for BigUint {
         if self.is_zero() {
             None
         } else {
-            Some((self - 1u32).bits())
+            Some((self - 1u32).bits().try_into().unwrap())
         }
     }
 }
@@ -411,7 +412,7 @@ impl FloorLog2 for BigUint {
         if self.is_zero() {
             None
         } else {
-            Some(self.bits() - 1)
+            Some((self.bits() - 1).try_into().unwrap())
         }
     }
 }
@@ -445,7 +446,7 @@ impl TrailingZeros for BigUint {
 impl CeilLog2 for BigInt {
     fn ceil_log2(&self) -> Option<usize> {
         if self.is_positive() {
-            Some((self - 1u32).bits())
+            Some((self - 1u32).bits().try_into().unwrap())
         } else {
             None
         }
@@ -455,7 +456,7 @@ impl CeilLog2 for BigInt {
 impl FloorLog2 for BigInt {
     fn floor_log2(&self) -> Option<usize> {
         if self.is_positive() {
-            Some(self.bits() - 1)
+            Some((self.bits() - 1).try_into().unwrap())
         } else {
             None
         }
