@@ -47,7 +47,6 @@ version = "0.2.8"
 
 [dependencies.parking_lot]
 version = "0.10"
-features = ["nightly"]
 
 [dependencies.paste]
 version = "0.1.6"
