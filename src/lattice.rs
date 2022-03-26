@@ -181,7 +181,7 @@ where
 mod tests {
     use super::*;
     use num_bigint::BigInt;
-    use num_traits::{One, Pow};
+    use num_traits::One;
 
     #[test]
     fn test_gram_schmidt() {
@@ -281,16 +281,6 @@ mod tests {
         assert!(output == expected);
     }
 
-    // workaround for https://github.com/rust-num/num-bigint/issues/106
-    fn pow<'a, T>(base: &'a Ratio<BigInt>, exponent: &'a T) -> Ratio<BigInt>
-    where
-        &'a BigInt: Pow<&'a T, Output = BigInt>,
-    {
-        let numer = base.numer().pow(exponent);
-        let denom = base.denom().pow(exponent);
-        Ratio::new(numer, denom)
-    }
-
     #[test]
     fn test_lll_reduce() {
         let ints = |v: &[i64]| -> Vec<BigInt> { v.iter().copied().map(BigInt::from).collect() };
@@ -324,7 +314,7 @@ mod tests {
         assert!(output == expected);
 
         // find the minimal polynomial of sin(pi / 7)
-        let multiplier = BigInt::from(1) << 48;
+        let multiplier = BigInt::one() << 48i32;
         // approximation to 1024 fractional bits
         let sin_pi_7_approximation: Ratio<BigInt> =
             "97498727392503287796421964844598099607650972550809391824625445149289352\
@@ -348,7 +338,8 @@ mod tests {
                     BigInt::zero()
                 }
             } else {
-                -pow(&sin_pi_7_approximation, &x)
+                -(&sin_pi_7_approximation)
+                    .pow(x as i32)
                     .mul(&multiplier)
                     .round()
                     .to_integer()

@@ -6,6 +6,7 @@ use num_integer::Integer;
 use num_rational::Ratio;
 use num_traits::{CheckedDiv, CheckedMul, CheckedRem, NumAssign, One, Signed, ToPrimitive, Zero};
 use std::{
+    convert::TryInto,
     fmt,
     ops::{Add, Div, DivAssign, Mul},
 };
@@ -401,7 +402,7 @@ impl CeilLog2 for BigUint {
         if self.is_zero() {
             None
         } else {
-            Some((self - 1u32).bits())
+            Some((self - 1u32).bits().try_into().unwrap())
         }
     }
 }
@@ -411,7 +412,7 @@ impl FloorLog2 for BigUint {
         if self.is_zero() {
             None
         } else {
-            Some(self.bits() - 1)
+            Some((self.bits() - 1).try_into().unwrap())
         }
     }
 }
@@ -445,7 +446,7 @@ impl TrailingZeros for BigUint {
 impl CeilLog2 for BigInt {
     fn ceil_log2(&self) -> Option<usize> {
         if self.is_positive() {
-            Some((self - 1u32).bits())
+            Some((self - 1u32).bits().try_into().unwrap())
         } else {
             None
         }
@@ -455,7 +456,7 @@ impl CeilLog2 for BigInt {
 impl FloorLog2 for BigInt {
     fn floor_log2(&self) -> Option<usize> {
         if self.is_positive() {
-            Some(self.bits() - 1)
+            Some((self.bits() - 1).try_into().unwrap())
         } else {
             None
         }
@@ -769,7 +770,7 @@ mod tests {
     #[test]
     fn test_trailing_zeros() {
         let one = BigUint::one();
-        for i in 0..=256 {
+        for i in 0..=256u64 {
             for j in 0..=i {
                 let v = (&one << dbg!(i)) | (&one << dbg!(j));
                 assert_eq!(v.trailing_zeros(), Some(j));
@@ -781,12 +782,12 @@ mod tests {
     fn test_ceil_log2() {
         assert_eq!(BigUint::zero().ceil_log2(), None);
         assert_eq!(BigInt::zero().ceil_log2(), None);
-        assert_eq!(0.ceil_log2(), None);
+        assert_eq!(0i32.ceil_log2(), None);
         let one = BigUint::one();
         assert_eq!(one.ceil_log2(), Some(0));
         assert_eq!(BigInt::one().ceil_log2(), Some(0));
-        assert_eq!(1.ceil_log2(), Some(0));
-        for i in 0..=256 {
+        assert_eq!(1i32.ceil_log2(), Some(0));
+        for i in 0..=256usize {
             for j in 0..=i {
                 let v = (&one << dbg!(i)) + (&one << dbg!(j));
                 assert_eq!(v.ceil_log2(), Some(i + 1));
@@ -804,12 +805,12 @@ mod tests {
     fn test_floor_log2() {
         assert_eq!(BigUint::zero().floor_log2(), None);
         assert_eq!(BigInt::zero().floor_log2(), None);
-        assert_eq!(0.floor_log2(), None);
+        assert_eq!(0i32.floor_log2(), None);
         let one = BigUint::one();
         assert_eq!(one.floor_log2(), Some(0));
         assert_eq!(BigInt::one().floor_log2(), Some(0));
-        assert_eq!(1.floor_log2(), Some(0));
-        for i in 0..=256 {
+        assert_eq!(1i32.floor_log2(), Some(0));
+        for i in 0..=256usize {
             for j in 0..=i {
                 let v = (&one << dbg!(i)) | (&one << dbg!(j));
                 assert_eq!(v.floor_log2(), Some(i));

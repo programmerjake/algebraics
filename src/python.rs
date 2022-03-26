@@ -3,69 +3,49 @@
 
 #![cfg(feature = "python")]
 
-use crate::{algebraic_numbers::RealAlgebraicNumber, traits::ExactDivAssign};
+use crate::{algebraic_numbers::RealAlgebraicNumber, traits::ExactDiv};
 use num_bigint::BigInt;
 use num_traits::{Signed, Zero};
 use pyo3::{
     basic::CompareOp,
-    exceptions::{TypeError, ValueError, ZeroDivisionError},
+    exceptions::{PyTypeError, PyValueError, PyZeroDivisionError},
     prelude::*,
     types::PyAny,
-    PyNativeType, PyNumberProtocol, PyObjectProtocol,
 };
 use std::{
     ops::{Deref, DerefMut},
     sync::Arc,
 };
 
-impl FromPyObject<'_> for RealAlgebraicNumber {
-    fn extract(value: &PyAny) -> PyResult<Self> {
-        Ok(RealAlgebraicNumberWrapper::extract(value)?.into())
-    }
-}
-
-impl<'a> FromPyObject<'a> for &'a RealAlgebraicNumber {
-    fn extract(value: &'a PyAny) -> PyResult<Self> {
-        let wrapper: RealAlgebraicNumberWrapper = value.extract()?;
-        Ok(&value.py().register_any(wrapper))
-    }
-}
-
-impl IntoPy<PyObject> for RealAlgebraicNumber {
-    fn into_py(self, py: Python) -> PyObject {
-        RealAlgebraicNumberWrapper::from(self).into_py(py)
-    }
-}
-
-impl IntoPy<PyObject> for &'_ RealAlgebraicNumber {
-    fn into_py(self, py: Python) -> PyObject {
-        RealAlgebraicNumberWrapper::from(self).into_py(py)
-    }
-}
-
-impl ToPyObject for RealAlgebraicNumber {
-    fn to_object(&self, py: Python) -> PyObject {
-        self.into_py(py)
-    }
-}
-
 #[derive(Clone)]
-struct RealAlgebraicNumberWrapper(Arc<RealAlgebraicNumber>);
+struct SharedNumber(Arc<RealAlgebraicNumber>);
 
-impl Deref for RealAlgebraicNumberWrapper {
+impl Deref for SharedNumber {
     type Target = Arc<RealAlgebraicNumber>;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-impl DerefMut for RealAlgebraicNumberWrapper {
+impl DerefMut for SharedNumber {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
 
-impl FromPyObject<'_> for RealAlgebraicNumberWrapper {
+impl From<RealAlgebraicNumber> for SharedNumber {
+    fn from(v: RealAlgebraicNumber) -> Self {
+        SharedNumber(v.into())
+    }
+}
+
+impl IntoPy<PyObject> for SharedNumber {
+    fn into_py(self, py: Python) -> PyObject {
+        RealAlgebraicNumberPy2 { value: self }.into_py(py)
+    }
+}
+
+impl FromPyObject<'_> for SharedNumber {
     fn extract(value: &PyAny) -> PyResult<Self> {
         if let Ok(value) = value.extract::<PyRef<RealAlgebraicNumberPy2>>() {
             return Ok(value.value.clone());
@@ -75,76 +55,31 @@ impl FromPyObject<'_> for RealAlgebraicNumberWrapper {
     }
 }
 
-impl From<Arc<RealAlgebraicNumber>> for RealAlgebraicNumberWrapper {
-    fn from(v: Arc<RealAlgebraicNumber>) -> Self {
-        RealAlgebraicNumberWrapper(v)
-    }
-}
-
-impl From<RealAlgebraicNumber> for RealAlgebraicNumberWrapper {
-    fn from(v: RealAlgebraicNumber) -> Self {
-        RealAlgebraicNumberWrapper(v.into())
-    }
-}
-
-impl From<&'_ RealAlgebraicNumber> for RealAlgebraicNumberWrapper {
-    fn from(v: &RealAlgebraicNumber) -> Self {
-        RealAlgebraicNumber::clone(v).into()
-    }
-}
-
-impl Into<Arc<RealAlgebraicNumber>> for RealAlgebraicNumberWrapper {
-    fn into(self) -> Arc<RealAlgebraicNumber> {
-        self.0
-    }
-}
-
-impl From<RealAlgebraicNumberWrapper> for RealAlgebraicNumber {
-    fn from(v: RealAlgebraicNumberWrapper) -> Self {
-        match Arc::try_unwrap(v.0) {
-            Ok(v) => v,
-            Err(v) => (*v).clone(),
-        }
-    }
-}
-
-impl IntoPy<PyObject> for RealAlgebraicNumberWrapper {
-    fn into_py(self, py: Python) -> PyObject {
-        RealAlgebraicNumberPy2 { value: self }.into_py(py)
-    }
-}
-
-impl IntoPy<PyObject> for &'_ RealAlgebraicNumberWrapper {
-    fn into_py(self, py: Python) -> PyObject {
-        RealAlgebraicNumberWrapper::clone(self).into_py(py)
-    }
-}
-
-impl ToPyObject for RealAlgebraicNumberWrapper {
-    fn to_object(&self, py: Python) -> PyObject {
-        self.into_py(py)
-    }
-}
-
-#[pyclass(name=RealAlgebraicNumber, module="algebraics")]
+#[pyclass(name = "RealAlgebraicNumber", module = "algebraics")]
 struct RealAlgebraicNumberPy2 {
-    value: RealAlgebraicNumberWrapper,
+    value: SharedNumber,
 }
 
-#[pymethods(PyObjectProtocol, PyNumberProtocol)]
+impl From<&'_ PyCell<RealAlgebraicNumberPy2>> for SharedNumber {
+    fn from(v: &PyCell<RealAlgebraicNumberPy2>) -> Self {
+        v.borrow().value.clone()
+    }
+}
+
+#[pymethods]
 impl RealAlgebraicNumberPy2 {
     #[new]
-    fn pynew(value: Option<RealAlgebraicNumberWrapper>) -> Self {
+    fn pynew(value: Option<SharedNumber>) -> Self {
         let value = value.unwrap_or_else(|| RealAlgebraicNumber::zero().into());
         RealAlgebraicNumberPy2 { value }
     }
-    fn __trunc__(&self, py: Python<'_>) -> BigInt {
+    fn __trunc__(&self, py: Python) -> BigInt {
         py.allow_threads(|| self.value.to_integer_trunc())
     }
-    fn __floor__(&self, py: Python<'_>) -> BigInt {
+    fn __floor__(&self, py: Python) -> BigInt {
         py.allow_threads(|| self.value.to_integer_floor())
     }
-    fn __ceil__(&self, py: Python<'_>) -> BigInt {
+    fn __ceil__(&self, py: Python) -> BigInt {
         py.allow_threads(|| self.value.to_integer_ceil())
     }
     fn to_integer(&self) -> Option<BigInt> {
@@ -167,30 +102,26 @@ impl RealAlgebraicNumberPy2 {
     fn is_integer(&self) -> bool {
         self.value.is_integer()
     }
-    fn recip(&self, py: Python<'_>) -> PyResult<RealAlgebraicNumberWrapper> {
+    fn recip(&self, py: Python) -> PyResult<SharedNumber> {
         py.allow_threads(|| Some(self.value.checked_recip()?.into()))
             .ok_or_else(get_div_by_zero_error)
     }
     /// returns `floor(log2(self))`
-    fn floor_log2(&self, py: Python<'_>) -> PyResult<i64> {
+    fn floor_log2(&self, py: Python) -> PyResult<i64> {
         py.allow_threads(|| self.value.checked_floor_log2())
             .ok_or_else(get_floor_ceil_log2_error)
     }
     /// returns `ceil(log2(self))`
-    fn ceil_log2(&self, py: Python<'_>) -> PyResult<i64> {
+    fn ceil_log2(&self, py: Python) -> PyResult<i64> {
         py.allow_threads(|| self.value.checked_ceil_log2())
             .ok_or_else(get_floor_ceil_log2_error)
     }
-}
 
-#[pyproto]
-impl PyObjectProtocol for RealAlgebraicNumberPy2 {
+    // Basic object methods
     fn __repr__(&self) -> PyResult<String> {
         Ok(format!("<{:?}>", *self.value))
     }
-    fn __richcmp__(&self, other: &PyAny, op: CompareOp) -> PyResult<bool> {
-        let py = other.py();
-        let other = other.extract::<RealAlgebraicNumberWrapper>()?;
+    fn __richcmp__(&self, py: Python, other: SharedNumber, op: CompareOp) -> PyResult<bool> {
         Ok(py.allow_threads(|| match op {
             CompareOp::Lt => *self.value < *other,
             CompareOp::Le => *self.value <= *other,
@@ -200,121 +131,121 @@ impl PyObjectProtocol for RealAlgebraicNumberPy2 {
             CompareOp::Ge => *self.value >= *other,
         }))
     }
-}
 
-fn get_div_by_zero_error() -> PyErr {
-    ZeroDivisionError::py_err("can't divide RealAlgebraicNumber by zero")
-}
-
-fn get_floor_ceil_log2_error() -> PyErr {
-    ValueError::py_err("can't extract base-2 logarithm of zero or negative RealAlgebraicNumber")
-}
-
-fn try_arithmetic_helper<
-    E: Send,
-    F: Send + FnOnce(&mut RealAlgebraicNumber, &RealAlgebraicNumber) -> Result<(), E>,
-    MapErr: FnOnce(E) -> PyErr,
->(
-    lhs: &PyAny,
-    rhs: RealAlgebraicNumberWrapper,
-    f: F,
-    map_err: MapErr,
-) -> PyResult<RealAlgebraicNumberWrapper> {
-    let py = lhs.py();
-    let mut lhs: RealAlgebraicNumberWrapper = lhs.extract()?;
-    py.allow_threads(|| {
-        f(Arc::make_mut(&mut lhs), &**rhs)?;
-        Ok(lhs)
-    })
-    .map_err(map_err)
-}
-
-fn arithmetic_helper<F: Send + FnOnce(&mut RealAlgebraicNumber, &RealAlgebraicNumber)>(
-    lhs: &PyAny,
-    rhs: RealAlgebraicNumberWrapper,
-    f: F,
-) -> PyResult<RealAlgebraicNumberWrapper> {
-    enum Uninhabited {}
-    try_arithmetic_helper(
-        lhs,
-        rhs,
-        |lhs, rhs| {
-            f(lhs, rhs);
-            Ok(())
-        },
-        |v: Uninhabited| match v {},
-    )
-}
-
-#[pyproto]
-impl PyNumberProtocol for RealAlgebraicNumberPy2 {
-    fn __add__(
-        lhs: &PyAny,
-        rhs: RealAlgebraicNumberWrapper,
-    ) -> PyResult<RealAlgebraicNumberWrapper> {
-        arithmetic_helper(lhs, rhs, |lhs, rhs| *lhs += rhs)
+    // Numeric methods
+    fn __add__(lhs: SharedNumber, py: Python, rhs: SharedNumber) -> PyResult<SharedNumber> {
+        arithmetic_helper(py, lhs, rhs, |lhs, rhs| lhs + rhs)
     }
-    fn __sub__(
-        lhs: &PyAny,
-        rhs: RealAlgebraicNumberWrapper,
-    ) -> PyResult<RealAlgebraicNumberWrapper> {
-        arithmetic_helper(lhs, rhs, |lhs, rhs| *lhs -= rhs)
+    fn __radd__(rhs: SharedNumber, py: Python, lhs: SharedNumber) -> PyResult<SharedNumber> {
+        Self::__add__(lhs, py, rhs)
     }
-    fn __mul__(
-        lhs: &PyAny,
-        rhs: RealAlgebraicNumberWrapper,
-    ) -> PyResult<RealAlgebraicNumberWrapper> {
-        arithmetic_helper(lhs, rhs, |lhs, rhs| *lhs *= rhs)
+    fn __sub__(lhs: SharedNumber, py: Python, rhs: SharedNumber) -> PyResult<SharedNumber> {
+        arithmetic_helper(py, lhs, rhs, |lhs, rhs| lhs - rhs)
     }
-    fn __truediv__(
-        lhs: &PyAny,
-        rhs: RealAlgebraicNumberWrapper,
-    ) -> PyResult<RealAlgebraicNumberWrapper> {
+    fn __rsub__(rhs: SharedNumber, py: Python, lhs: SharedNumber) -> PyResult<SharedNumber> {
+        Self::__sub__(lhs, py, rhs)
+    }
+    fn __mul__(lhs: SharedNumber, py: Python, rhs: SharedNumber) -> PyResult<SharedNumber> {
+        arithmetic_helper(py, lhs, rhs, |lhs, rhs| lhs * rhs)
+    }
+    fn __rmul__(rhs: SharedNumber, py: Python, lhs: SharedNumber) -> PyResult<SharedNumber> {
+        Self::__mul__(lhs, py, rhs)
+    }
+    fn __truediv__(lhs: SharedNumber, py: Python, rhs: SharedNumber) -> PyResult<SharedNumber> {
         try_arithmetic_helper(
+            py,
             lhs,
             rhs,
-            |lhs, rhs| lhs.checked_exact_div_assign(rhs),
-            |()| get_div_by_zero_error(),
+            |lhs, rhs| lhs.checked_exact_div(rhs).ok_or(()),
+            |_| get_div_by_zero_error(),
         )
     }
+    fn __rtruediv__(rhs: SharedNumber, py: Python, lhs: SharedNumber) -> PyResult<SharedNumber> {
+        Self::__truediv__(lhs, py, rhs)
+    }
     fn __pow__(
-        lhs: &PyAny,
-        rhs: RealAlgebraicNumberWrapper,
+        lhs: SharedNumber,
+        py: Python,
+        rhs: SharedNumber,
         modulus: &PyAny,
-    ) -> PyResult<RealAlgebraicNumberWrapper> {
+    ) -> PyResult<SharedNumber> {
         if !modulus.is_none() {
-            return Err(TypeError::py_err(
+            return Err(PyTypeError::new_err(
                 "3 argument pow() not allowed for RealAlgebraicNumber",
             ));
         }
         try_arithmetic_helper(
+            py,
             lhs,
             rhs,
             |lhs, rhs| {
                 if let Some(rhs) = rhs.to_rational() {
-                    *lhs = lhs
-                        .checked_pow(rhs)
-                        .ok_or("pow() failed for RealAlgebraicNumber")?;
-                    Ok(())
+                    lhs.checked_pow(rhs)
+                        .ok_or("pow() failed for RealAlgebraicNumber")
                 } else {
                     Err("exponent must be rational for RealAlgebraicNumber")
                 }
             },
-            ValueError::py_err,
+            PyValueError::new_err,
         )
+    }
+    fn __rpow__(
+        rhs: SharedNumber,
+        py: Python,
+        lhs: SharedNumber,
+        modulus: &PyAny,
+    ) -> PyResult<SharedNumber> {
+        Self::__pow__(lhs, py, rhs, modulus)
     }
 
     // Unary arithmetic
-    fn __neg__(&self) -> PyResult<RealAlgebraicNumberWrapper> {
-        Ok(Python::acquire_gil()
-            .python()
-            .allow_threads(|| (-&**self.value).into()))
+    fn __neg__(&self, py: Python) -> PyResult<SharedNumber> {
+        Ok(py.allow_threads(|| (-&**self.value).into()))
     }
-    fn __abs__(&self) -> PyResult<RealAlgebraicNumberWrapper> {
-        Ok(Python::acquire_gil()
-            .python()
-            .allow_threads(|| self.value.abs().into()))
+    fn __abs__(&self, py: Python) -> PyResult<SharedNumber> {
+        Ok(py.allow_threads(|| self.value.abs().into()))
     }
+}
+
+fn get_div_by_zero_error() -> PyErr {
+    PyZeroDivisionError::new_err("can't divide RealAlgebraicNumber by zero")
+}
+
+fn get_floor_ceil_log2_error() -> PyErr {
+    PyValueError::new_err("can't extract base-2 logarithm of zero or negative RealAlgebraicNumber")
+}
+
+fn try_arithmetic_helper<
+    E: Send,
+    F: Send + FnOnce(&RealAlgebraicNumber, &RealAlgebraicNumber) -> Result<RealAlgebraicNumber, E>,
+    MapErr: FnOnce(E) -> PyErr,
+>(
+    py: Python,
+    lhs: SharedNumber,
+    rhs: SharedNumber,
+    f: F,
+    map_err: MapErr,
+) -> PyResult<SharedNumber> {
+    py.allow_threads(|| Ok(f(&lhs, &rhs)?.into()))
+        .map_err(map_err)
+}
+
+fn arithmetic_helper<
+    F: Send + FnOnce(&RealAlgebraicNumber, &RealAlgebraicNumber) -> RealAlgebraicNumber,
+>(
+    py: Python,
+    lhs: SharedNumber,
+    rhs: SharedNumber,
+    f: F,
+) -> PyResult<SharedNumber> {
+    enum Uninhabited {}
+    try_arithmetic_helper(
+        py,
+        lhs,
+        rhs,
+        |lhs, rhs| Ok(f(lhs, rhs)),
+        |v: Uninhabited| match v {},
+    )
 }
 
 #[pymodule]
@@ -332,22 +263,12 @@ mod tests {
         #![allow(dead_code)]
 
         #[pyfunction]
-        fn identity_ref_result(v: &RealAlgebraicNumber) -> PyResult<&RealAlgebraicNumber> {
+        fn identity_result(v: SharedNumber) -> PyResult<SharedNumber> {
             Ok(v)
         }
 
         #[pyfunction]
-        fn identity_result(v: RealAlgebraicNumber) -> PyResult<RealAlgebraicNumber> {
-            Ok(v)
-        }
-
-        #[pyfunction]
-        fn identity_ref(v: &RealAlgebraicNumber) -> &RealAlgebraicNumber {
-            v
-        }
-
-        #[pyfunction]
-        fn identity(v: RealAlgebraicNumber) -> RealAlgebraicNumber {
+        fn identity(v: SharedNumber) -> SharedNumber {
             v
         }
     }

@@ -575,14 +575,14 @@ impl PartialOrd<BigRational> for RealQuadraticNumber {
         if let Some(lhs) = self.to_ratio() {
             lhs < *rhs
         } else if self.quadratic_term().is_negative() {
-            if self.linear_term() * rhs.denom() < 2 * abs_quadratic_term * rhs.numer() {
+            if self.linear_term() * rhs.denom() < 2i32 * abs_quadratic_term * rhs.numer() {
                 true
             } else {
                 self.constant_term() * rhs.denom() * rhs.denom()
                     > -rhs.numer()
                         * (self.quadratic_term() * rhs.numer() + self.linear_term() * rhs.denom())
             }
-        } else if self.linear_term() * rhs.denom() > -2 * abs_quadratic_term * rhs.numer() {
+        } else if self.linear_term() * rhs.denom() > -2i32 * abs_quadratic_term * rhs.numer() {
             self.constant_term() * rhs.denom() * rhs.denom()
                 > -rhs.numer()
                     * (self.quadratic_term() * rhs.numer() + self.linear_term() * rhs.denom())
