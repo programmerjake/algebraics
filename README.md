@@ -86,7 +86,7 @@ Using algebraics in your own Rust project:
 
 ```toml
 [dependencies.algebraics]
-version = "0.2"
+version = "0.3"
 ```
 
 Developing algebraics:

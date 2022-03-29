@@ -20,6 +20,7 @@ pub use algebraic_numbers::RealAlgebraicNumber;
 
 macro_rules! doctest {
     ($x:expr) => {
+        #[allow(unused_doc_comments)]
         #[doc = $x]
         extern "C" {}
     };

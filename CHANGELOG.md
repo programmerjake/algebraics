@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 * add changes here
 
+## [0.3.0]
+
+### Changed
+
+* Updated dependency versions
+
 ## [0.2.0]
 
 ### Changed

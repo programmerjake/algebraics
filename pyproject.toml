@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 # See Notices.txt for copyright information
 [build-system]
-requires = ["maturin"]
+requires = ["maturin>=0.11,<0.12"]
 build-backend = "maturin"
 
 [tool.maturin]

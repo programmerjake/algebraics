@@ -954,7 +954,7 @@ mod tests {
             println!("{}: {}", Polynomial::from(poly.clone()), f);
             let rqn = RealQuadraticNumber::new(poly).unwrap();
             let num = rqn.to_f64().unwrap();
-            assert!((num - f).abs() < 1e-10, format!("{} != {}", num, f));
+            assert!((num - f).abs() < 1e-10, "{} != {}", num, f);
         }
     }
     #[test]
@@ -969,7 +969,7 @@ mod tests {
             let rqn = RealQuadraticNumber::new(poly).unwrap();
             let num = (-rqn).to_f64().unwrap();
             let f = -f;
-            assert!((num - f).abs() < 1e-10, format!("{} != {}", num, f));
+            assert!((num - f).abs() < 1e-10, "{} != {}", num, f);
         }
     }
     #[test]
