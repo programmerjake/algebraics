@@ -201,12 +201,11 @@ fn sign_changes_at(
             ValueOrInfinity::NegativeInfinity => {
                 let degree = polynomial.degree().unwrap_or(0);
                 let s = Sign::new(&polynomial.highest_power_coefficient());
-                if degree.is_odd()
-                {
-                    if let Some(sign) = s { Some(-sign) }
-                    else { None }
+                if degree.is_odd() {
+                    s.map(|| -s)
+                } else {
+                    s
                 }
-                else { s }
             }
         };
         if let Some(sign) = sign {
