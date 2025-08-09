@@ -202,7 +202,7 @@ fn sign_changes_at(
                 let degree = polynomial.degree().unwrap_or(0);
                 let s = Sign::new(&polynomial.highest_power_coefficient());
                 if degree.is_odd() {
-                    s.map(|| -s)
+                    s.map(|s| -s)
                 } else {
                     s
                 }
@@ -1000,23 +1000,20 @@ trait RootSelector: Sized {
                     &factor.primitive_sturm_sequence,
                     ValueOrInfinity::Value(&lower_bound),
                 );
-                if lower_bound_sign_changes.is_root {
-                    return lower_bound.into();
-                }
                 let upper_bound_sign_changes = sign_changes_at(
                     &factor.primitive_sturm_sequence,
                     ValueOrInfinity::Value(&upper_bound),
                 );
-                if upper_bound_sign_changes.is_root {
-                    return upper_bound.into();
-                }
-                if lower_bound_sign_changes.sign_change_count
-                    != upper_bound_sign_changes.sign_change_count
-                {
-                    let num_roots = distance(
-                        lower_bound_sign_changes.sign_change_count,
-                        upper_bound_sign_changes.sign_change_count,
-                    );
+                let num_roots = if lower_bound_sign_changes.is_root {
+                    1
+                } else {
+                    0
+                } + distance(
+                    lower_bound_sign_changes.sign_change_count,
+                    upper_bound_sign_changes.sign_change_count,
+                );
+
+                if num_roots > 0 {
                     roots_left += num_roots;
                     factors.push(factor);
                 }
@@ -1884,6 +1881,20 @@ mod tests {
             make_sqrt(2, DyadicFractionInterval::from_int_range(bi(1), bi(2), 0)),
             make_sqrt(3, DyadicFractionInterval::from_int_range(bi(1), bi(2), 0)),
             make_sqrt(6, DyadicFractionInterval::from_int_range(bi(1), bi(10), 0)),
+        );
+        test_case(
+            RealAlgebraicNumber::new_unchecked(
+                p(&[-1, 2, 4]),
+                DyadicFractionInterval::new(bi(-1), bi(3), 1),
+            ),
+            RealAlgebraicNumber::new_unchecked(
+                p(&[-1, 2, 4]),
+                DyadicFractionInterval::new(bi(-1), bi(3), 1),
+            ),
+            RealAlgebraicNumber::new_unchecked(
+                p(&[1, -12, 16]),
+                DyadicFractionInterval::new(bi(0), bi(2), 3),
+            ),
         );
     }
 
