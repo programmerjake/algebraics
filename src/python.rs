@@ -10,70 +10,82 @@ use pyo3::{
     basic::CompareOp,
     exceptions::{PyTypeError, PyValueError, PyZeroDivisionError},
     prelude::*,
-    types::PyAny,
+    types::{PyAny, PyInt},
 };
-use std::{
-    ops::{Deref, DerefMut},
-    sync::Arc,
-};
+use std::convert::{TryFrom, TryInto};
 
-#[derive(Clone)]
-struct SharedNumber(Arc<RealAlgebraicNumber>);
+#[derive(FromPyObject)]
+enum Number<'py> {
+    #[pyo3(transparent, annotation = "RealAlgebraicNumber")]
+    RealAlgebraicNumber(Bound<'py, RealAlgebraicNumberPy>),
+    #[pyo3(transparent, annotation = "int")]
+    Int(Bound<'py, PyInt>),
+}
 
-impl Deref for SharedNumber {
-    type Target = Arc<RealAlgebraicNumber>;
-    fn deref(&self) -> &Self::Target {
-        &self.0
+impl<'py> From<Bound<'py, RealAlgebraicNumberPy>> for Number<'py> {
+    fn from(value: Bound<'py, RealAlgebraicNumberPy>) -> Self {
+        Number::RealAlgebraicNumber(value)
     }
 }
 
-impl DerefMut for SharedNumber {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
+impl<'py> TryFrom<Number<'py>> for Bound<'py, RealAlgebraicNumberPy> {
+    type Error = PyErr;
+    fn try_from(value: Number<'py>) -> Result<Self, Self::Error> {
+        Ok(match value {
+            Number::RealAlgebraicNumber(value) => value,
+            Number::Int(value) => Bound::new(
+                value.py(),
+                RealAlgebraicNumberPy {
+                    value: RealAlgebraicNumber::from(value.extract::<BigInt>()?),
+                },
+            )?,
+        })
     }
 }
 
-impl From<RealAlgebraicNumber> for SharedNumber {
-    fn from(v: RealAlgebraicNumber) -> Self {
-        SharedNumber(v.into())
+impl<'py> FromPyObject<'py> for RealAlgebraicNumber {
+    fn extract_bound(ob: &Bound<'py, PyAny>) -> PyResult<Self> {
+        Ok(match ob.extract::<Number<'py>>()? {
+            Number::RealAlgebraicNumber(value) => value.get().value.clone(),
+            Number::Int(value) => RealAlgebraicNumber::from(value.extract::<BigInt>()?),
+        })
     }
 }
 
-impl IntoPy<PyObject> for SharedNumber {
-    fn into_py(self, py: Python) -> PyObject {
-        RealAlgebraicNumberPy2 { value: self }.into_py(py)
+impl<'py> IntoPyObject<'py> for RealAlgebraicNumber {
+    type Target = RealAlgebraicNumberPy;
+    type Output = Bound<'py, RealAlgebraicNumberPy>;
+    type Error = PyErr;
+
+    fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
+        Bound::new(py, RealAlgebraicNumberPy { value: self })
     }
 }
 
-impl FromPyObject<'_> for SharedNumber {
-    fn extract(value: &PyAny) -> PyResult<Self> {
-        if let Ok(value) = value.extract::<PyRef<RealAlgebraicNumberPy2>>() {
-            return Ok(value.value.clone());
-        }
-        let value = value.extract::<BigInt>()?;
-        Ok(RealAlgebraicNumber::from(value).into())
-    }
-}
-
-#[pyclass(name = "RealAlgebraicNumber", module = "algebraics")]
-struct RealAlgebraicNumberPy2 {
-    value: SharedNumber,
-}
-
-impl From<&'_ PyCell<RealAlgebraicNumberPy2>> for SharedNumber {
-    fn from(v: &PyCell<RealAlgebraicNumberPy2>) -> Self {
-        v.borrow().value.clone()
-    }
+#[pyclass(name = "RealAlgebraicNumber", module = "algebraics", frozen)]
+pub struct RealAlgebraicNumberPy {
+    pub value: RealAlgebraicNumber,
 }
 
 #[pymethods]
-impl RealAlgebraicNumberPy2 {
+impl RealAlgebraicNumberPy {
     #[new]
-    fn pynew(value: Option<SharedNumber>) -> Self {
-        let value = value.unwrap_or_else(|| RealAlgebraicNumber::zero().into());
-        RealAlgebraicNumberPy2 { value }
+    #[pyo3(signature = (value=None))]
+    fn pynew<'py>(py: Python<'py>, value: Option<Number<'py>>) -> PyResult<Bound<'py, Self>> {
+        match value {
+            None => Bound::new(
+                py,
+                RealAlgebraicNumberPy {
+                    value: RealAlgebraicNumber::zero(),
+                },
+            ),
+            Some(value) => value.try_into(),
+        }
     }
     fn __trunc__(&self, py: Python) -> BigInt {
+        py.allow_threads(|| self.value.to_integer_trunc())
+    }
+    fn __int__(&self, py: Python) -> BigInt {
         py.allow_threads(|| self.value.to_integer_trunc())
     }
     fn __floor__(&self, py: Python) -> BigInt {
@@ -102,8 +114,8 @@ impl RealAlgebraicNumberPy2 {
     fn is_integer(&self) -> bool {
         self.value.is_integer()
     }
-    fn recip(&self, py: Python) -> PyResult<SharedNumber> {
-        py.allow_threads(|| Some(self.value.checked_recip()?.into()))
+    fn recip<'py>(&self, py: Python<'py>) -> PyResult<RealAlgebraicNumber> {
+        py.allow_threads(|| Some(self.value.checked_recip()?))
             .ok_or_else(get_div_by_zero_error)
     }
     /// returns `floor(log2(self))`
@@ -119,56 +131,90 @@ impl RealAlgebraicNumberPy2 {
 
     // Basic object methods
     fn __repr__(&self) -> PyResult<String> {
-        Ok(format!("<{:?}>", *self.value))
+        Ok(format!("<{:?}>", self.value))
     }
-    fn __richcmp__(&self, py: Python, other: SharedNumber, op: CompareOp) -> PyResult<bool> {
+    fn __richcmp__(&self, py: Python<'_>, other: Number<'_>, op: CompareOp) -> PyResult<bool> {
+        let other = Bound::<RealAlgebraicNumberPy>::try_from(other)?;
+        let other = other.get();
         Ok(py.allow_threads(|| match op {
-            CompareOp::Lt => *self.value < *other,
-            CompareOp::Le => *self.value <= *other,
-            CompareOp::Eq => *self.value == *other,
-            CompareOp::Ne => *self.value != *other,
-            CompareOp::Gt => *self.value > *other,
-            CompareOp::Ge => *self.value >= *other,
+            CompareOp::Lt => self.value < other.value,
+            CompareOp::Le => self.value <= other.value,
+            CompareOp::Eq => self.value == other.value,
+            CompareOp::Ne => self.value != other.value,
+            CompareOp::Gt => self.value > other.value,
+            CompareOp::Ge => self.value >= other.value,
         }))
     }
 
     // Numeric methods
-    fn __add__(lhs: SharedNumber, py: Python, rhs: SharedNumber) -> PyResult<SharedNumber> {
-        arithmetic_helper(py, lhs, rhs, |lhs, rhs| lhs + rhs)
+    fn __add__(
+        lhs: Bound<'_, RealAlgebraicNumberPy>,
+        py: Python<'_>,
+        rhs: Number<'_>,
+    ) -> PyResult<RealAlgebraicNumber> {
+        arithmetic_helper(py, lhs.get(), rhs, |lhs, rhs| lhs + rhs)
     }
-    fn __radd__(rhs: SharedNumber, py: Python, lhs: SharedNumber) -> PyResult<SharedNumber> {
-        Self::__add__(lhs, py, rhs)
+    fn __radd__(
+        rhs: Bound<'_, RealAlgebraicNumberPy>,
+        py: Python<'_>,
+        lhs: Number<'_>,
+    ) -> PyResult<RealAlgebraicNumber> {
+        Self::__add__(lhs.try_into()?, py, rhs.into())
     }
-    fn __sub__(lhs: SharedNumber, py: Python, rhs: SharedNumber) -> PyResult<SharedNumber> {
-        arithmetic_helper(py, lhs, rhs, |lhs, rhs| lhs - rhs)
+    fn __sub__(
+        lhs: Bound<'_, RealAlgebraicNumberPy>,
+        py: Python<'_>,
+        rhs: Number<'_>,
+    ) -> PyResult<RealAlgebraicNumber> {
+        arithmetic_helper(py, lhs.get(), rhs, |lhs, rhs| lhs - rhs)
     }
-    fn __rsub__(rhs: SharedNumber, py: Python, lhs: SharedNumber) -> PyResult<SharedNumber> {
-        Self::__sub__(lhs, py, rhs)
+    fn __rsub__(
+        rhs: Bound<'_, RealAlgebraicNumberPy>,
+        py: Python<'_>,
+        lhs: Number<'_>,
+    ) -> PyResult<RealAlgebraicNumber> {
+        Self::__sub__(lhs.try_into()?, py, rhs.into())
     }
-    fn __mul__(lhs: SharedNumber, py: Python, rhs: SharedNumber) -> PyResult<SharedNumber> {
-        arithmetic_helper(py, lhs, rhs, |lhs, rhs| lhs * rhs)
+    fn __mul__(
+        lhs: Bound<'_, RealAlgebraicNumberPy>,
+        py: Python<'_>,
+        rhs: Number<'_>,
+    ) -> PyResult<RealAlgebraicNumber> {
+        arithmetic_helper(py, lhs.get(), rhs, |lhs, rhs| lhs * rhs)
     }
-    fn __rmul__(rhs: SharedNumber, py: Python, lhs: SharedNumber) -> PyResult<SharedNumber> {
-        Self::__mul__(lhs, py, rhs)
+    fn __rmul__(
+        rhs: Bound<'_, RealAlgebraicNumberPy>,
+        py: Python<'_>,
+        lhs: Number<'_>,
+    ) -> PyResult<RealAlgebraicNumber> {
+        Self::__mul__(lhs.try_into()?, py, rhs.into())
     }
-    fn __truediv__(lhs: SharedNumber, py: Python, rhs: SharedNumber) -> PyResult<SharedNumber> {
+    fn __truediv__(
+        lhs: Bound<'_, RealAlgebraicNumberPy>,
+        py: Python<'_>,
+        rhs: Number<'_>,
+    ) -> PyResult<RealAlgebraicNumber> {
         try_arithmetic_helper(
             py,
-            lhs,
+            lhs.get(),
             rhs,
             |lhs, rhs| lhs.checked_exact_div(rhs).ok_or(()),
             |_| get_div_by_zero_error(),
         )
     }
-    fn __rtruediv__(rhs: SharedNumber, py: Python, lhs: SharedNumber) -> PyResult<SharedNumber> {
-        Self::__truediv__(lhs, py, rhs)
+    fn __rtruediv__(
+        rhs: Bound<'_, RealAlgebraicNumberPy>,
+        py: Python<'_>,
+        lhs: Number<'_>,
+    ) -> PyResult<RealAlgebraicNumber> {
+        Self::__truediv__(lhs.try_into()?, py, rhs.into())
     }
     fn __pow__(
-        lhs: SharedNumber,
-        py: Python,
-        rhs: SharedNumber,
-        modulus: &PyAny,
-    ) -> PyResult<SharedNumber> {
+        lhs: Bound<'_, RealAlgebraicNumberPy>,
+        py: Python<'_>,
+        rhs: Number<'_>,
+        modulus: &Bound<'_, PyAny>,
+    ) -> PyResult<RealAlgebraicNumber> {
         if !modulus.is_none() {
             return Err(PyTypeError::new_err(
                 "3 argument pow() not allowed for RealAlgebraicNumber",
@@ -176,7 +222,7 @@ impl RealAlgebraicNumberPy2 {
         }
         try_arithmetic_helper(
             py,
-            lhs,
+            lhs.get(),
             rhs,
             |lhs, rhs| {
                 if let Some(rhs) = rhs.to_rational() {
@@ -190,19 +236,19 @@ impl RealAlgebraicNumberPy2 {
         )
     }
     fn __rpow__(
-        rhs: SharedNumber,
-        py: Python,
-        lhs: SharedNumber,
-        modulus: &PyAny,
-    ) -> PyResult<SharedNumber> {
-        Self::__pow__(lhs, py, rhs, modulus)
+        rhs: Bound<'_, RealAlgebraicNumberPy>,
+        py: Python<'_>,
+        lhs: Number<'_>,
+        modulus: &Bound<'_, PyAny>,
+    ) -> PyResult<RealAlgebraicNumber> {
+        Self::__pow__(lhs.try_into()?, py, rhs.into(), modulus)
     }
 
     // Unary arithmetic
-    fn __neg__(&self, py: Python) -> PyResult<SharedNumber> {
-        Ok(py.allow_threads(|| (-&**self.value).into()))
+    fn __neg__(&self, py: Python) -> PyResult<RealAlgebraicNumber> {
+        Ok(py.allow_threads(|| (-&self.value).into()))
     }
-    fn __abs__(&self, py: Python) -> PyResult<SharedNumber> {
+    fn __abs__(&self, py: Python) -> PyResult<RealAlgebraicNumber> {
         Ok(py.allow_threads(|| self.value.abs().into()))
     }
 }
@@ -221,12 +267,14 @@ fn try_arithmetic_helper<
     MapErr: FnOnce(E) -> PyErr,
 >(
     py: Python,
-    lhs: SharedNumber,
-    rhs: SharedNumber,
+    lhs: &RealAlgebraicNumberPy,
+    rhs: Number<'_>,
     f: F,
     map_err: MapErr,
-) -> PyResult<SharedNumber> {
-    py.allow_threads(|| Ok(f(&lhs, &rhs)?.into()))
+) -> PyResult<RealAlgebraicNumber> {
+    let rhs = Bound::<RealAlgebraicNumberPy>::try_from(rhs)?;
+    let rhs = rhs.get();
+    py.allow_threads(|| Ok(f(&lhs.value, &rhs.value)?.into()))
         .map_err(map_err)
 }
 
@@ -234,10 +282,10 @@ fn arithmetic_helper<
     F: Send + FnOnce(&RealAlgebraicNumber, &RealAlgebraicNumber) -> RealAlgebraicNumber,
 >(
     py: Python,
-    lhs: SharedNumber,
-    rhs: SharedNumber,
+    lhs: &RealAlgebraicNumberPy,
+    rhs: Number<'_>,
     f: F,
-) -> PyResult<SharedNumber> {
+) -> PyResult<RealAlgebraicNumber> {
     enum Uninhabited {}
     try_arithmetic_helper(
         py,
@@ -249,8 +297,8 @@ fn arithmetic_helper<
 }
 
 #[pymodule]
-fn algebraics(_py: Python, m: &PyModule) -> PyResult<()> {
-    m.add_class::<RealAlgebraicNumberPy2>()?;
+fn algebraics(_py: Python, m: Bound<PyModule>) -> PyResult<()> {
+    m.add_class::<RealAlgebraicNumberPy>()?;
     Ok(())
 }
 
@@ -263,12 +311,12 @@ mod tests {
         #![allow(dead_code)]
 
         #[pyfunction]
-        fn identity_result(v: SharedNumber) -> PyResult<SharedNumber> {
+        fn identity_result(v: RealAlgebraicNumber) -> PyResult<RealAlgebraicNumber> {
             Ok(v)
         }
 
         #[pyfunction]
-        fn identity(v: SharedNumber) -> SharedNumber {
+        fn identity(v: RealAlgebraicNumber) -> RealAlgebraicNumber {
             v
         }
     }
