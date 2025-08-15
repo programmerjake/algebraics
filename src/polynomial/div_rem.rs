@@ -244,11 +244,11 @@ impl<'l, 'r, T: PolynomialCoefficient + for<'a> ExactDiv<&'a T, Output = T>>
 {
     type Output = Polynomial<T>;
     fn exact_div(self, rhs: &Polynomial<T>) -> Polynomial<T> {
-        let (quotient, factor) = self.clone().exact_pseudo_div(rhs.borrow());
+        let (quotient, factor) = self.clone().exact_pseudo_div(rhs);
         quotient.exact_div(factor)
     }
     fn checked_exact_div(self, rhs: &Polynomial<T>) -> Option<Polynomial<T>> {
-        let (quotient, factor) = self.clone().checked_exact_pseudo_div(rhs.borrow())?;
+        let (quotient, factor) = self.clone().checked_exact_pseudo_div(rhs)?;
         quotient.checked_exact_div(factor)
     }
 }

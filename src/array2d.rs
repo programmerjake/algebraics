@@ -70,7 +70,7 @@ impl<'a, T: Sized> Array2DData for &'a [T] {
         Iter {
             positions: this.positions(),
             stride: this.stride(),
-            data: this.data.borrow(),
+            data: this.data,
         }
     }
 }

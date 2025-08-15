@@ -934,7 +934,7 @@ pub(crate) trait PrintTree: for<'a> PrintTreeData<'a> {
         &'a self,
     ) -> LeafOrNodePair<
         <Self as PrintTreeData<'a>>::Leaf,
-        &Self,
+        &'a Self,
         <Self as PrintTreeData<'a>>::NodeData,
     >;
     fn write_or_print_tree<WriteLnFn: FnMut(fmt::Arguments) -> Result<(), E>, E>(
