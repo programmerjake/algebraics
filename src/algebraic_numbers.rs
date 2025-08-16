@@ -1666,6 +1666,35 @@ mod tests {
     }
 
     #[test]
+    fn prevent_exploding_intervals() {
+        let mut num = RealAlgebraicNumber::from(2) / RealAlgebraicNumber::from(3);
+        let original = num.clone();
+
+        for _ in 0..100 {
+            num = num.pow((1, 2));
+            num = num.pow((2, 1));
+        }
+
+        assert_eq!(num, original);
+        assert_eq!(num.interval().log2_denom(), 0);
+        assert_eq!(num.interval().lower_bound_numer(), &BigInt::from(0));
+        assert_eq!(num.interval().upper_bound_numer(), &BigInt::from(1));
+    }
+
+    #[test]
+    fn prevent_exploding_precisions() {
+        let v1 = -(RealAlgebraicNumber::from(2) / RealAlgebraicNumber::from(81)).pow((1, 2));
+        let v2 = (RealAlgebraicNumber::from(200) / RealAlgebraicNumber::from(81)).pow((1, 2));
+
+        let num = v1 + v2;
+
+        assert_eq!(num, RealAlgebraicNumber::from(2).pow((1, 2)));
+        assert_eq!(num.interval().log2_denom(), 0);
+        assert_eq!(num.interval().lower_bound_numer(), &BigInt::from(1));
+        assert_eq!(num.interval().upper_bound_numer(), &BigInt::from(2));
+    }
+
+    #[test]
     fn test_add() {
         fn test_case<
             A: Into<RealAlgebraicNumber>,
