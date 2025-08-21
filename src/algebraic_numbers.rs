@@ -990,7 +990,7 @@ trait RootSelector: Sized {
             .collect();
         let mut factors_temp = Vec::with_capacity(factors.len());
         loop {
-            let interval = self.get_interval();
+            let mut interval = self.get_interval();
             let (lower_bound, upper_bound) = interval.to_ratio_range();
             mem::swap(&mut factors, &mut factors_temp);
             factors.clear();
@@ -1019,10 +1019,94 @@ trait RootSelector: Sized {
                 }
             }
             if roots_left <= 1 {
-                break RealAlgebraicNumber::new_unchecked(
-                    factors.remove(0).into_factor(),
-                    interval,
-                );
+                let factor = factors.remove(0);
+                if factor.factor().degree().is_some_and(|deg| deg > 1) {
+                    // Reduce the precision of the interval as much as possible to prevent the precision from exploding due to repeated computation
+                    // Skip this step if the number is rational
+
+                    let mut precomputed_lower_bound_sign_changes = None;
+                    let mut precomputed_upper_bound_sign_changes = None;
+
+                    while interval.log2_denom() > 0 {
+                        let trial_interval = interval
+                            .clone()
+                            .into_converted_log2_denom(interval.log2_denom() - 1);
+
+                        let lower_bound_sign_changes = sign_changes_at(
+                            &factor.primitive_sturm_sequence,
+                            ValueOrInfinity::Value(&trial_interval.lower_bound()),
+                        );
+                        let upper_bound_sign_changes = sign_changes_at(
+                            &factor.primitive_sturm_sequence,
+                            ValueOrInfinity::Value(&trial_interval.upper_bound()),
+                        );
+                        // We don't need to check if the lower bound is a root because we know that the root is irrational
+                        let num_roots = distance(
+                            lower_bound_sign_changes.sign_change_count,
+                            upper_bound_sign_changes.sign_change_count,
+                        );
+
+                        assert!(num_roots > 0);
+
+                        if num_roots == 1 {
+                            interval = trial_interval;
+                            precomputed_lower_bound_sign_changes = Some(lower_bound_sign_changes);
+                            precomputed_upper_bound_sign_changes = Some(upper_bound_sign_changes);
+                        } else {
+                            break;
+                        }
+                    }
+
+                    // Tighten the range as much as possible to prevent that from exploding too
+
+                    let lower_bound_sign_changes = precomputed_lower_bound_sign_changes
+                        .unwrap_or_else(|| {
+                            sign_changes_at(
+                                &factor.primitive_sturm_sequence,
+                                ValueOrInfinity::Value(&interval.lower_bound()),
+                            )
+                        });
+                    let upper_bound_sign_changes = precomputed_upper_bound_sign_changes
+                        .unwrap_or_else(|| {
+                            sign_changes_at(
+                                &factor.primitive_sturm_sequence,
+                                ValueOrInfinity::Value(&interval.upper_bound()),
+                            )
+                        });
+
+                    while interval.upper_bound_numer() - interval.lower_bound_numer()
+                        > BigInt::from(1)
+                    {
+                        let middle = (interval.lower_bound_numer() + interval.upper_bound_numer())
+                            / BigInt::from(2);
+
+                        let middle_sign_changes = sign_changes_at(
+                            &factor.primitive_sturm_sequence,
+                            ValueOrInfinity::Value(&Ratio::new(
+                                middle.clone(),
+                                BigInt::one() << interval.log2_denom(),
+                            )),
+                        );
+
+                        if middle_sign_changes.sign_change_count
+                            == lower_bound_sign_changes.sign_change_count
+                        {
+                            interval.set_lower_bound_numer(middle);
+                        } else {
+                            assert_eq!(
+                                middle_sign_changes.sign_change_count,
+                                upper_bound_sign_changes.sign_change_count
+                            );
+                            interval.set_upper_bound_numer(middle);
+                        }
+                    }
+                }
+
+                let v = RealAlgebraicNumber::new_unchecked(factor.into_factor(), interval);
+                break match v.to_rational() {
+                    Some(rational) => RealAlgebraicNumber::from(rational),
+                    None => v,
+                };
             }
             self.shrink_interval();
         }
@@ -1663,6 +1747,35 @@ mod tests {
             ),
             Ordering::Less,
         );
+    }
+
+    #[test]
+    fn prevent_exploding_intervals() {
+        let mut num = RealAlgebraicNumber::from(2) / RealAlgebraicNumber::from(3);
+        let original = num.clone();
+
+        for _ in 0..100 {
+            num = num.pow((1, 2));
+            num = num.pow((2, 1));
+        }
+
+        assert_eq!(num, original);
+        assert_eq!(num.interval().log2_denom(), 0);
+        assert_eq!(num.interval().lower_bound_numer(), &BigInt::from(0));
+        assert_eq!(num.interval().upper_bound_numer(), &BigInt::from(1));
+    }
+
+    #[test]
+    fn prevent_exploding_precisions() {
+        let v1 = -(RealAlgebraicNumber::from(2) / RealAlgebraicNumber::from(81)).pow((1, 2));
+        let v2 = (RealAlgebraicNumber::from(200) / RealAlgebraicNumber::from(81)).pow((1, 2));
+
+        let num = v1 + v2;
+
+        assert_eq!(num, RealAlgebraicNumber::from(2).pow((1, 2)));
+        assert_eq!(num.interval().log2_denom(), 0);
+        assert_eq!(num.interval().lower_bound_numer(), &BigInt::from(1));
+        assert_eq!(num.interval().upper_bound_numer(), &BigInt::from(2));
     }
 
     #[test]
