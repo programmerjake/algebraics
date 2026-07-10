@@ -19,8 +19,8 @@ mod private {
     pub(crate) trait SealedData {}
 
     impl<T> SealedData for Vec<T> {}
-    impl<'a, T> SealedData for &'a [T] {}
-    impl<'a, T> SealedData for &'a mut [T] {}
+    impl<T> SealedData for &[T] {}
+    impl<T> SealedData for &mut [T] {}
 }
 
 pub(crate) trait Array2DData:
@@ -277,7 +277,7 @@ impl<Data: Array2DData> Array2DBase<Data> {
         &self,
         x_bound: XB,
         y_bound: YB,
-    ) -> Array2DSlice<Data::Element> {
+    ) -> Array2DSlice<'_, Data::Element> {
         let Array2DSliceData {
             x_size,
             y_size,
@@ -294,7 +294,7 @@ impl<Data: Array2DData> Array2DBase<Data> {
         &mut self,
         x_bound: XB,
         y_bound: YB,
-    ) -> Array2DMutSlice<Data::Element>
+    ) -> Array2DMutSlice<'_, Data::Element>
     where
         Data: BorrowMut<[<Data as Array2DData>::Element]>,
     {
@@ -313,14 +313,14 @@ impl<Data: Array2DData> Array2DBase<Data> {
     pub(crate) fn positions(&self) -> Positions {
         Positions::new(self.x_size, self.y_size)
     }
-    pub(crate) fn iter(&self) -> Iter<Data::Element> {
+    pub(crate) fn iter(&self) -> Iter<'_, Data::Element> {
         Iter {
             positions: self.positions(),
             stride: self.stride(),
             data: self.data.borrow(),
         }
     }
-    pub(crate) fn iter_mut(&mut self) -> IterMut<Data::Element>
+    pub(crate) fn iter_mut(&mut self) -> IterMut<'_, Data::Element>
     where
         Data: BorrowMut<[<Data as Array2DData>::Element]>,
     {
@@ -382,10 +382,10 @@ impl<T> Array2DBase<Vec<T>> {
         self.data
     }
     pub(crate) fn data(&self) -> &[T] {
-        &*self.data
+        &self.data
     }
     pub(crate) fn data_mut(&mut self) -> &mut [T] {
-        &mut *self.data
+        &mut self.data
     }
 }
 
@@ -498,6 +498,7 @@ pub(crate) type Array2DMutSlice<'a, T> = Array2DBase<&'a mut [T]>;
 
 /// column-major 2D positions iterator
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Default)]
 pub(crate) struct Positions {
     x: usize,
     y: usize,
@@ -506,17 +507,6 @@ pub(crate) struct Positions {
     after_rev_y: usize,
 }
 
-impl Default for Positions {
-    fn default() -> Self {
-        Self {
-            x: 0,
-            y: 0,
-            y_size: 0,
-            rev_x: 0,
-            after_rev_y: 0,
-        }
-    }
-}
 
 impl Positions {
     pub(crate) fn new(x_size: usize, y_size: usize) -> Self {
@@ -869,7 +859,7 @@ mod tests {
     #[test]
     fn test_iter_mut() {
         let mut array = Array2DOwned::new_with_positions(2, 3, |x, y| x * 10 + y);
-        let expected_list: Vec<_> = array.data().iter().copied().collect();
+        let expected_list: Vec<_> = array.data().to_vec();
         for operation_mask in 0..(1 << expected_list.len()) {
             println!();
             let mut expected = expected_list.iter().copied();

@@ -205,7 +205,7 @@ impl<T: Integer + Clone + Signed + for<'a> Mul<&'a T, Output = T>> ExtendedGCD f
 /// # Ok::<(), ParseRatioError>(())
 /// ```
 // FIXME: unignore doctest when pub
-pub(crate) trait DivRemNearest<Rhs = Self>: Sized {
+pub trait DivRemNearest<Rhs = Self>: Sized {
     type DivOutput;
     type RemOutput;
     fn checked_div_rem_nearest(&self, rhs: &Rhs) -> Option<(Self::DivOutput, Self::RemOutput)>;
@@ -474,7 +474,7 @@ impl TrailingZeros for BigInt {
     }
 }
 
-pub(crate) trait IsolatedRealRoot<T: PolynomialCoefficient + Integer> {
+pub trait IsolatedRealRoot<T: PolynomialCoefficient + Integer> {
     fn root_polynomial(&self) -> &Polynomial<T>;
     fn multiplicity(&self) -> usize;
     fn lower_bound(&self) -> &Ratio<T>;
@@ -550,13 +550,24 @@ pub trait ExactDiv<Rhs = Self>: Sized {
     fn checked_exact_div(self, rhs: Rhs) -> Option<Self::Output>;
 }
 
+#[derive(Debug)]
+pub struct ExactDivAssignError;
+
+impl fmt::Display for ExactDivAssignError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "exact division failed")
+    }
+}
+
+impl std::error::Error for ExactDivAssignError {}
+
 pub trait ExactDivAssign<Rhs = Self>: ExactDiv<Rhs, Output = Self> {
     fn exact_div_assign(&mut self, rhs: Rhs) {
-        if let Err(()) = self.checked_exact_div_assign(rhs) {
+        if let Err(ExactDivAssignError) = self.checked_exact_div_assign(rhs) {
             panic!("exact division failed");
         }
     }
-    fn checked_exact_div_assign(&mut self, rhs: Rhs) -> Result<(), ()>;
+    fn checked_exact_div_assign(&mut self, rhs: Rhs) -> Result<(), ExactDivAssignError>;
 }
 
 /// division always produces exact results except for division by zero, overflow, or similar
@@ -610,9 +621,9 @@ macro_rules! impl_exact_div_for_ratio {
             fn exact_div_assign(&mut self, rhs: $rhs) {
                 self.div_assign(rhs);
             }
-            fn checked_exact_div_assign(&mut self, rhs: $rhs) -> Result<(), ()> {
+            fn checked_exact_div_assign(&mut self, rhs: $rhs) -> Result<(), ExactDivAssignError> {
                 if rhs.is_zero() {
-                    Err(())
+                    Err(ExactDivAssignError)
                 } else {
                     self.div_assign(rhs);
                     Ok(())
@@ -703,13 +714,13 @@ macro_rules! impl_exact_div_for_int {
             fn exact_div_assign(&mut self, rhs: &$t) {
                 *self = (&*self).exact_div(rhs);
             }
-            fn checked_exact_div_assign(&mut self, rhs: &$t) -> Result<(), ()> {
+            fn checked_exact_div_assign(&mut self, rhs: &$t) -> Result<(), ExactDivAssignError> {
                 (&*self)
                     .checked_exact_div(rhs)
                     .map(|v| {
                         *self = v;
                     })
-                    .ok_or(())
+                    .ok_or(ExactDivAssignError)
             }
         }
 
@@ -717,13 +728,13 @@ macro_rules! impl_exact_div_for_int {
             fn exact_div_assign(&mut self, rhs: $t) {
                 *self = (&*self).exact_div(rhs);
             }
-            fn checked_exact_div_assign(&mut self, rhs: $t) -> Result<(), ()> {
+            fn checked_exact_div_assign(&mut self, rhs: $t) -> Result<(), ExactDivAssignError> {
                 (&*self)
                     .checked_exact_div(rhs)
                     .map(|v| {
                         *self = v;
                     })
-                    .ok_or(())
+                    .ok_or(ExactDivAssignError)
             }
         }
     };

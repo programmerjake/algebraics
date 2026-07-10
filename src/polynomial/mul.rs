@@ -9,7 +9,7 @@ use std::{
     ops::{AddAssign, Mul, MulAssign},
 };
 
-impl<'a, T: PolynomialCoefficient> Mul for &'a Polynomial<T> {
+impl<T: PolynomialCoefficient> Mul for &Polynomial<T> {
     type Output = Polynomial<T>;
     #[allow(clippy::suspicious_arithmetic_impl)]
     fn mul(self, rhs: &Polynomial<T>) -> Polynomial<T> {
@@ -35,14 +35,14 @@ impl<'a, T: PolynomialCoefficient> Mul for &'a Polynomial<T> {
     }
 }
 
-impl<'a, T: PolynomialCoefficient> Mul<Polynomial<T>> for &'a Polynomial<T> {
+impl<T: PolynomialCoefficient> Mul<Polynomial<T>> for &Polynomial<T> {
     type Output = Polynomial<T>;
     fn mul(self, rhs: Polynomial<T>) -> Polynomial<T> {
         self * &rhs
     }
 }
 
-impl<'a, T: PolynomialCoefficient> Mul<&'a Polynomial<T>> for Polynomial<T> {
+impl<T: PolynomialCoefficient> Mul<&Polynomial<T>> for Polynomial<T> {
     type Output = Polynomial<T>;
     fn mul(self, rhs: &Polynomial<T>) -> Polynomial<T> {
         &self * rhs
@@ -62,7 +62,7 @@ impl<T: PolynomialCoefficient> MulAssign for Polynomial<T> {
     }
 }
 
-impl<'a, T: PolynomialCoefficient> MulAssign<&'a Polynomial<T>> for Polynomial<T> {
+impl<T: PolynomialCoefficient> MulAssign<&Polynomial<T>> for Polynomial<T> {
     fn mul_assign(&mut self, rhs: &Polynomial<T>) {
         *self = &*self * rhs;
     }
@@ -115,14 +115,14 @@ impl<'a, T: PolynomialCoefficient> Mul<&'a T> for &'a Polynomial<T> {
     }
 }
 
-impl<'a, T: PolynomialCoefficient> Mul<T> for &'a Polynomial<T> {
+impl<T: PolynomialCoefficient> Mul<T> for &Polynomial<T> {
     type Output = Polynomial<T>;
     fn mul(self, rhs: T) -> Polynomial<T> {
         mul_single(Cow::Borrowed(self), Cow::Owned(rhs))
     }
 }
 
-impl<'a, T: PolynomialCoefficient> Mul<&'a T> for Polynomial<T> {
+impl<T: PolynomialCoefficient> Mul<&T> for Polynomial<T> {
     type Output = Polynomial<T>;
     fn mul(self, rhs: &T) -> Polynomial<T> {
         mul_single(Cow::Owned(self), Cow::Borrowed(rhs))
@@ -142,7 +142,7 @@ impl<T: PolynomialCoefficient> MulAssign<T> for Polynomial<T> {
     }
 }
 
-impl<'a, T: PolynomialCoefficient> MulAssign<&'a T> for Polynomial<T> {
+impl<T: PolynomialCoefficient> MulAssign<&T> for Polynomial<T> {
     fn mul_assign(&mut self, rhs: &T) {
         mul_assign_single(self, Cow::Borrowed(rhs));
     }

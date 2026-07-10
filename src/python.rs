@@ -115,7 +115,7 @@ impl RealAlgebraicNumberPy {
         self.value.is_integer()
     }
     fn recip<'py>(&self, py: Python<'py>) -> PyResult<RealAlgebraicNumber> {
-        py.allow_threads(|| Some(self.value.checked_recip()?))
+        py.allow_threads(|| self.value.checked_recip())
             .ok_or_else(get_div_by_zero_error)
     }
     /// returns `floor(log2(self))`
@@ -246,10 +246,10 @@ impl RealAlgebraicNumberPy {
 
     // Unary arithmetic
     fn __neg__(&self, py: Python) -> PyResult<RealAlgebraicNumber> {
-        Ok(py.allow_threads(|| (-&self.value).into()))
+        Ok(py.allow_threads(|| -&self.value))
     }
     fn __abs__(&self, py: Python) -> PyResult<RealAlgebraicNumber> {
-        Ok(py.allow_threads(|| self.value.abs().into()))
+        Ok(py.allow_threads(|| self.value.abs()))
     }
 }
 
@@ -274,7 +274,7 @@ fn try_arithmetic_helper<
 ) -> PyResult<RealAlgebraicNumber> {
     let rhs = Bound::<RealAlgebraicNumberPy>::try_from(rhs)?;
     let rhs = rhs.get();
-    py.allow_threads(|| Ok(f(&lhs.value, &rhs.value)?.into()))
+    py.allow_threads(|| f(&lhs.value, &rhs.value))
         .map_err(map_err)
 }
 

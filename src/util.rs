@@ -512,7 +512,7 @@ pub fn is_prime_u32(v: u32) -> bool {
         if v == prime {
             return true;
         }
-        if v % prime == 0 {
+        if v.is_multiple_of(prime) {
             return false;
         }
         if prime * prime > v {
@@ -552,7 +552,7 @@ pub fn next_prime_u32(mut v: u32) -> Option<u32> {
     if v >= 4_294_967_291 {
         return None;
     }
-    if v % 2 == 0 {
+    if v.is_multiple_of(2) {
         v += 1;
     } else {
         v += 2;
@@ -583,7 +583,7 @@ fn is_prime_check_small_divisors(v: u128) -> Option<bool> {
         if v == prime {
             return Some(true);
         }
-        if v % prime == 0 {
+        if v.is_multiple_of(prime) {
             return Some(false);
         }
         if prime * prime > v {
@@ -599,7 +599,7 @@ fn is_pseudo_prime_miller_rabin_test_for_base<T: IsPseudoPrime>(
     r: usize,
     base: &T,
 ) -> bool {
-    let x = base.pow_modular_reduce(d, &n);
+    let x = base.pow_modular_reduce(d, n);
     if x.is_one() || (n.clone() - x.clone()).is_one() {
         return false;
     }
@@ -770,8 +770,10 @@ pub trait IsPseudoPrimePower: IsPseudoPrime + FloorLog2 {
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
+#[derive(Default)]
 pub enum Sign {
     Negative,
+    #[default]
     Positive,
 }
 
@@ -785,11 +787,6 @@ impl Sign {
     }
 }
 
-impl Default for Sign {
-    fn default() -> Sign {
-        Sign::Positive
-    }
-}
 
 impl Neg for Sign {
     type Output = Sign;
@@ -1144,8 +1141,9 @@ pub(crate) mod tests {
     pub(crate) fn test_checked_op_helper<
         T: Clone + PartialEq + fmt::Debug,
         R: Clone,
-        OpEqMove: Fn(&mut T, R) -> Result<(), ()>,
-        OpEqRef: Fn(&mut T, &R) -> Result<(), ()>,
+        Err,
+        OpEqMove: Fn(&mut T, R) -> Result<(), Err>,
+        OpEqRef: Fn(&mut T, &R) -> Result<(), Err>,
         OpRefRef: Fn(&T, &R) -> Option<T>,
         OpMoveRef: Fn(T, &R) -> Option<T>,
         OpRefMove: Fn(&T, R) -> Option<T>,

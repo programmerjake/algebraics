@@ -3,8 +3,8 @@
 
 use crate::{
     traits::{
-        AlwaysExactDiv, AlwaysExactDivAssign, CeilLog2, ExactDiv, ExactDivAssign, FloorLog2,
-        IntervalUnion, IntervalUnionAssign,
+        AlwaysExactDiv, AlwaysExactDivAssign, CeilLog2, ExactDiv, ExactDivAssign,
+        ExactDivAssignError, FloorLog2, IntervalUnion, IntervalUnionAssign,
     },
     util::DebugAsDisplay,
 };
@@ -408,12 +408,12 @@ impl DyadicFractionInterval {
             },
         );
     }
-    fn do_checked_div_assign(&mut self, rhs: Cow<DyadicFractionInterval>) -> Result<(), ()> {
+    fn do_checked_div_assign(&mut self, rhs: Cow<DyadicFractionInterval>) -> Result<(), ExactDivAssignError> {
         if let Some(recip) = rhs.checked_recip() {
             *self *= recip;
             Ok(())
         } else {
-            Err(())
+            Err(ExactDivAssignError)
         }
     }
     fn do_div_assign(&mut self, rhs: Cow<DyadicFractionInterval>) {
@@ -1003,6 +1003,7 @@ impl AddAssign<&'_ DyadicFractionInterval> for DyadicFractionInterval {
 
 impl AddAssign<BigInt> for DyadicFractionInterval {
     fn add_assign(&mut self, mut rhs: BigInt) {
+        #![allow(clippy::suspicious_op_assign_impl)]
         rhs <<= self.log2_denom;
         self.lower_bound_numer.add_assign(&rhs);
         self.upper_bound_numer.add_assign(rhs);
@@ -1049,6 +1050,7 @@ impl SubAssign<&'_ DyadicFractionInterval> for DyadicFractionInterval {
 
 impl SubAssign<BigInt> for DyadicFractionInterval {
     fn sub_assign(&mut self, mut rhs: BigInt) {
+        #![allow(clippy::suspicious_op_assign_impl)]
         rhs <<= self.log2_denom;
         self.lower_bound_numer.sub_assign(&rhs);
         self.upper_bound_numer.sub_assign(rhs);
@@ -1165,7 +1167,7 @@ impl ExactDivAssign<DyadicFractionInterval> for DyadicFractionInterval {
     fn exact_div_assign(&mut self, rhs: DyadicFractionInterval) {
         self.do_div_assign(Cow::Owned(rhs))
     }
-    fn checked_exact_div_assign(&mut self, rhs: DyadicFractionInterval) -> Result<(), ()> {
+    fn checked_exact_div_assign(&mut self, rhs: DyadicFractionInterval) -> Result<(), ExactDivAssignError> {
         self.do_checked_div_assign(Cow::Owned(rhs))
     }
 }
@@ -1174,7 +1176,7 @@ impl ExactDivAssign<&'_ DyadicFractionInterval> for DyadicFractionInterval {
     fn exact_div_assign(&mut self, rhs: &DyadicFractionInterval) {
         self.do_div_assign(Cow::Borrowed(rhs))
     }
-    fn checked_exact_div_assign(&mut self, rhs: &DyadicFractionInterval) -> Result<(), ()> {
+    fn checked_exact_div_assign(&mut self, rhs: &DyadicFractionInterval) -> Result<(), ExactDivAssignError> {
         self.do_checked_div_assign(Cow::Borrowed(rhs))
     }
 }
@@ -1312,31 +1314,31 @@ mod tests {
         ops::{Deref, DerefMut},
     };
 
-    type DFI = DyadicFractionInterval;
+    type Dfi = DyadicFractionInterval;
 
     #[derive(Clone)]
-    struct SameWrapper<T: Borrow<DFI>>(T);
+    struct SameWrapper<T: Borrow<Dfi>>(T);
 
-    impl<T: Borrow<DFI>> Deref for SameWrapper<T> {
-        type Target = DFI;
-        fn deref(&self) -> &DFI {
+    impl<T: Borrow<Dfi>> Deref for SameWrapper<T> {
+        type Target = Dfi;
+        fn deref(&self) -> &Dfi {
             self.0.borrow()
         }
     }
 
-    impl<T: BorrowMut<DFI>> DerefMut for SameWrapper<T> {
-        fn deref_mut(&mut self) -> &mut DFI {
+    impl<T: BorrowMut<Dfi>> DerefMut for SameWrapper<T> {
+        fn deref_mut(&mut self) -> &mut Dfi {
             self.0.borrow_mut()
         }
     }
 
-    impl<T: Borrow<DFI>> PartialEq for SameWrapper<T> {
+    impl<T: Borrow<Dfi>> PartialEq for SameWrapper<T> {
         fn eq(&self, rhs: &Self) -> bool {
             self.is_same(rhs)
         }
     }
 
-    impl<T: Borrow<DFI>> fmt::Debug for SameWrapper<T> {
+    impl<T: Borrow<Dfi>> fmt::Debug for SameWrapper<T> {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
             fmt::Debug::fmt(&**self, f)
         }
@@ -1369,190 +1371,190 @@ mod tests {
     #[test]
     fn test_from_ratio_range() {
         assert_same!(
-            DFI::from_ratio_range(r(2, 3), r(5, 7), 8),
-            DFI::new(bi(170), bi(183), 8)
+            Dfi::from_ratio_range(r(2, 3), r(5, 7), 8),
+            Dfi::new(bi(170), bi(183), 8)
         );
         assert_same!(
-            DFI::from_ratio_range(ri(-1), r(-5, 7), 8),
-            DFI::new(bi(-256), bi(-182), 8)
+            Dfi::from_ratio_range(ri(-1), r(-5, 7), 8),
+            Dfi::new(bi(-256), bi(-182), 8)
         );
         assert_same!(
-            DFI::from_ratio_range(r(5, 32), r(45, 32), 5),
-            DFI::new(bi(5), bi(45), 5)
+            Dfi::from_ratio_range(r(5, 32), r(45, 32), 5),
+            Dfi::new(bi(5), bi(45), 5)
         );
         assert_same!(
-            DFI::from_ratio_range(r(7, 32), r(8, 32), 5),
-            DFI::new(bi(7), bi(8), 5)
+            Dfi::from_ratio_range(r(7, 32), r(8, 32), 5),
+            Dfi::new(bi(7), bi(8), 5)
         );
     }
 
     #[test]
     fn test_from_ratio() {
-        assert_same!(DFI::from_ratio(r(2, 3), 8), DFI::new(bi(170), bi(171), 8));
+        assert_same!(Dfi::from_ratio(r(2, 3), 8), Dfi::new(bi(170), bi(171), 8));
         assert_same!(
-            DFI::from_ratio(r(-2, 3), 8),
-            DFI::new(bi(-171), bi(-170), 8)
+            Dfi::from_ratio(r(-2, 3), 8),
+            Dfi::new(bi(-171), bi(-170), 8)
         );
-        assert_same!(DFI::from_ratio(r(1, 8), 8), DFI::new(bi(32), bi(32), 8));
+        assert_same!(Dfi::from_ratio(r(1, 8), 8), Dfi::new(bi(32), bi(32), 8));
     }
 
     #[test]
     fn test_convert_log2_denom() {
         assert_same!(
-            DFI::new(bi(1), bi(2), 0).into_converted_log2_denom(2),
-            DFI::new(bi(4), bi(8), 2)
+            Dfi::new(bi(1), bi(2), 0).into_converted_log2_denom(2),
+            Dfi::new(bi(4), bi(8), 2)
         );
         assert_same!(
-            DFI::new(bi(-2), bi(-1), 0).into_converted_log2_denom(2),
-            DFI::new(bi(-8), bi(-4), 2)
+            Dfi::new(bi(-2), bi(-1), 0).into_converted_log2_denom(2),
+            Dfi::new(bi(-8), bi(-4), 2)
         );
         assert_same!(
-            DFI::new(bi(4), bi(8), 2).into_converted_log2_denom(0),
-            DFI::new(bi(1), bi(2), 0)
+            Dfi::new(bi(4), bi(8), 2).into_converted_log2_denom(0),
+            Dfi::new(bi(1), bi(2), 0)
         );
         assert_same!(
-            DFI::new(bi(7), bi(7), 2).into_converted_log2_denom(0),
-            DFI::new(bi(1), bi(2), 0)
+            Dfi::new(bi(7), bi(7), 2).into_converted_log2_denom(0),
+            Dfi::new(bi(1), bi(2), 0)
         );
         assert_same!(
-            DFI::new(bi(6), bi(6), 2).into_converted_log2_denom(0),
-            DFI::new(bi(1), bi(2), 0)
+            Dfi::new(bi(6), bi(6), 2).into_converted_log2_denom(0),
+            Dfi::new(bi(1), bi(2), 0)
         );
         assert_same!(
-            DFI::new(bi(5), bi(5), 2).into_converted_log2_denom(0),
-            DFI::new(bi(1), bi(2), 0)
+            Dfi::new(bi(5), bi(5), 2).into_converted_log2_denom(0),
+            Dfi::new(bi(1), bi(2), 0)
         );
         assert_same!(
-            DFI::new(bi(4), bi(4), 2).into_converted_log2_denom(0),
-            DFI::new(bi(1), bi(1), 0)
+            Dfi::new(bi(4), bi(4), 2).into_converted_log2_denom(0),
+            Dfi::new(bi(1), bi(1), 0)
         );
         assert_same!(
-            DFI::new(bi(8), bi(8), 2).into_converted_log2_denom(0),
-            DFI::new(bi(2), bi(2), 0)
+            Dfi::new(bi(8), bi(8), 2).into_converted_log2_denom(0),
+            Dfi::new(bi(2), bi(2), 0)
         );
         assert_same!(
-            DFI::new(bi(-8), bi(-4), 2).into_converted_log2_denom(0),
-            DFI::new(bi(-2), bi(-1), 0)
+            Dfi::new(bi(-8), bi(-4), 2).into_converted_log2_denom(0),
+            Dfi::new(bi(-2), bi(-1), 0)
         );
         assert_same!(
-            DFI::new(bi(-7), bi(-7), 2).into_converted_log2_denom(0),
-            DFI::new(bi(-2), bi(-1), 0)
+            Dfi::new(bi(-7), bi(-7), 2).into_converted_log2_denom(0),
+            Dfi::new(bi(-2), bi(-1), 0)
         );
         assert_same!(
-            DFI::new(bi(-6), bi(-6), 2).into_converted_log2_denom(0),
-            DFI::new(bi(-2), bi(-1), 0)
+            Dfi::new(bi(-6), bi(-6), 2).into_converted_log2_denom(0),
+            Dfi::new(bi(-2), bi(-1), 0)
         );
         assert_same!(
-            DFI::new(bi(-5), bi(-5), 2).into_converted_log2_denom(0),
-            DFI::new(bi(-2), bi(-1), 0)
+            Dfi::new(bi(-5), bi(-5), 2).into_converted_log2_denom(0),
+            Dfi::new(bi(-2), bi(-1), 0)
         );
         assert_same!(
-            DFI::new(bi(-4), bi(-4), 2).into_converted_log2_denom(0),
-            DFI::new(bi(-1), bi(-1), 0)
+            Dfi::new(bi(-4), bi(-4), 2).into_converted_log2_denom(0),
+            Dfi::new(bi(-1), bi(-1), 0)
         );
         assert_same!(
-            DFI::new(bi(-8), bi(-8), 2).into_converted_log2_denom(0),
-            DFI::new(bi(-2), bi(-2), 0)
+            Dfi::new(bi(-8), bi(-8), 2).into_converted_log2_denom(0),
+            Dfi::new(bi(-2), bi(-2), 0)
         );
     }
 
     #[test]
     fn test_square() {
         assert_same!(
-            DFI::new(bi(1), bi(2), 0).into_square(),
-            DFI::new(bi(1), bi(4), 0)
+            Dfi::new(bi(1), bi(2), 0).into_square(),
+            Dfi::new(bi(1), bi(4), 0)
         );
         assert_same!(
-            DFI::new(bi(4), bi(5), 0).into_square(),
-            DFI::new(bi(16), bi(25), 0)
+            Dfi::new(bi(4), bi(5), 0).into_square(),
+            Dfi::new(bi(16), bi(25), 0)
         );
         assert_same!(
-            DFI::new(bi(1), bi(1), 4).into_square(),
-            DFI::new(bi(0), bi(1), 4)
+            Dfi::new(bi(1), bi(1), 4).into_square(),
+            Dfi::new(bi(0), bi(1), 4)
         );
         assert_same!(
-            DFI::new(bi(16), bi(16), 4).into_square(),
-            DFI::new(bi(16), bi(16), 4)
+            Dfi::new(bi(16), bi(16), 4).into_square(),
+            Dfi::new(bi(16), bi(16), 4)
         );
         assert_same!(
-            DFI::new(bi(15), bi(15), 4).into_square(),
-            DFI::new(bi(14), bi(15), 4)
+            Dfi::new(bi(15), bi(15), 4).into_square(),
+            Dfi::new(bi(14), bi(15), 4)
         );
         assert_same!(
-            DFI::new(bi(15), bi(15), 4).into_square(),
-            DFI::new(bi(14), bi(15), 4)
+            Dfi::new(bi(15), bi(15), 4).into_square(),
+            Dfi::new(bi(14), bi(15), 4)
         );
         assert_same!(
-            DFI::new(bi(-16), bi(16), 4).into_square(),
-            DFI::new(bi(0), bi(16), 4)
+            Dfi::new(bi(-16), bi(16), 4).into_square(),
+            Dfi::new(bi(0), bi(16), 4)
         );
         assert_same!(
-            DFI::new(bi(-4), bi(5), 0).into_square(),
-            DFI::new(bi(0), bi(25), 0)
+            Dfi::new(bi(-4), bi(5), 0).into_square(),
+            Dfi::new(bi(0), bi(25), 0)
         );
         assert_same!(
-            DFI::new(bi(-5), bi(4), 0).into_square(),
-            DFI::new(bi(0), bi(25), 0)
+            Dfi::new(bi(-5), bi(4), 0).into_square(),
+            Dfi::new(bi(0), bi(25), 0)
         );
         assert_same!(
-            DFI::new(bi(-16), bi(-16), 4).into_square(),
-            DFI::new(bi(16), bi(16), 4)
+            Dfi::new(bi(-16), bi(-16), 4).into_square(),
+            Dfi::new(bi(16), bi(16), 4)
         );
         assert_same!(
-            DFI::new(bi(-5), bi(-4), 0).into_square(),
-            DFI::new(bi(16), bi(25), 0)
+            Dfi::new(bi(-5), bi(-4), 0).into_square(),
+            Dfi::new(bi(16), bi(25), 0)
         );
     }
 
     #[test]
     fn test_sqrt() {
         assert_same!(
-            DFI::new(bi(0), bi(1), 8).into_sqrt(),
-            DFI::new(bi(0), bi(16), 8)
+            Dfi::new(bi(0), bi(1), 8).into_sqrt(),
+            Dfi::new(bi(0), bi(16), 8)
         );
         assert_same!(
-            DFI::new(bi(1), bi(2), 8).into_sqrt(),
-            DFI::new(bi(16), bi(23), 8)
+            Dfi::new(bi(1), bi(2), 8).into_sqrt(),
+            Dfi::new(bi(16), bi(23), 8)
         );
         assert_same!(
-            DFI::new(bi(2), bi(3), 8).into_sqrt(),
-            DFI::new(bi(22), bi(28), 8)
+            Dfi::new(bi(2), bi(3), 8).into_sqrt(),
+            Dfi::new(bi(22), bi(28), 8)
         );
         assert_same!(
-            DFI::new(bi(3), bi(4), 8).into_sqrt(),
-            DFI::new(bi(27), bi(32), 8)
+            Dfi::new(bi(3), bi(4), 8).into_sqrt(),
+            Dfi::new(bi(27), bi(32), 8)
         );
         assert_same!(
-            DFI::new(bi(4), bi(5), 8).into_sqrt(),
-            DFI::new(bi(32), bi(36), 8)
+            Dfi::new(bi(4), bi(5), 8).into_sqrt(),
+            Dfi::new(bi(32), bi(36), 8)
         );
         assert_same!(
-            DFI::new(bi(512), bi(512), 8).into_sqrt(),
-            DFI::new(bi(362), bi(363), 8)
+            Dfi::new(bi(512), bi(512), 8).into_sqrt(),
+            Dfi::new(bi(362), bi(363), 8)
         );
     }
 
     #[test]
     fn test_arithmetic_geometric_mean() {
         assert_same!(
-            DFI::new(bi(0), bi(1), 8).into_arithmetic_geometric_mean(DFI::new(bi(0), bi(1), 8)),
-            DFI::new(bi(0), bi(1), 8),
+            Dfi::new(bi(0), bi(1), 8).into_arithmetic_geometric_mean(Dfi::new(bi(0), bi(1), 8)),
+            Dfi::new(bi(0), bi(1), 8),
         );
         assert_same!(
-            DFI::new(bi(256), bi(256), 8).into_arithmetic_geometric_mean(DFI::new(
+            Dfi::new(bi(256), bi(256), 8).into_arithmetic_geometric_mean(Dfi::new(
                 bi(512),
                 bi(512),
                 8
             )),
-            DFI::new(bi(372), bi(374), 8),
+            Dfi::new(bi(372), bi(374), 8),
         );
         assert_same!(
-            DFI::new(bi(1) << 64, bi(1) << 64, 64).into_arithmetic_geometric_mean(DFI::new(
+            Dfi::new(bi(1) << 64, bi(1) << 64, 64).into_arithmetic_geometric_mean(Dfi::new(
                 bi(2) << 64,
                 bi(2) << 64,
                 64
             )),
-            DFI::new(
+            Dfi::new(
                 bi(26_873_051_318_597_756_702),
                 bi(26_873_051_318_597_756_707),
                 64
@@ -1563,11 +1565,11 @@ mod tests {
     #[test]
     fn test_debug() {
         assert_eq!(
-            &format!("{:?}", DFI::new(bi(-123), bi(456), 789)),
+            &format!("{:?}", Dfi::new(bi(-123), bi(456), 789)),
             "DyadicFractionInterval { lower_bound_numer: -123, upper_bound_numer: 456, log2_denom: 789 }",
         );
         assert_eq!(
-            &format!("{:#?}", DFI::new(bi(-123), bi(456), 789)),
+            &format!("{:#?}", Dfi::new(bi(-123), bi(456), 789)),
             "DyadicFractionInterval {\n    lower_bound_numer: -123,\n    upper_bound_numer: 456,\n    log2_denom: 789,\n}",
         );
     }
@@ -1575,14 +1577,14 @@ mod tests {
     #[test]
     fn test_display() {
         assert_eq!(
-            &format!("{}", DFI::new(bi(-123), bi(456), 789)),
+            &format!("{}", Dfi::new(bi(-123), bi(456), 789)),
             "[-123 / 2^789, 456 / 2^789]",
         );
     }
 
     #[test]
     fn test_interval_union() {
-        fn test_case(lhs: DFI, rhs: DFI, expected: DFI) {
+        fn test_case(lhs: Dfi, rhs: Dfi, expected: Dfi) {
             test_op_helper(
                 SameWrapper(lhs.clone()),
                 SameWrapper(rhs.clone()),
@@ -1607,60 +1609,60 @@ mod tests {
             );
         }
         test_case(
-            DFI::new(bi(3), bi(5), 0),
-            DFI::new(bi(17), bi(97), 0),
-            DFI::new(bi(3), bi(97), 0),
+            Dfi::new(bi(3), bi(5), 0),
+            Dfi::new(bi(17), bi(97), 0),
+            Dfi::new(bi(3), bi(97), 0),
         );
         test_case(
-            DFI::new(bi(3), bi(5), 1),
-            DFI::new(bi(17), bi(97), 0),
-            DFI::new(bi(3), bi(194), 1),
+            Dfi::new(bi(3), bi(5), 1),
+            Dfi::new(bi(17), bi(97), 0),
+            Dfi::new(bi(3), bi(194), 1),
         );
         test_case(
-            DFI::new(bi(3), bi(5), 0),
-            DFI::new(bi(17), bi(97), 1),
-            DFI::new(bi(6), bi(97), 1),
+            Dfi::new(bi(3), bi(5), 0),
+            Dfi::new(bi(17), bi(97), 1),
+            Dfi::new(bi(6), bi(97), 1),
         );
         test_case(
-            DFI::new(bi(3), bi(5), 1),
-            DFI::new(bi(17), bi(97), 1),
-            DFI::new(bi(3), bi(97), 1),
+            Dfi::new(bi(3), bi(5), 1),
+            Dfi::new(bi(17), bi(97), 1),
+            Dfi::new(bi(3), bi(97), 1),
         );
         test_case(
-            DFI::new(bi(-3), bi(5), 0),
-            DFI::new(bi(17), bi(97), 0),
-            DFI::new(bi(-3), bi(97), 0),
+            Dfi::new(bi(-3), bi(5), 0),
+            Dfi::new(bi(17), bi(97), 0),
+            Dfi::new(bi(-3), bi(97), 0),
         );
         test_case(
-            DFI::new(bi(-5), bi(3), 0),
-            DFI::new(bi(17), bi(97), 0),
-            DFI::new(bi(-5), bi(97), 0),
+            Dfi::new(bi(-5), bi(3), 0),
+            Dfi::new(bi(17), bi(97), 0),
+            Dfi::new(bi(-5), bi(97), 0),
         );
         test_case(
-            DFI::new(bi(-5), bi(-3), 0),
-            DFI::new(bi(17), bi(97), 0),
-            DFI::new(bi(-5), bi(97), 0),
+            Dfi::new(bi(-5), bi(-3), 0),
+            Dfi::new(bi(17), bi(97), 0),
+            Dfi::new(bi(-5), bi(97), 0),
         );
         test_case(
-            DFI::new(bi(3), bi(5), 1),
-            DFI::new(bi(-17), bi(97), 1),
-            DFI::new(bi(-17), bi(97), 1),
+            Dfi::new(bi(3), bi(5), 1),
+            Dfi::new(bi(-17), bi(97), 1),
+            Dfi::new(bi(-17), bi(97), 1),
         );
         test_case(
-            DFI::new(bi(3), bi(5), 1),
-            DFI::new(bi(-97), bi(17), 1),
-            DFI::new(bi(-97), bi(17), 1),
+            Dfi::new(bi(3), bi(5), 1),
+            Dfi::new(bi(-97), bi(17), 1),
+            Dfi::new(bi(-97), bi(17), 1),
         );
         test_case(
-            DFI::new(bi(3), bi(5), 1),
-            DFI::new(bi(-97), bi(-17), 1),
-            DFI::new(bi(-97), bi(5), 1),
+            Dfi::new(bi(3), bi(5), 1),
+            Dfi::new(bi(-97), bi(-17), 1),
+            Dfi::new(bi(-97), bi(5), 1),
         );
     }
 
     #[test]
     fn test_add() {
-        fn test_case(lhs: DFI, rhs: DFI, expected: DFI) {
+        fn test_case(lhs: Dfi, rhs: Dfi, expected: Dfi) {
             test_op_helper(
                 SameWrapper(lhs.clone()),
                 SameWrapper(rhs.clone()),
@@ -1685,30 +1687,30 @@ mod tests {
             );
         }
         test_case(
-            DFI::new(bi(3), bi(5), 0),
-            DFI::new(bi(17), bi(97), 0),
-            DFI::new(bi(20), bi(102), 0),
+            Dfi::new(bi(3), bi(5), 0),
+            Dfi::new(bi(17), bi(97), 0),
+            Dfi::new(bi(20), bi(102), 0),
         );
         test_case(
-            DFI::new(bi(3), bi(5), 1),
-            DFI::new(bi(17), bi(97), 0),
-            DFI::new(bi(37), bi(199), 1),
+            Dfi::new(bi(3), bi(5), 1),
+            Dfi::new(bi(17), bi(97), 0),
+            Dfi::new(bi(37), bi(199), 1),
         );
         test_case(
-            DFI::new(bi(3), bi(5), 0),
-            DFI::new(bi(17), bi(97), 1),
-            DFI::new(bi(23), bi(107), 1),
+            Dfi::new(bi(3), bi(5), 0),
+            Dfi::new(bi(17), bi(97), 1),
+            Dfi::new(bi(23), bi(107), 1),
         );
         test_case(
-            DFI::new(bi(3), bi(5), 1),
-            DFI::new(bi(17), bi(97), 1),
-            DFI::new(bi(20), bi(102), 1),
+            Dfi::new(bi(3), bi(5), 1),
+            Dfi::new(bi(17), bi(97), 1),
+            Dfi::new(bi(20), bi(102), 1),
         );
     }
 
     #[test]
     fn test_add_int() {
-        fn test_case(lhs: DFI, rhs: BigInt, expected: DFI) {
+        fn test_case(lhs: Dfi, rhs: BigInt, expected: Dfi) {
             test_op_helper(
                 SameWrapper(lhs),
                 rhs,
@@ -1722,20 +1724,20 @@ mod tests {
             );
         }
         test_case(
-            DFI::new(bi(3), bi(5), 0),
+            Dfi::new(bi(3), bi(5), 0),
             bi(23),
-            DFI::new(bi(26), bi(28), 0),
+            Dfi::new(bi(26), bi(28), 0),
         );
         test_case(
-            DFI::new(bi(3), bi(5), 1),
+            Dfi::new(bi(3), bi(5), 1),
             bi(23),
-            DFI::new(bi(49), bi(51), 1),
+            Dfi::new(bi(49), bi(51), 1),
         );
     }
 
     #[test]
     fn test_add_ratio() {
-        fn test_case(lhs: DFI, rhs: Ratio<BigInt>, expected: DFI) {
+        fn test_case(lhs: Dfi, rhs: Ratio<BigInt>, expected: Dfi) {
             test_op_helper(
                 SameWrapper(lhs),
                 rhs,
@@ -1749,30 +1751,30 @@ mod tests {
             );
         }
         test_case(
-            DFI::new(bi(3), bi(5), 0),
+            Dfi::new(bi(3), bi(5), 0),
             r(7, 5),
-            DFI::new(bi(4), bi(7), 0),
+            Dfi::new(bi(4), bi(7), 0),
         );
         test_case(
-            DFI::new(bi(3), bi(5), 0),
+            Dfi::new(bi(3), bi(5), 0),
             r(-7, 5),
-            DFI::new(bi(1), bi(4), 0),
+            Dfi::new(bi(1), bi(4), 0),
         );
         test_case(
-            DFI::new(bi(3), bi(5), 8),
+            Dfi::new(bi(3), bi(5), 8),
             r(7, 5),
-            DFI::new(bi(361), bi(364), 8),
+            Dfi::new(bi(361), bi(364), 8),
         );
         test_case(
-            DFI::new(bi(3), bi(5), 8),
+            Dfi::new(bi(3), bi(5), 8),
             r(-7, 5),
-            DFI::new(bi(-356), bi(-353), 8),
+            Dfi::new(bi(-356), bi(-353), 8),
         );
     }
 
     #[test]
     fn test_sub() {
-        fn test_case(lhs: DFI, rhs: DFI, expected: DFI) {
+        fn test_case(lhs: Dfi, rhs: Dfi, expected: Dfi) {
             test_op_helper(
                 SameWrapper(lhs.clone()),
                 SameWrapper(rhs.clone()),
@@ -1797,30 +1799,30 @@ mod tests {
             );
         }
         test_case(
-            DFI::new(bi(3), bi(5), 0),
-            DFI::new(bi(17), bi(97), 0),
-            DFI::new(bi(-94), bi(-12), 0),
+            Dfi::new(bi(3), bi(5), 0),
+            Dfi::new(bi(17), bi(97), 0),
+            Dfi::new(bi(-94), bi(-12), 0),
         );
         test_case(
-            DFI::new(bi(3), bi(5), 1),
-            DFI::new(bi(17), bi(97), 0),
-            DFI::new(bi(-191), bi(-29), 1),
+            Dfi::new(bi(3), bi(5), 1),
+            Dfi::new(bi(17), bi(97), 0),
+            Dfi::new(bi(-191), bi(-29), 1),
         );
         test_case(
-            DFI::new(bi(3), bi(5), 0),
-            DFI::new(bi(17), bi(97), 1),
-            DFI::new(bi(-91), bi(-7), 1),
+            Dfi::new(bi(3), bi(5), 0),
+            Dfi::new(bi(17), bi(97), 1),
+            Dfi::new(bi(-91), bi(-7), 1),
         );
         test_case(
-            DFI::new(bi(3), bi(5), 1),
-            DFI::new(bi(17), bi(97), 1),
-            DFI::new(bi(-94), bi(-12), 1),
+            Dfi::new(bi(3), bi(5), 1),
+            Dfi::new(bi(17), bi(97), 1),
+            Dfi::new(bi(-94), bi(-12), 1),
         );
     }
 
     #[test]
     fn test_sub_int() {
-        fn test_case(lhs: DFI, rhs: BigInt, expected: DFI) {
+        fn test_case(lhs: Dfi, rhs: BigInt, expected: Dfi) {
             test_op_helper(
                 SameWrapper(lhs),
                 rhs,
@@ -1834,20 +1836,20 @@ mod tests {
             );
         }
         test_case(
-            DFI::new(bi(3), bi(5), 0),
+            Dfi::new(bi(3), bi(5), 0),
             bi(23),
-            DFI::new(bi(-20), bi(-18), 0),
+            Dfi::new(bi(-20), bi(-18), 0),
         );
         test_case(
-            DFI::new(bi(3), bi(5), 1),
+            Dfi::new(bi(3), bi(5), 1),
             bi(23),
-            DFI::new(bi(-43), bi(-41), 1),
+            Dfi::new(bi(-43), bi(-41), 1),
         );
     }
 
     #[test]
     fn test_sub_ratio() {
-        fn test_case(lhs: DFI, rhs: Ratio<BigInt>, expected: DFI) {
+        fn test_case(lhs: Dfi, rhs: Ratio<BigInt>, expected: Dfi) {
             test_op_helper(
                 SameWrapper(lhs),
                 rhs,
@@ -1861,30 +1863,30 @@ mod tests {
             );
         }
         test_case(
-            DFI::new(bi(3), bi(5), 0),
+            Dfi::new(bi(3), bi(5), 0),
             r(7, 5),
-            DFI::new(bi(1), bi(4), 0),
+            Dfi::new(bi(1), bi(4), 0),
         );
         test_case(
-            DFI::new(bi(3), bi(5), 0),
+            Dfi::new(bi(3), bi(5), 0),
             r(-7, 5),
-            DFI::new(bi(4), bi(7), 0),
+            Dfi::new(bi(4), bi(7), 0),
         );
         test_case(
-            DFI::new(bi(3), bi(5), 8),
+            Dfi::new(bi(3), bi(5), 8),
             r(7, 5),
-            DFI::new(bi(-356), bi(-353), 8),
+            Dfi::new(bi(-356), bi(-353), 8),
         );
         test_case(
-            DFI::new(bi(3), bi(5), 8),
+            Dfi::new(bi(3), bi(5), 8),
             r(-7, 5),
-            DFI::new(bi(361), bi(364), 8),
+            Dfi::new(bi(361), bi(364), 8),
         );
     }
 
     #[test]
     fn test_mul() {
-        fn test_case(lhs: DFI, rhs: DFI, expected: DFI) {
+        fn test_case(lhs: Dfi, rhs: Dfi, expected: Dfi) {
             test_op_helper(
                 SameWrapper(lhs.clone()),
                 SameWrapper(rhs.clone()),
@@ -1909,105 +1911,105 @@ mod tests {
             );
         }
         test_case(
-            DFI::new(bi(3), bi(5), 0),
-            DFI::new(bi(17), bi(97), 0),
-            DFI::new(bi(51), bi(485), 0),
+            Dfi::new(bi(3), bi(5), 0),
+            Dfi::new(bi(17), bi(97), 0),
+            Dfi::new(bi(51), bi(485), 0),
         );
         test_case(
-            DFI::new(bi(-3), bi(5), 0),
-            DFI::new(bi(17), bi(97), 0),
-            DFI::new(bi(-291), bi(485), 0),
+            Dfi::new(bi(-3), bi(5), 0),
+            Dfi::new(bi(17), bi(97), 0),
+            Dfi::new(bi(-291), bi(485), 0),
         );
         test_case(
-            DFI::new(bi(-5), bi(3), 0),
-            DFI::new(bi(17), bi(97), 0),
-            DFI::new(bi(-485), bi(291), 0),
+            Dfi::new(bi(-5), bi(3), 0),
+            Dfi::new(bi(17), bi(97), 0),
+            Dfi::new(bi(-485), bi(291), 0),
         );
         test_case(
-            DFI::new(bi(-5), bi(-3), 0),
-            DFI::new(bi(17), bi(97), 0),
-            DFI::new(bi(-485), bi(-51), 0),
+            Dfi::new(bi(-5), bi(-3), 0),
+            Dfi::new(bi(17), bi(97), 0),
+            Dfi::new(bi(-485), bi(-51), 0),
         );
         test_case(
-            DFI::new(bi(3), bi(5), 0),
-            DFI::new(bi(-17), bi(97), 0),
-            DFI::new(bi(-85), bi(485), 0),
+            Dfi::new(bi(3), bi(5), 0),
+            Dfi::new(bi(-17), bi(97), 0),
+            Dfi::new(bi(-85), bi(485), 0),
         );
         test_case(
-            DFI::new(bi(-3), bi(5), 0),
-            DFI::new(bi(-17), bi(97), 0),
-            DFI::new(bi(-291), bi(485), 0),
+            Dfi::new(bi(-3), bi(5), 0),
+            Dfi::new(bi(-17), bi(97), 0),
+            Dfi::new(bi(-291), bi(485), 0),
         );
         test_case(
-            DFI::new(bi(-5), bi(3), 0),
-            DFI::new(bi(-17), bi(97), 0),
-            DFI::new(bi(-485), bi(291), 0),
+            Dfi::new(bi(-5), bi(3), 0),
+            Dfi::new(bi(-17), bi(97), 0),
+            Dfi::new(bi(-485), bi(291), 0),
         );
         test_case(
-            DFI::new(bi(-5), bi(-3), 0),
-            DFI::new(bi(-17), bi(97), 0),
-            DFI::new(bi(-485), bi(85), 0),
+            Dfi::new(bi(-5), bi(-3), 0),
+            Dfi::new(bi(-17), bi(97), 0),
+            Dfi::new(bi(-485), bi(85), 0),
         );
         test_case(
-            DFI::new(bi(3), bi(5), 0),
-            DFI::new(bi(-97), bi(17), 0),
-            DFI::new(bi(-485), bi(85), 0),
+            Dfi::new(bi(3), bi(5), 0),
+            Dfi::new(bi(-97), bi(17), 0),
+            Dfi::new(bi(-485), bi(85), 0),
         );
         test_case(
-            DFI::new(bi(-3), bi(5), 0),
-            DFI::new(bi(-97), bi(17), 0),
-            DFI::new(bi(-485), bi(291), 0),
+            Dfi::new(bi(-3), bi(5), 0),
+            Dfi::new(bi(-97), bi(17), 0),
+            Dfi::new(bi(-485), bi(291), 0),
         );
         test_case(
-            DFI::new(bi(-5), bi(3), 0),
-            DFI::new(bi(-97), bi(17), 0),
-            DFI::new(bi(-291), bi(485), 0),
+            Dfi::new(bi(-5), bi(3), 0),
+            Dfi::new(bi(-97), bi(17), 0),
+            Dfi::new(bi(-291), bi(485), 0),
         );
         test_case(
-            DFI::new(bi(-5), bi(-3), 0),
-            DFI::new(bi(-97), bi(17), 0),
-            DFI::new(bi(-85), bi(485), 0),
+            Dfi::new(bi(-5), bi(-3), 0),
+            Dfi::new(bi(-97), bi(17), 0),
+            Dfi::new(bi(-85), bi(485), 0),
         );
         test_case(
-            DFI::new(bi(3), bi(5), 0),
-            DFI::new(bi(-97), bi(-17), 0),
-            DFI::new(bi(-485), bi(-51), 0),
+            Dfi::new(bi(3), bi(5), 0),
+            Dfi::new(bi(-97), bi(-17), 0),
+            Dfi::new(bi(-485), bi(-51), 0),
         );
         test_case(
-            DFI::new(bi(-3), bi(5), 0),
-            DFI::new(bi(-97), bi(-17), 0),
-            DFI::new(bi(-485), bi(291), 0),
+            Dfi::new(bi(-3), bi(5), 0),
+            Dfi::new(bi(-97), bi(-17), 0),
+            Dfi::new(bi(-485), bi(291), 0),
         );
         test_case(
-            DFI::new(bi(-5), bi(3), 0),
-            DFI::new(bi(-97), bi(-17), 0),
-            DFI::new(bi(-291), bi(485), 0),
+            Dfi::new(bi(-5), bi(3), 0),
+            Dfi::new(bi(-97), bi(-17), 0),
+            Dfi::new(bi(-291), bi(485), 0),
         );
         test_case(
-            DFI::new(bi(-5), bi(-3), 0),
-            DFI::new(bi(-97), bi(-17), 0),
-            DFI::new(bi(51), bi(485), 0),
+            Dfi::new(bi(-5), bi(-3), 0),
+            Dfi::new(bi(-97), bi(-17), 0),
+            Dfi::new(bi(51), bi(485), 0),
         );
         test_case(
-            DFI::new(bi(3), bi(5), 1),
-            DFI::new(bi(17), bi(97), 0),
-            DFI::new(bi(51), bi(485), 1),
+            Dfi::new(bi(3), bi(5), 1),
+            Dfi::new(bi(17), bi(97), 0),
+            Dfi::new(bi(51), bi(485), 1),
         );
         test_case(
-            DFI::new(bi(3), bi(5), 0),
-            DFI::new(bi(17), bi(97), 1),
-            DFI::new(bi(51), bi(485), 1),
+            Dfi::new(bi(3), bi(5), 0),
+            Dfi::new(bi(17), bi(97), 1),
+            Dfi::new(bi(51), bi(485), 1),
         );
         test_case(
-            DFI::new(bi(3), bi(5), 1),
-            DFI::new(bi(17), bi(97), 1),
-            DFI::new(bi(25), bi(243), 1),
+            Dfi::new(bi(3), bi(5), 1),
+            Dfi::new(bi(17), bi(97), 1),
+            Dfi::new(bi(25), bi(243), 1),
         );
     }
 
     #[test]
     fn test_mul_int() {
-        fn test_case(lhs: DFI, rhs: BigInt, expected: DFI) {
+        fn test_case(lhs: Dfi, rhs: BigInt, expected: Dfi) {
             test_op_helper(
                 SameWrapper(lhs),
                 rhs,
@@ -2021,30 +2023,30 @@ mod tests {
             );
         }
         test_case(
-            DFI::new(bi(3), bi(5), 0),
+            Dfi::new(bi(3), bi(5), 0),
             bi(23),
-            DFI::new(bi(69), bi(115), 0),
+            Dfi::new(bi(69), bi(115), 0),
         );
         test_case(
-            DFI::new(bi(3), bi(5), 1),
+            Dfi::new(bi(3), bi(5), 1),
             bi(23),
-            DFI::new(bi(69), bi(115), 1),
+            Dfi::new(bi(69), bi(115), 1),
         );
         test_case(
-            DFI::new(bi(3), bi(5), 0),
+            Dfi::new(bi(3), bi(5), 0),
             bi(-23),
-            DFI::new(bi(-115), bi(-69), 0),
+            Dfi::new(bi(-115), bi(-69), 0),
         );
         test_case(
-            DFI::new(bi(3), bi(5), 1),
+            Dfi::new(bi(3), bi(5), 1),
             bi(-23),
-            DFI::new(bi(-115), bi(-69), 1),
+            Dfi::new(bi(-115), bi(-69), 1),
         );
     }
 
     #[test]
     fn test_mul_ratio() {
-        fn test_case(lhs: DFI, rhs: Ratio<BigInt>, expected: DFI) {
+        fn test_case(lhs: Dfi, rhs: Ratio<BigInt>, expected: Dfi) {
             test_op_helper(
                 SameWrapper(lhs),
                 rhs,
@@ -2058,36 +2060,36 @@ mod tests {
             );
         }
         test_case(
-            DFI::new(bi(3), bi(5), 0),
+            Dfi::new(bi(3), bi(5), 0),
             r(23, 7),
-            DFI::new(bi(9), bi(17), 0),
+            Dfi::new(bi(9), bi(17), 0),
         );
         test_case(
-            DFI::new(bi(3), bi(5), 1),
+            Dfi::new(bi(3), bi(5), 1),
             r(23, 7),
-            DFI::new(bi(9), bi(17), 1),
+            Dfi::new(bi(9), bi(17), 1),
         );
         test_case(
-            DFI::new(bi(3), bi(5), 0),
+            Dfi::new(bi(3), bi(5), 0),
             r(-23, 7),
-            DFI::new(bi(-17), bi(-9), 0),
+            Dfi::new(bi(-17), bi(-9), 0),
         );
         test_case(
-            DFI::new(bi(3), bi(5), 1),
+            Dfi::new(bi(3), bi(5), 1),
             r(-23, 7),
-            DFI::new(bi(-17), bi(-9), 1),
+            Dfi::new(bi(-17), bi(-9), 1),
         );
-        test_case(DFI::new(bi(3), bi(5), 0), ri(3), DFI::new(bi(9), bi(15), 0));
+        test_case(Dfi::new(bi(3), bi(5), 0), ri(3), Dfi::new(bi(9), bi(15), 0));
         test_case(
-            DFI::new(bi(3), bi(5), 0),
+            Dfi::new(bi(3), bi(5), 0),
             ri(-3),
-            DFI::new(bi(-15), bi(-9), 0),
+            Dfi::new(bi(-15), bi(-9), 0),
         );
     }
 
     #[test]
     fn test_div() {
-        fn test_case(lhs: DFI, rhs: DFI, expected: Option<DFI>) {
+        fn test_case(lhs: Dfi, rhs: Dfi, expected: Option<Dfi>) {
             test_checked_op_helper(
                 SameWrapper(lhs),
                 SameWrapper(rhs),
@@ -2101,89 +2103,89 @@ mod tests {
             );
         }
         test_case(
-            DFI::new(bi(3), bi(5), 8),
-            DFI::new(bi(17), bi(97), 8),
-            Some(DFI::new(bi(7), bi(76), 8)),
+            Dfi::new(bi(3), bi(5), 8),
+            Dfi::new(bi(17), bi(97), 8),
+            Some(Dfi::new(bi(7), bi(76), 8)),
         );
         test_case(
-            DFI::new(bi(-3), bi(5), 8),
-            DFI::new(bi(17), bi(97), 8),
-            Some(DFI::new(bi(-46), bi(76), 8)),
+            Dfi::new(bi(-3), bi(5), 8),
+            Dfi::new(bi(17), bi(97), 8),
+            Some(Dfi::new(bi(-46), bi(76), 8)),
         );
         test_case(
-            DFI::new(bi(-5), bi(3), 8),
-            DFI::new(bi(17), bi(97), 8),
-            Some(DFI::new(bi(-76), bi(46), 8)),
+            Dfi::new(bi(-5), bi(3), 8),
+            Dfi::new(bi(17), bi(97), 8),
+            Some(Dfi::new(bi(-76), bi(46), 8)),
         );
         test_case(
-            DFI::new(bi(-5), bi(-3), 8),
-            DFI::new(bi(17), bi(97), 8),
-            Some(DFI::new(bi(-76), bi(-7), 8)),
+            Dfi::new(bi(-5), bi(-3), 8),
+            Dfi::new(bi(17), bi(97), 8),
+            Some(Dfi::new(bi(-76), bi(-7), 8)),
         );
         test_case(
-            DFI::new(bi(3), bi(5), 8),
-            DFI::new(bi(-17), bi(97), 8),
+            Dfi::new(bi(3), bi(5), 8),
+            Dfi::new(bi(-17), bi(97), 8),
             None,
         );
         test_case(
-            DFI::new(bi(-3), bi(5), 8),
-            DFI::new(bi(-17), bi(97), 8),
+            Dfi::new(bi(-3), bi(5), 8),
+            Dfi::new(bi(-17), bi(97), 8),
             None,
         );
         test_case(
-            DFI::new(bi(-5), bi(3), 8),
-            DFI::new(bi(-17), bi(97), 8),
+            Dfi::new(bi(-5), bi(3), 8),
+            Dfi::new(bi(-17), bi(97), 8),
             None,
         );
         test_case(
-            DFI::new(bi(-5), bi(-3), 8),
-            DFI::new(bi(-17), bi(97), 8),
+            Dfi::new(bi(-5), bi(-3), 8),
+            Dfi::new(bi(-17), bi(97), 8),
             None,
         );
         test_case(
-            DFI::new(bi(3), bi(5), 8),
-            DFI::new(bi(-97), bi(17), 8),
+            Dfi::new(bi(3), bi(5), 8),
+            Dfi::new(bi(-97), bi(17), 8),
             None,
         );
         test_case(
-            DFI::new(bi(-3), bi(5), 8),
-            DFI::new(bi(-97), bi(17), 8),
+            Dfi::new(bi(-3), bi(5), 8),
+            Dfi::new(bi(-97), bi(17), 8),
             None,
         );
         test_case(
-            DFI::new(bi(-5), bi(3), 8),
-            DFI::new(bi(-97), bi(17), 8),
+            Dfi::new(bi(-5), bi(3), 8),
+            Dfi::new(bi(-97), bi(17), 8),
             None,
         );
         test_case(
-            DFI::new(bi(-5), bi(-3), 8),
-            DFI::new(bi(-97), bi(17), 8),
+            Dfi::new(bi(-5), bi(-3), 8),
+            Dfi::new(bi(-97), bi(17), 8),
             None,
         );
         test_case(
-            DFI::new(bi(3), bi(5), 8),
-            DFI::new(bi(-97), bi(-17), 8),
-            Some(DFI::new(bi(-76), bi(-7), 8)),
+            Dfi::new(bi(3), bi(5), 8),
+            Dfi::new(bi(-97), bi(-17), 8),
+            Some(Dfi::new(bi(-76), bi(-7), 8)),
         );
         test_case(
-            DFI::new(bi(-3), bi(5), 8),
-            DFI::new(bi(-97), bi(-17), 8),
-            Some(DFI::new(bi(-76), bi(46), 8)),
+            Dfi::new(bi(-3), bi(5), 8),
+            Dfi::new(bi(-97), bi(-17), 8),
+            Some(Dfi::new(bi(-76), bi(46), 8)),
         );
         test_case(
-            DFI::new(bi(-5), bi(3), 8),
-            DFI::new(bi(-97), bi(-17), 8),
-            Some(DFI::new(bi(-46), bi(76), 8)),
+            Dfi::new(bi(-5), bi(3), 8),
+            Dfi::new(bi(-97), bi(-17), 8),
+            Some(Dfi::new(bi(-46), bi(76), 8)),
         );
         test_case(
-            DFI::new(bi(-5), bi(-3), 8),
-            DFI::new(bi(-97), bi(-17), 8),
-            Some(DFI::new(bi(7), bi(76), 8)),
+            Dfi::new(bi(-5), bi(-3), 8),
+            Dfi::new(bi(-97), bi(-17), 8),
+            Some(Dfi::new(bi(7), bi(76), 8)),
         );
         test_case(
-            DFI::from_int(bi(1), 64),
-            DFI::from_int(bi(3), 64),
-            Some(DFI::new(
+            Dfi::from_int(bi(1), 64),
+            Dfi::from_int(bi(3), 64),
+            Some(Dfi::new(
                 bi(6_148_914_691_236_517_205),
                 bi(6_148_914_691_236_517_206),
                 64,
@@ -2193,7 +2195,7 @@ mod tests {
 
     #[test]
     fn test_div_int() {
-        fn test_case(lhs: DFI, rhs: BigInt, expected: DFI) {
+        fn test_case(lhs: Dfi, rhs: BigInt, expected: Dfi) {
             test_op_helper(
                 SameWrapper(lhs),
                 rhs,
@@ -2207,40 +2209,40 @@ mod tests {
             );
         }
         test_case(
-            DFI::new(bi(35), bi(72), 0),
+            Dfi::new(bi(35), bi(72), 0),
             bi(11),
-            DFI::new(bi(3), bi(7), 0),
+            Dfi::new(bi(3), bi(7), 0),
         );
         test_case(
-            DFI::new(bi(35), bi(72), 1),
+            Dfi::new(bi(35), bi(72), 1),
             bi(11),
-            DFI::new(bi(3), bi(7), 1),
+            Dfi::new(bi(3), bi(7), 1),
         );
         test_case(
-            DFI::new(bi(35), bi(72), 0),
+            Dfi::new(bi(35), bi(72), 0),
             bi(-11),
-            DFI::new(bi(-7), bi(-3), 0),
+            Dfi::new(bi(-7), bi(-3), 0),
         );
         test_case(
-            DFI::new(bi(35), bi(72), 1),
+            Dfi::new(bi(35), bi(72), 1),
             bi(-11),
-            DFI::new(bi(-7), bi(-3), 1),
+            Dfi::new(bi(-7), bi(-3), 1),
         );
         test_case(
-            DFI::new(bi(35), bi(72), 0),
+            Dfi::new(bi(35), bi(72), 0),
             bi(3),
-            DFI::new(bi(11), bi(24), 0),
+            Dfi::new(bi(11), bi(24), 0),
         );
         test_case(
-            DFI::new(bi(35), bi(72), 0),
+            Dfi::new(bi(35), bi(72), 0),
             bi(5),
-            DFI::new(bi(7), bi(15), 0),
+            Dfi::new(bi(7), bi(15), 0),
         );
     }
 
     #[test]
     fn test_div_ratio() {
-        fn test_case(lhs: DFI, rhs: Ratio<BigInt>, expected: DFI) {
+        fn test_case(lhs: Dfi, rhs: Ratio<BigInt>, expected: Dfi) {
             test_op_helper(
                 SameWrapper(lhs),
                 rhs,
@@ -2254,40 +2256,40 @@ mod tests {
             );
         }
         test_case(
-            DFI::new(bi(3), bi(5), 0),
+            Dfi::new(bi(3), bi(5), 0),
             r(7, 23),
-            DFI::new(bi(9), bi(17), 0),
+            Dfi::new(bi(9), bi(17), 0),
         );
         test_case(
-            DFI::new(bi(3), bi(5), 1),
+            Dfi::new(bi(3), bi(5), 1),
             r(7, 23),
-            DFI::new(bi(9), bi(17), 1),
+            Dfi::new(bi(9), bi(17), 1),
         );
         test_case(
-            DFI::new(bi(3), bi(5), 0),
+            Dfi::new(bi(3), bi(5), 0),
             r(-7, 23),
-            DFI::new(bi(-17), bi(-9), 0),
+            Dfi::new(bi(-17), bi(-9), 0),
         );
         test_case(
-            DFI::new(bi(3), bi(5), 1),
+            Dfi::new(bi(3), bi(5), 1),
             r(-7, 23),
-            DFI::new(bi(-17), bi(-9), 1),
+            Dfi::new(bi(-17), bi(-9), 1),
         );
         test_case(
-            DFI::new(bi(3), bi(5), 0),
+            Dfi::new(bi(3), bi(5), 0),
             r(1, 3),
-            DFI::new(bi(9), bi(15), 0),
+            Dfi::new(bi(9), bi(15), 0),
         );
         test_case(
-            DFI::new(bi(3), bi(5), 0),
+            Dfi::new(bi(3), bi(5), 0),
             r(-1, 3),
-            DFI::new(bi(-15), bi(-9), 0),
+            Dfi::new(bi(-15), bi(-9), 0),
         );
     }
 
     #[test]
     fn test_pow() {
-        fn test_case(lhs: DFI, rhs: i64, expected: DFI) {
+        fn test_case(lhs: Dfi, rhs: i64, expected: Dfi) {
             test_unary_op_helper(
                 SameWrapper(lhs),
                 &SameWrapper(expected),
@@ -2295,104 +2297,104 @@ mod tests {
                 |SameWrapper(a)| SameWrapper(a.pow(rhs)),
             );
         }
-        test_case(DFI::new(bi(5), bi(7), 0), 0, DFI::new(bi(1), bi(1), 0));
-        test_case(DFI::new(bi(5), bi(7), 0), 1, DFI::new(bi(5), bi(7), 0));
-        test_case(DFI::new(bi(5), bi(7), 0), 2, DFI::new(bi(25), bi(49), 0));
-        test_case(DFI::new(bi(5), bi(7), 0), 3, DFI::new(bi(125), bi(343), 0));
-        test_case(DFI::new(bi(5), bi(7), 0), 4, DFI::new(bi(625), bi(2401), 0));
+        test_case(Dfi::new(bi(5), bi(7), 0), 0, Dfi::new(bi(1), bi(1), 0));
+        test_case(Dfi::new(bi(5), bi(7), 0), 1, Dfi::new(bi(5), bi(7), 0));
+        test_case(Dfi::new(bi(5), bi(7), 0), 2, Dfi::new(bi(25), bi(49), 0));
+        test_case(Dfi::new(bi(5), bi(7), 0), 3, Dfi::new(bi(125), bi(343), 0));
+        test_case(Dfi::new(bi(5), bi(7), 0), 4, Dfi::new(bi(625), bi(2401), 0));
         test_case(
-            DFI::new(bi(5), bi(7), 0),
+            Dfi::new(bi(5), bi(7), 0),
             5,
-            DFI::new(bi(3125), bi(16807), 0),
+            Dfi::new(bi(3125), bi(16807), 0),
         );
         test_case(
-            DFI::new(bi(255), bi(257), 8),
+            Dfi::new(bi(255), bi(257), 8),
             0,
-            DFI::new(bi(256), bi(256), 8),
+            Dfi::new(bi(256), bi(256), 8),
         );
         test_case(
-            DFI::new(bi(255), bi(257), 8),
+            Dfi::new(bi(255), bi(257), 8),
             1,
-            DFI::new(bi(255), bi(257), 8),
+            Dfi::new(bi(255), bi(257), 8),
         );
         test_case(
-            DFI::new(bi(255), bi(257), 8),
+            Dfi::new(bi(255), bi(257), 8),
             2,
-            DFI::new(bi(254), bi(259), 8),
+            Dfi::new(bi(254), bi(259), 8),
         );
         test_case(
-            DFI::new(bi(255), bi(257), 8),
+            Dfi::new(bi(255), bi(257), 8),
             3,
-            DFI::new(bi(253), bi(261), 8),
+            Dfi::new(bi(253), bi(261), 8),
         );
-        test_case(DFI::new(bi(-5), bi(7), 0), 0, DFI::new(bi(1), bi(1), 0));
-        test_case(DFI::new(bi(-5), bi(7), 0), 1, DFI::new(bi(-5), bi(7), 0));
-        test_case(DFI::new(bi(-5), bi(7), 0), 2, DFI::new(bi(0), bi(49), 0));
+        test_case(Dfi::new(bi(-5), bi(7), 0), 0, Dfi::new(bi(1), bi(1), 0));
+        test_case(Dfi::new(bi(-5), bi(7), 0), 1, Dfi::new(bi(-5), bi(7), 0));
+        test_case(Dfi::new(bi(-5), bi(7), 0), 2, Dfi::new(bi(0), bi(49), 0));
         test_case(
-            DFI::new(bi(-5), bi(7), 0),
+            Dfi::new(bi(-5), bi(7), 0),
             3,
-            DFI::new(bi(-125), bi(343), 0),
+            Dfi::new(bi(-125), bi(343), 0),
         );
-        test_case(DFI::new(bi(-5), bi(7), 0), 4, DFI::new(bi(0), bi(2401), 0));
+        test_case(Dfi::new(bi(-5), bi(7), 0), 4, Dfi::new(bi(0), bi(2401), 0));
         test_case(
-            DFI::new(bi(-5), bi(7), 0),
+            Dfi::new(bi(-5), bi(7), 0),
             5,
-            DFI::new(bi(-3125), bi(16807), 0),
+            Dfi::new(bi(-3125), bi(16807), 0),
         );
-        test_case(DFI::new(bi(-7), bi(5), 0), 0, DFI::new(bi(1), bi(1), 0));
-        test_case(DFI::new(bi(-7), bi(5), 0), 1, DFI::new(bi(-7), bi(5), 0));
-        test_case(DFI::new(bi(-7), bi(5), 0), 2, DFI::new(bi(0), bi(49), 0));
+        test_case(Dfi::new(bi(-7), bi(5), 0), 0, Dfi::new(bi(1), bi(1), 0));
+        test_case(Dfi::new(bi(-7), bi(5), 0), 1, Dfi::new(bi(-7), bi(5), 0));
+        test_case(Dfi::new(bi(-7), bi(5), 0), 2, Dfi::new(bi(0), bi(49), 0));
         test_case(
-            DFI::new(bi(-7), bi(5), 0),
+            Dfi::new(bi(-7), bi(5), 0),
             3,
-            DFI::new(bi(-343), bi(125), 0),
+            Dfi::new(bi(-343), bi(125), 0),
         );
-        test_case(DFI::new(bi(-7), bi(5), 0), 4, DFI::new(bi(0), bi(2401), 0));
+        test_case(Dfi::new(bi(-7), bi(5), 0), 4, Dfi::new(bi(0), bi(2401), 0));
         test_case(
-            DFI::new(bi(-7), bi(5), 0),
+            Dfi::new(bi(-7), bi(5), 0),
             5,
-            DFI::new(bi(-16807), bi(3125), 0),
+            Dfi::new(bi(-16807), bi(3125), 0),
         );
-        test_case(DFI::new(bi(-7), bi(-5), 0), 0, DFI::new(bi(1), bi(1), 0));
-        test_case(DFI::new(bi(-7), bi(-5), 0), 1, DFI::new(bi(-7), bi(-5), 0));
-        test_case(DFI::new(bi(-7), bi(-5), 0), 2, DFI::new(bi(25), bi(49), 0));
+        test_case(Dfi::new(bi(-7), bi(-5), 0), 0, Dfi::new(bi(1), bi(1), 0));
+        test_case(Dfi::new(bi(-7), bi(-5), 0), 1, Dfi::new(bi(-7), bi(-5), 0));
+        test_case(Dfi::new(bi(-7), bi(-5), 0), 2, Dfi::new(bi(25), bi(49), 0));
         test_case(
-            DFI::new(bi(-7), bi(-5), 0),
+            Dfi::new(bi(-7), bi(-5), 0),
             3,
-            DFI::new(bi(-343), bi(-125), 0),
+            Dfi::new(bi(-343), bi(-125), 0),
         );
         test_case(
-            DFI::new(bi(-7), bi(-5), 0),
+            Dfi::new(bi(-7), bi(-5), 0),
             4,
-            DFI::new(bi(625), bi(2401), 0),
+            Dfi::new(bi(625), bi(2401), 0),
         );
         test_case(
-            DFI::new(bi(-7), bi(-5), 0),
+            Dfi::new(bi(-7), bi(-5), 0),
             5,
-            DFI::new(bi(-16807), bi(-3125), 0),
+            Dfi::new(bi(-16807), bi(-3125), 0),
         );
-        test_case(DFI::from_int(bi(3), 8), -1, DFI::new(bi(85), bi(86), 8));
-        test_case(DFI::from_int(bi(3), 8), -2, DFI::new(bi(28), bi(29), 8));
-        test_case(DFI::from_int(bi(3), 8), -3, DFI::new(bi(9), bi(10), 8));
-        test_case(DFI::from_int(bi(3), 8), -4, DFI::new(bi(3), bi(4), 8));
-        test_case(DFI::from_int(bi(3), 8), -5, DFI::new(bi(0), bi(2), 8));
-        test_case(DFI::from_int(bi(3), 8), -6, DFI::new(bi(0), bi(1), 8));
+        test_case(Dfi::from_int(bi(3), 8), -1, Dfi::new(bi(85), bi(86), 8));
+        test_case(Dfi::from_int(bi(3), 8), -2, Dfi::new(bi(28), bi(29), 8));
+        test_case(Dfi::from_int(bi(3), 8), -3, Dfi::new(bi(9), bi(10), 8));
+        test_case(Dfi::from_int(bi(3), 8), -4, Dfi::new(bi(3), bi(4), 8));
+        test_case(Dfi::from_int(bi(3), 8), -5, Dfi::new(bi(0), bi(2), 8));
+        test_case(Dfi::from_int(bi(3), 8), -6, Dfi::new(bi(0), bi(1), 8));
     }
 
     #[test]
     fn test_natural_log_of_2() {
         for _ in 0..5 {
             assert_same!(
-                DFI::natural_log_of_2(64),
-                DFI::new(
+                Dfi::natural_log_of_2(64),
+                Dfi::new(
                     bi(12_786_308_645_202_655_659),
                     bi(12_786_308_645_202_655_660),
                     64
                 )
             );
             assert_same!(
-                DFI::natural_log_of_2(128),
-                DFI::new(
+                Dfi::natural_log_of_2(128),
+                Dfi::new(
                     BigInt::from(235_865_763_225_513_294_137_944_142_764_154_484_399u128),
                     BigInt::from(235_865_763_225_513_294_137_944_142_764_154_484_400u128),
                     128
@@ -2404,72 +2406,72 @@ mod tests {
     #[test]
     fn test_log_core() {
         assert_same!(
-            DFI::from_ratio(ri(2), 64).log_core(), // calculate log(3)
-            DFI::new(
+            Dfi::from_ratio(ri(2), 64).log_core(), // calculate log(3)
+            Dfi::new(
                 bi(20_265_819_725_292_939_638),
                 bi(20_265_819_725_292_939_639),
                 64
             )
         );
         assert_same!(
-            DFI::from_ratio(ri(2), 128).log_core(), // calculate log(3)
-            DFI::new(
+            Dfi::from_ratio(ri(2), 128).log_core(), // calculate log(3)
+            Dfi::new(
                 "373838389916413667603494184660470824117".parse().unwrap(),
                 "373838389916413667603494184660470824118".parse().unwrap(),
                 128
             )
         );
         assert_same!(
-            DFI::from_ratio(ri(3), 64).log_core(), // calculate log(2)
-            DFI::new(
+            Dfi::from_ratio(ri(3), 64).log_core(), // calculate log(2)
+            Dfi::new(
                 bi(12_786_308_645_202_655_659),
                 bi(12_786_308_645_202_655_660),
                 64
             )
         );
         assert_same!(
-            DFI::from_ratio(ri(3), 128).log_core(), // calculate log(2)
-            DFI::new(
+            Dfi::from_ratio(ri(3), 128).log_core(), // calculate log(2)
+            Dfi::new(
                 BigInt::from(235_865_763_225_513_294_137_944_142_764_154_484_399u128),
                 BigInt::from(235_865_763_225_513_294_137_944_142_764_154_484_400u128),
                 128
             )
         );
         assert_same!(
-            DFI::from_ratio(ri(9), 64).log_core(), // calculate log(5 / 4)
-            DFI::new(
+            Dfi::from_ratio(ri(9), 64).log_core(), // calculate log(5 / 4)
+            Dfi::new(
                 bi(4_116_271_982_791_902_040),
                 bi(4_116_271_982_791_902_041),
                 64
             )
         );
         assert_same!(
-            DFI::from_ratio(ri(9), 128).log_core(), // calculate log(5 / 4)
-            DFI::new(
+            Dfi::from_ratio(ri(9), 128).log_core(), // calculate log(5 / 4)
+            Dfi::new(
                 BigInt::from(75_931_815_804_343_184_391_506_054_410_983_916_693u128),
                 BigInt::from(75_931_815_804_343_184_391_506_054_410_983_916_694u128),
                 128
             )
         );
         assert_same!(
-            DFI::from_ratio(r(13, 3), 64).log_core(), // calculate log(8 / 5)
-            DFI::new(
+            Dfi::from_ratio(r(13, 3), 64).log_core(), // calculate log(8 / 5)
+            Dfi::new(
                 bi(8_670_036_662_410_753_619),
                 bi(8_670_036_662_410_753_620),
                 64
             )
         );
         assert_same!(
-            DFI::from_ratio(r(13, 3), 80).log_core(), // calculate log(8 / 5)
-            DFI::new(
+            Dfi::from_ratio(r(13, 3), 80).log_core(), // calculate log(8 / 5)
+            Dfi::new(
                 bi(568_199_522_707_751_149_207_091),
                 bi(568_199_522_707_751_149_207_092),
                 80
             )
         );
         assert_same!(
-            DFI::from_ratio(r(13, 3), 128).log_core(), // calculate log(8 / 5)
-            DFI::new(
+            Dfi::from_ratio(r(13, 3), 128).log_core(), // calculate log(8 / 5)
+            Dfi::new(
                 BigInt::from(159_933_947_421_170_109_746_438_088_353_170_567_705u128),
                 BigInt::from(159_933_947_421_170_109_746_438_088_353_170_567_706u128),
                 128
@@ -2480,48 +2482,48 @@ mod tests {
     #[test]
     fn test_log() {
         assert_same!(
-            DFI::from_ratio_range(r(4, 5), r(123, 45), 64).log(),
-            DFI::new(
+            Dfi::from_ratio_range(r(4, 5), r(123, 45), 64).log(),
+            Dfi::new(
                 bi(-4_116_271_982_791_902_042),
                 bi(18_548_604_515_280_868_688),
                 64
             )
         );
         assert_same!(
-            DFI::from_ratio_range(r(4, 5), r(123, 45), 127).log(),
-            DFI::new(
+            Dfi::from_ratio_range(r(4, 5), r(123, 45), 127).log(),
+            Dfi::new(
                 bi(-37_965_907_902_171_592_195_753_027_205_491_958_348),
                 BigInt::from(171_080_680_208_919_797_346_165_683_845_098_625_899u128),
                 127
             )
         );
         assert_same!(
-            DFI::from_ratio(r(12345, 2), 64).log(),
-            DFI::new(
+            Dfi::from_ratio(r(12345, 2), 64).log(),
+            Dfi::new(
                 bi(161_000_585_365_199_022_398),
                 bi(161_000_585_365_199_022_399),
                 64
             )
         );
         for i in 2..30 {
-            fn do_test(i: usize, input: DFI) {
+            fn do_test(i: usize, input: Dfi) {
                 assert!(input.log2_denom < 50);
                 println!("i = {}", i);
                 dbg!(&input);
                 let input_denom = 2.0f64.powi(input.log2_denom.try_into().unwrap());
                 let input_lower_bound = input.lower_bound_numer.to_f64().unwrap() / input_denom;
                 let input_upper_bound = input.upper_bound_numer.to_f64().unwrap() / input_denom;
-                let expected = DFI::from_ratio_range(
+                let expected = Dfi::from_ratio_range(
                     Ratio::<BigInt>::from_float(input_lower_bound.ln()).unwrap(),
                     Ratio::<BigInt>::from_float(input_upper_bound.ln()).unwrap(),
                     input.log2_denom,
                 );
                 assert_same!(input.log(), expected);
             }
-            do_test(i, DFI::from_int(BigInt::from(i), 32));
+            do_test(i, Dfi::from_int(BigInt::from(i), 32));
             do_test(
                 i,
-                DFI::from_ratio(Ratio::new(BigInt::one(), BigInt::from(i)), 32),
+                Dfi::from_ratio(Ratio::new(BigInt::one(), BigInt::from(i)), 32),
             );
         }
     }
@@ -2529,56 +2531,56 @@ mod tests {
     #[test]
     fn test_exp() {
         assert_same!(
-            DFI::from_int_range(bi(0), bi(0), 64).exp(),
-            DFI::new(
+            Dfi::from_int_range(bi(0), bi(0), 64).exp(),
+            Dfi::new(
                 bi(18_446_744_073_709_551_616),
                 bi(18_446_744_073_709_551_616),
                 64
             )
         );
         assert_same!(
-            DFI::from_int_range(bi(0), bi(1), 64).exp(),
-            DFI::new(
+            Dfi::from_int_range(bi(0), bi(1), 64).exp(),
+            Dfi::new(
                 bi(18_446_744_073_709_551_616),
                 bi(50_143_449_209_799_256_683),
                 64
             )
         );
         assert_same!(
-            DFI::from_int_range(bi(1), bi(1), 64).exp(),
-            DFI::new(
+            Dfi::from_int_range(bi(1), bi(1), 64).exp(),
+            Dfi::new(
                 bi(50_143_449_209_799_256_682),
                 bi(50_143_449_209_799_256_683),
                 64
             )
         );
         assert_same!(
-            DFI::from_int_range(bi(1), bi(1), 120).exp(),
-            DFI::new(
+            Dfi::from_int_range(bi(1), bi(1), 120).exp(),
+            Dfi::new(
                 bi(3_613_216_306_821_173_191_995_746_233_763_034_355),
                 bi(3_613_216_306_821_173_191_995_746_233_763_034_356),
                 120
             )
         );
         assert_same!(
-            DFI::from_ratio_range(r(1, 16), r(1, 16), 64).exp(),
-            DFI::new(
+            Dfi::from_ratio_range(r(1, 16), r(1, 16), 64).exp(),
+            Dfi::new(
                 bi(19_636_456_851_539_679_189),
                 bi(19_636_456_851_539_679_190),
                 64
             )
         );
         assert_same!(
-            DFI::from_ratio_range(r(1, 16), r(5, 11), 64).exp(),
-            DFI::new(
+            Dfi::from_ratio_range(r(1, 16), r(5, 11), 64).exp(),
+            Dfi::new(
                 bi(19_636_456_851_539_679_189),
                 bi(29_062_053_985_348_969_808),
                 64
             )
         );
         assert_same!(
-            DFI::from_ratio(r(12345, 20), 120).exp(),
-            DFI::new(
+            Dfi::from_ratio(r(12345, 20), 120).exp(),
+            Dfi::new(
                 "15554943374427623479586295616005556713817814660873673636717540447365020\
                  241010687483038422716174364856604938959636391301874371790367372240576361413166\
                  945168943074910853869056633171038088299306405677231299055607307283566273703681\
@@ -2597,19 +2599,19 @@ mod tests {
 
         // check that we don't overflow where we don't need to
         assert_same!(
-            DFI::from_int(bi(-99_999_999_999_999_999_999_999_999), 120).exp(),
-            DFI::new(bi(0), bi(1), 120)
+            Dfi::from_int(bi(-99_999_999_999_999_999_999_999_999), 120).exp(),
+            Dfi::new(bi(0), bi(1), 120)
         );
 
         for i in (1..30).rev() {
-            fn do_test(i: i64, input: DFI) {
+            fn do_test(i: i64, input: Dfi) {
                 assert!(input.log2_denom < 50);
                 println!("i = {}", i);
                 dbg!(&input);
                 let input_denom = 2.0f64.powi(input.log2_denom.try_into().unwrap());
                 let input_lower_bound = input.lower_bound_numer.to_f64().unwrap() / input_denom;
                 let input_upper_bound = input.upper_bound_numer.to_f64().unwrap() / input_denom;
-                let expected = DFI::from_ratio_range(
+                let expected = Dfi::from_ratio_range(
                     Ratio::<BigInt>::from_float(input_lower_bound.exp()).unwrap(),
                     Ratio::<BigInt>::from_float(input_upper_bound.exp()).unwrap(),
                     input.log2_denom,
@@ -2618,16 +2620,16 @@ mod tests {
             }
             if i <= 3 {
                 // f64::exp loses precision really fast, skip in cases where f64::exp is not precise enough
-                do_test(i, DFI::from_int(BigInt::from(i), 32));
+                do_test(i, Dfi::from_int(BigInt::from(i), 32));
             }
             do_test(
                 i,
-                DFI::from_ratio(Ratio::new(BigInt::one(), BigInt::from(i)), 32),
+                Dfi::from_ratio(Ratio::new(BigInt::one(), BigInt::from(i)), 32),
             );
-            do_test(i, DFI::from_int(BigInt::from(-i), 32));
+            do_test(i, Dfi::from_int(BigInt::from(-i), 32));
             do_test(
                 i,
-                DFI::from_ratio(Ratio::new(BigInt::one(), BigInt::from(-i)), 32),
+                Dfi::from_ratio(Ratio::new(BigInt::one(), BigInt::from(-i)), 32),
             );
         }
     }

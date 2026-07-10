@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 // See Notices.txt for copyright information
 use crate::traits::{
-    AlwaysExactDivAssign, CharacteristicZero, ExactDiv, ExactDivAssign, GCDAndLCM,
-    RingCharacteristic, GCD,
+    AlwaysExactDivAssign, CharacteristicZero, ExactDiv, ExactDivAssign, ExactDivAssignError,
+    GCDAndLCM, RingCharacteristic, GCD,
 };
 use num_bigint::BigInt;
 use num_integer::Integer;
@@ -139,7 +139,7 @@ pub trait PolynomialCoefficient:
         coefficient
     }
     fn negate_element(element: &mut Self::Element) {
-        let zero = Self::make_zero_element(Cow::Borrowed(&element));
+        let zero = Self::make_zero_element(Cow::Borrowed(element));
         *element = -mem::replace(element, zero);
     }
     fn mul_element_by_usize(element: Cow<Self::Element>, multiplier: usize) -> Self::Element;
@@ -167,7 +167,7 @@ pub trait PolynomialCoefficient:
         }
         let mut retval = None;
         loop {
-            if exponent % 2 != 0 {
+            if !exponent.is_multiple_of(2) {
                 match &mut retval {
                     None => retval = Some(base.clone()),
                     Some(retval) => *retval *= &base,
@@ -187,7 +187,7 @@ pub trait PolynomialCoefficient:
         }
         let mut retval = None;
         loop {
-            if exponent % 2 != 0 {
+            if !exponent.is_multiple_of(2) {
                 match &mut retval {
                     None => retval = Some(base.clone()),
                     Some(retval) => *retval *= &base,
@@ -207,7 +207,7 @@ pub trait PolynomialCoefficient:
         }
         let mut retval = None;
         loop {
-            if exponent % 2 != 0 {
+            if !exponent.is_multiple_of(2) {
                 match &mut retval {
                     None => retval = Some(base.clone()),
                     Some(retval) => *retval *= &base,
@@ -494,7 +494,7 @@ impl Mul<DivisorIsOne> for &DivisorIsOne {
     }
 }
 
-impl<'a, 'b> Mul<&'a DivisorIsOne> for &'b DivisorIsOne {
+impl Mul<&DivisorIsOne> for &DivisorIsOne {
     type Output = DivisorIsOne;
     fn mul(self, _rhs: &DivisorIsOne) -> DivisorIsOne {
         DivisorIsOne
@@ -502,14 +502,14 @@ impl<'a, 'b> Mul<&'a DivisorIsOne> for &'b DivisorIsOne {
 }
 
 impl ExactDivAssign for DivisorIsOne {
-    fn checked_exact_div_assign(&mut self, _rhs: DivisorIsOne) -> Result<(), ()> {
+    fn checked_exact_div_assign(&mut self, _rhs: DivisorIsOne) -> Result<(), ExactDivAssignError> {
         Ok(())
     }
     fn exact_div_assign(&mut self, _rhs: DivisorIsOne) {}
 }
 
 impl ExactDivAssign<&DivisorIsOne> for DivisorIsOne {
-    fn checked_exact_div_assign(&mut self, _rhs: &DivisorIsOne) -> Result<(), ()> {
+    fn checked_exact_div_assign(&mut self, _rhs: &DivisorIsOne) -> Result<(), ExactDivAssignError> {
         Ok(())
     }
     fn exact_div_assign(&mut self, _rhs: &DivisorIsOne) {}
@@ -545,7 +545,7 @@ impl ExactDiv<DivisorIsOne> for &DivisorIsOne {
     }
 }
 
-impl<'a, 'b> ExactDiv<&'a DivisorIsOne> for &'b DivisorIsOne {
+impl ExactDiv<&DivisorIsOne> for &DivisorIsOne {
     type Output = DivisorIsOne;
     fn checked_exact_div(self, _rhs: &DivisorIsOne) -> Option<DivisorIsOne> {
         Some(DivisorIsOne)
@@ -1136,9 +1136,9 @@ impl<T: PolynomialCoefficient> From<(Vec<T::Element>, T::Divisor)> for Polynomia
     }
 }
 
-impl<T: PolynomialCoefficient> Into<(Vec<T::Element>, T::Divisor)> for Polynomial<T> {
-    fn into(self) -> (Vec<T::Element>, T::Divisor) {
-        (self.elements, self.divisor)
+impl<T: PolynomialCoefficient> From<Polynomial<T>> for (Vec<T::Element>, T::Divisor) {
+    fn from(val: Polynomial<T>) -> Self {
+        (val.elements, val.divisor)
     }
 }
 
@@ -1190,7 +1190,7 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
     pub fn split_out_divisor(self) -> (Vec<T::Element>, T::Divisor) {
         self.into()
     }
-    pub fn iter(&self) -> Iter<T> {
+    pub fn iter(&self) -> Iter<'_, T> {
         Iter {
             elements: self.elements.iter(),
             divisor: &self.divisor,
@@ -1486,9 +1486,9 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
             T::make_zero_coefficient_from_coefficient(Cow::Borrowed(at)),
         )
     }
-    pub fn set_one_if_nonzero(&mut self) -> Result<(), ()> {
+    pub fn set_one_if_nonzero(&mut self) -> Result<(), EmptyPolynomial> {
         if self.elements.is_empty() {
-            Err(())
+            Err(EmptyPolynomial)
         } else {
             self.elements.drain(1..);
             self.divisor = One::one();
@@ -1499,7 +1499,7 @@ impl<T: PolynomialCoefficient> Polynomial<T> {
     pub fn into_one_if_nonzero(mut self) -> Result<Self, Self> {
         match self.set_one_if_nonzero() {
             Ok(()) => Ok(self),
-            Err(()) => Err(self),
+            Err(EmptyPolynomial) => Err(self),
         }
     }
     #[must_use]
@@ -1747,6 +1747,17 @@ impl From<PolynomialIsZero> for std::io::Error {
         Self::new(std::io::ErrorKind::InvalidInput, err)
     }
 }
+
+#[derive(Debug)]
+pub struct EmptyPolynomial;
+
+impl fmt::Display for EmptyPolynomial {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Empty polynomial")
+    }
+}
+
+impl std::error::Error for EmptyPolynomial {}
 
 #[cfg(test)]
 mod tests {

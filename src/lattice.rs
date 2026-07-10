@@ -338,7 +338,7 @@ mod tests {
                     BigInt::zero()
                 }
             } else {
-                -(&sin_pi_7_approximation)
+                -sin_pi_7_approximation
                     .pow(x as i32)
                     .mul(&multiplier)
                     .round()

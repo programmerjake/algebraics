@@ -61,7 +61,7 @@ mod tests {
             let poly = make_poly(poly, modulus);
             let expected_factors: Vec<_> = expected_factors
                 .iter()
-                .map(|poly| make_poly(*poly, modulus))
+                .map(|poly| make_poly(poly, modulus))
                 .collect();
             println!("poly: {}", poly);
             println!("expected_factors:");

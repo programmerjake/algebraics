@@ -5,8 +5,7 @@ use crate::{
     polynomial::{
         Polynomial, PolynomialCoefficient, PolynomialCoefficientElement, PolynomialDivSupported,
         PseudoDivRem,
-    },
-    traits::{ExactDiv, ExactDivAssign},
+    }, traits::{ExactDiv, ExactDivAssign, ExactDivAssignError},
 };
 use num_integer::Integer;
 use num_traits::{CheckedDiv, CheckedRem, Zero};
@@ -165,7 +164,7 @@ impl<T: PolynomialDivSupported> CheckedDiv for Polynomial<T> {
         let PseudoDivRem {
             quotient, factor, ..
         } = self.clone().checked_pseudo_div_rem(rhs)?;
-        Some(quotient.checked_exact_div(factor)?)
+        quotient.checked_exact_div(factor)
     }
 }
 
@@ -174,7 +173,7 @@ impl<T: PolynomialDivSupported> CheckedRem for Polynomial<T> {
         let PseudoDivRem {
             remainder, factor, ..
         } = self.clone().checked_pseudo_div_rem(rhs)?;
-        Some(remainder.checked_exact_div(factor)?)
+        remainder.checked_exact_div(factor)
     }
 }
 
@@ -219,7 +218,7 @@ impl_div_rem!(Polynomial<T>, identity, Polynomial<T>);
 impl_div_rem!(Polynomial<T>, identity, &'_ Polynomial<T>);
 impl_div_rem!(&'_ Polynomial<T>, Clone::clone, Polynomial<T>);
 
-impl<'a, 'b, T: PolynomialDivSupported> Div<&'a Polynomial<T>> for &'b Polynomial<T> {
+impl<T: PolynomialDivSupported> Div<&Polynomial<T>> for &Polynomial<T> {
     type Output = Polynomial<T>;
     fn div(self, rhs: &Polynomial<T>) -> Polynomial<T> {
         let PseudoDivRem {
@@ -229,7 +228,7 @@ impl<'a, 'b, T: PolynomialDivSupported> Div<&'a Polynomial<T>> for &'b Polynomia
     }
 }
 
-impl<'a, 'b, T: PolynomialDivSupported> Rem<&'a Polynomial<T>> for &'b Polynomial<T> {
+impl<T: PolynomialDivSupported> Rem<&Polynomial<T>> for &Polynomial<T> {
     type Output = Polynomial<T>;
     fn rem(self, rhs: &Polynomial<T>) -> Polynomial<T> {
         let PseudoDivRem {
@@ -239,8 +238,8 @@ impl<'a, 'b, T: PolynomialDivSupported> Rem<&'a Polynomial<T>> for &'b Polynomia
     }
 }
 
-impl<'l, 'r, T: PolynomialCoefficient + for<'a> ExactDiv<&'a T, Output = T>>
-    ExactDiv<&'r Polynomial<T>> for &'l Polynomial<T>
+impl<T: PolynomialCoefficient + for<'a> ExactDiv<&'a T, Output = T>>
+    ExactDiv<&Polynomial<T>> for &Polynomial<T>
 {
     type Output = Polynomial<T>;
     fn exact_div(self, rhs: &Polynomial<T>) -> Polynomial<T> {
@@ -276,13 +275,13 @@ macro_rules! impl_div_rem_eq {
                 let lhs = mem::replace(self, Zero::zero());
                 *self = lhs.exact_div(rhs);
             }
-            fn checked_exact_div_assign(&mut self, rhs: $r) -> Result<(), ()> {
+            fn checked_exact_div_assign(&mut self, rhs: $r) -> Result<(), ExactDivAssignError> {
                 (&*self)
                     .checked_exact_div(rhs)
                     .map(|v| {
                         *self = v;
                     })
-                    .ok_or(())
+                    .ok_or(ExactDivAssignError)
             }
         }
     };
@@ -345,8 +344,8 @@ fn checked_div_single<T: PolynomialCoefficient + for<'a> ExactDiv<&'a T, Output 
 fn checked_div_assign_single<T: PolynomialCoefficient + for<'a> ExactDiv<&'a T, Output = T>>(
     lhs: &mut Polynomial<T>,
     rhs: &T,
-) -> Result<(), ()> {
-    *lhs = checked_div_single(Cow::Owned(mem::replace(lhs, Zero::zero())), rhs).ok_or(())?;
+) -> Result<(), ExactDivAssignError> {
+    *lhs = checked_div_single(Cow::Owned(mem::replace(lhs, Zero::zero())), rhs).ok_or(ExactDivAssignError)?;
     Ok(())
 }
 
@@ -359,8 +358,8 @@ impl<'a, T: PolynomialCoefficient + for<'b> ExactDiv<&'b T, Output = T>> Div<&'a
     }
 }
 
-impl<'a, T: PolynomialCoefficient + for<'b> ExactDiv<&'b T, Output = T>> Div<T>
-    for &'a Polynomial<T>
+impl<T: PolynomialCoefficient + for<'b> ExactDiv<&'b T, Output = T>> Div<T>
+    for &Polynomial<T>
 {
     type Output = Polynomial<T>;
     fn div(self, rhs: T) -> Polynomial<T> {
@@ -368,7 +367,7 @@ impl<'a, T: PolynomialCoefficient + for<'b> ExactDiv<&'b T, Output = T>> Div<T>
     }
 }
 
-impl<'a, T: PolynomialCoefficient + for<'b> ExactDiv<&'b T, Output = T>> Div<&'a T>
+impl<T: PolynomialCoefficient + for<'b> ExactDiv<&'b T, Output = T>> Div<&T>
     for Polynomial<T>
 {
     type Output = Polynomial<T>;
@@ -392,7 +391,7 @@ impl<T: PolynomialCoefficient + for<'a> ExactDiv<&'a T, Output = T>> DivAssign<T
     }
 }
 
-impl<'a, T: PolynomialCoefficient + for<'b> ExactDiv<&'b T, Output = T>> DivAssign<&'a T>
+impl<T: PolynomialCoefficient + for<'b> ExactDiv<&'b T, Output = T>> DivAssign<&T>
     for Polynomial<T>
 {
     fn div_assign(&mut self, rhs: &T) {
@@ -412,8 +411,8 @@ impl<'a, T: PolynomialCoefficient + for<'b> ExactDiv<&'b T, Output = T>> ExactDi
     }
 }
 
-impl<'a, T: PolynomialCoefficient + for<'b> ExactDiv<&'b T, Output = T>> ExactDiv<T>
-    for &'a Polynomial<T>
+impl<T: PolynomialCoefficient + for<'b> ExactDiv<&'b T, Output = T>> ExactDiv<T>
+    for &Polynomial<T>
 {
     type Output = Polynomial<T>;
     fn exact_div(self, rhs: T) -> Polynomial<T> {
@@ -424,7 +423,7 @@ impl<'a, T: PolynomialCoefficient + for<'b> ExactDiv<&'b T, Output = T>> ExactDi
     }
 }
 
-impl<'a, T: PolynomialCoefficient + for<'b> ExactDiv<&'b T, Output = T>> ExactDiv<&'a T>
+impl<T: PolynomialCoefficient + for<'b> ExactDiv<&'b T, Output = T>> ExactDiv<&T>
     for Polynomial<T>
 {
     type Output = Polynomial<T>;
@@ -452,18 +451,18 @@ impl<T: PolynomialCoefficient + for<'a> ExactDiv<&'a T, Output = T>> ExactDivAss
     fn exact_div_assign(&mut self, rhs: T) {
         div_assign_single(self, &rhs);
     }
-    fn checked_exact_div_assign(&mut self, rhs: T) -> Result<(), ()> {
+    fn checked_exact_div_assign(&mut self, rhs: T) -> Result<(), ExactDivAssignError> {
         checked_div_assign_single(self, &rhs)
     }
 }
 
-impl<'a, T: PolynomialCoefficient + for<'b> ExactDiv<&'b T, Output = T>> ExactDivAssign<&'a T>
+impl<T: PolynomialCoefficient + for<'b> ExactDiv<&'b T, Output = T>> ExactDivAssign<&T>
     for Polynomial<T>
 {
     fn exact_div_assign(&mut self, rhs: &T) {
         div_assign_single(self, rhs);
     }
-    fn checked_exact_div_assign(&mut self, rhs: &T) -> Result<(), ()> {
+    fn checked_exact_div_assign(&mut self, rhs: &T) -> Result<(), ExactDivAssignError> {
         checked_div_assign_single(self, rhs)
     }
 }

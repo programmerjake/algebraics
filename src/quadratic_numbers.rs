@@ -391,8 +391,8 @@ impl RealQuadraticNumber {
         }
         let gcd = self
             .constant_term()
-            .gcd(&self.linear_term())
-            .gcd(&self.quadratic_term());
+            .gcd(self.linear_term())
+            .gcd(self.quadratic_term());
         // gcd is always positive since quadratic_term is not zero
         debug_assert!(gcd.is_positive());
         self.poly.constant_term /= &gcd;

@@ -49,9 +49,6 @@ impl<T: PolynomialCoefficient + for<'a> ExactDiv<&'a T, Output = T>> Polynomial<
         assert!(!self.is_zero());
         let one = T::make_one_coefficient_from_element(Cow::Borrowed(&self.elements[0]));
 
-        #[allow(unused_variables)]
-        let mut i = 3usize;
-
         let mut f_i_2 = self; // f[i-2]
         let mut n_i_2 = f_i_2.degree().expect("f_i_2 is known to be non-zero");
         let mut a_i_2 = one.clone();
@@ -84,7 +81,6 @@ impl<T: PolynomialCoefficient + for<'a> ExactDiv<&'a T, Output = T>> Polynomial<
             );
 
             // step to next iteration
-            i += 1;
             f_i_2 = f_i_1;
             f_i_1 = f_i;
             n_i_2 = n_i_1;

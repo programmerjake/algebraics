@@ -4,8 +4,8 @@
 use crate::{
     polynomial::{DivisorIsOne, PolynomialCoefficient, PolynomialReducingFactorSupported},
     traits::{
-        AlwaysExactDiv, AlwaysExactDivAssign, ExactDiv, ExactDivAssign, ExtendedGCD,
-        ExtendedGCDResult, GCD,
+        AlwaysExactDiv, AlwaysExactDivAssign, ExactDiv, ExactDivAssign, ExactDivAssignError,
+        ExtendedGCD, ExtendedGCDResult, GCD,
     },
     util::BaseAndExponent,
 };
@@ -171,7 +171,7 @@ pub trait ModularReducePow<E = Self>: ModularReduce {
 }
 
 pub trait Modulus<Value: Clone + Eq>: Clone + Eq {
-    fn to_modulus(&self) -> Cow<Value>;
+    fn to_modulus(&self) -> Cow<'_, Value>;
     #[inline]
     fn into_modulus(self) -> Value {
         self.to_modulus().into_owned()
@@ -180,7 +180,7 @@ pub trait Modulus<Value: Clone + Eq>: Clone + Eq {
 
 impl<T: Modulus<Value>, Value: Clone + Eq> Modulus<Value> for &'_ T {
     #[inline]
-    fn to_modulus(&self) -> Cow<Value> {
+    fn to_modulus(&self) -> Cow<'_, Value> {
         (**self).to_modulus()
     }
 }
@@ -244,7 +244,7 @@ impl<T> Deref for KnownPrime<T> {
 
 impl<T: Modulus<Value>, Value: Eq + Clone> Modulus<Value> for KnownPrime<T> {
     #[inline]
-    fn to_modulus(&self) -> Cow<Value> {
+    fn to_modulus(&self) -> Cow<'_, Value> {
         self.0.to_modulus()
     }
     #[inline]
@@ -313,7 +313,7 @@ impl<T> Deref for KnownOdd<T> {
 
 impl<T: Modulus<Value>, Value: Eq + Clone> Modulus<Value> for KnownOdd<T> {
     #[inline]
-    fn to_modulus(&self) -> Cow<Value> {
+    fn to_modulus(&self) -> Cow<'_, Value> {
         self.0.to_modulus()
     }
     #[inline]
@@ -350,7 +350,7 @@ macro_rules! impl_int_modulus {
     ($t:ty, $wide:ty, $to_wide:expr, $from_wide:expr, $from_bigint:ident) => {
         impl Modulus<Self> for $t {
             #[inline]
-            fn to_modulus(&self) -> Cow<Self> {
+            fn to_modulus(&self) -> Cow<'_, Self> {
                 Cow::Borrowed(self)
             }
             #[inline]
@@ -516,7 +516,7 @@ macro_rules! impl_static_modulus {
         $(
             impl Modulus<$t> for $n {
                 #[inline]
-                fn to_modulus(&self) -> Cow<$t> {
+                fn to_modulus(&self) -> Cow<'_, $t> {
                     Cow::Owned($n.into_modulus())
                 }
                 #[inline]
@@ -664,9 +664,9 @@ impl<V, M: PartialEq> ModularInteger<V, M> {
     }
 }
 
-impl<V, M> Into<(V, M)> for ModularInteger<V, M> {
-    fn into(self) -> (V, M) {
-        (self.value, self.modulus)
+impl<V, M> From<ModularInteger<V, M>> for (V, M) {
+    fn from(val: ModularInteger<V, M>) -> Self {
+        (val.value, val.modulus)
     }
 }
 
@@ -761,16 +761,16 @@ impl<V: ModularReduce + Eq, M: Modulus<V>> AddAssign for ModularInteger<V, M> {
     }
 }
 
-impl<'r, V: ModularReduce + Eq, M: Modulus<V>> AddAssign<&'r ModularInteger<V, M>>
+impl<V: ModularReduce + Eq, M: Modulus<V>> AddAssign<&ModularInteger<V, M>>
     for ModularInteger<V, M>
 {
     fn add_assign(&mut self, rhs: &Self) {
-        self.require_matching_moduli(&rhs);
+        self.require_matching_moduli(rhs);
         self.value.modular_add_ref_assign(&rhs.value, &self.modulus);
     }
 }
 
-impl<'r, V: ModularReduce + Eq, M: Modulus<V>> Add<&'r ModularInteger<V, M>>
+impl<V: ModularReduce + Eq, M: Modulus<V>> Add<&ModularInteger<V, M>>
     for ModularInteger<V, M>
 {
     type Output = ModularInteger<V, M>;
@@ -783,8 +783,8 @@ impl<'r, V: ModularReduce + Eq, M: Modulus<V>> Add<&'r ModularInteger<V, M>>
     }
 }
 
-impl<'l, V: ModularReduce + Eq, M: Modulus<V>> Add<ModularInteger<V, M>>
-    for &'l ModularInteger<V, M>
+impl<V: ModularReduce + Eq, M: Modulus<V>> Add<ModularInteger<V, M>>
+    for &ModularInteger<V, M>
 {
     type Output = ModularInteger<V, M>;
     fn add(self, rhs: ModularInteger<V, M>) -> Self::Output {
@@ -796,8 +796,8 @@ impl<'l, V: ModularReduce + Eq, M: Modulus<V>> Add<ModularInteger<V, M>>
     }
 }
 
-impl<'l, 'r, V: ModularReduce + Eq, M: Modulus<V>> Add<&'r ModularInteger<V, M>>
-    for &'l ModularInteger<V, M>
+impl<V: ModularReduce + Eq, M: Modulus<V>> Add<&ModularInteger<V, M>>
+    for &ModularInteger<V, M>
 {
     type Output = ModularInteger<V, M>;
     fn add(self, rhs: &ModularInteger<V, M>) -> Self::Output {
@@ -829,7 +829,7 @@ impl<V: ModularReduce + Eq, M: Modulus<V>> Neg for ModularInteger<V, M> {
     }
 }
 
-impl<'a, V: ModularReduce + Eq, M: Modulus<V>> Neg for &'a ModularInteger<V, M> {
+impl<V: ModularReduce + Eq, M: Modulus<V>> Neg for &ModularInteger<V, M> {
     type Output = ModularInteger<V, M>;
     fn neg(self) -> Self::Output {
         let value = self.value.modular_neg_ref(&self.modulus);
@@ -851,12 +851,12 @@ impl<V: ModularReduce + Eq, M: Modulus<V>> Sub<ModularInteger<V, M>> for Modular
     }
 }
 
-impl<'r, V: ModularReduce + Eq, M: Modulus<V>> Sub<&'r ModularInteger<V, M>>
+impl<V: ModularReduce + Eq, M: Modulus<V>> Sub<&ModularInteger<V, M>>
     for ModularInteger<V, M>
 {
     type Output = ModularInteger<V, M>;
     fn sub(self, rhs: &ModularInteger<V, M>) -> Self::Output {
-        self.require_matching_moduli(&rhs);
+        self.require_matching_moduli(rhs);
         ModularInteger {
             value: self.value.modular_sub_move_ref(&rhs.value, &self.modulus),
             modulus: self.modulus,
@@ -864,8 +864,8 @@ impl<'r, V: ModularReduce + Eq, M: Modulus<V>> Sub<&'r ModularInteger<V, M>>
     }
 }
 
-impl<'l, V: ModularReduce + Eq, M: Modulus<V>> Sub<ModularInteger<V, M>>
-    for &'l ModularInteger<V, M>
+impl<V: ModularReduce + Eq, M: Modulus<V>> Sub<ModularInteger<V, M>>
+    for &ModularInteger<V, M>
 {
     type Output = ModularInteger<V, M>;
     fn sub(self, rhs: ModularInteger<V, M>) -> Self::Output {
@@ -877,12 +877,12 @@ impl<'l, V: ModularReduce + Eq, M: Modulus<V>> Sub<ModularInteger<V, M>>
     }
 }
 
-impl<'l, 'r, V: ModularReduce + Eq, M: Modulus<V>> Sub<&'r ModularInteger<V, M>>
-    for &'l ModularInteger<V, M>
+impl<V: ModularReduce + Eq, M: Modulus<V>> Sub<&ModularInteger<V, M>>
+    for &ModularInteger<V, M>
 {
     type Output = ModularInteger<V, M>;
     fn sub(self, rhs: &ModularInteger<V, M>) -> Self::Output {
-        self.require_matching_moduli(&rhs);
+        self.require_matching_moduli(rhs);
         ModularInteger {
             value: self.value.modular_sub_ref_ref(&rhs.value, &self.modulus),
             modulus: self.modulus.clone(),
@@ -899,11 +899,11 @@ impl<V: ModularReduce + Eq, M: Modulus<V>> SubAssign<ModularInteger<V, M>>
     }
 }
 
-impl<'r, V: ModularReduce + Eq, M: Modulus<V>> SubAssign<&'r ModularInteger<V, M>>
+impl<V: ModularReduce + Eq, M: Modulus<V>> SubAssign<&ModularInteger<V, M>>
     for ModularInteger<V, M>
 {
     fn sub_assign(&mut self, rhs: &Self) {
-        self.require_matching_moduli(&rhs);
+        self.require_matching_moduli(rhs);
         self.value.modular_sub_ref_assign(&rhs.value, &self.modulus);
     }
 }
@@ -938,21 +938,21 @@ impl<V: ModularReduce + Eq, M: Modulus<V>> MulAssign for ModularInteger<V, M> {
     }
 }
 
-impl<'r, V: ModularReduce + Eq, M: Modulus<V>> MulAssign<&'r ModularInteger<V, M>>
+impl<V: ModularReduce + Eq, M: Modulus<V>> MulAssign<&ModularInteger<V, M>>
     for ModularInteger<V, M>
 {
     fn mul_assign(&mut self, rhs: &Self) {
-        self.require_matching_moduli(&rhs);
+        self.require_matching_moduli(rhs);
         self.value.modular_mul_ref_assign(&rhs.value, &self.modulus);
     }
 }
 
-impl<'r, V: ModularReduce + Eq, M: Modulus<V>> Mul<&'r ModularInteger<V, M>>
+impl<V: ModularReduce + Eq, M: Modulus<V>> Mul<&ModularInteger<V, M>>
     for ModularInteger<V, M>
 {
     type Output = ModularInteger<V, M>;
     fn mul(self, rhs: &ModularInteger<V, M>) -> Self::Output {
-        self.require_matching_moduli(&rhs);
+        self.require_matching_moduli(rhs);
         ModularInteger {
             value: self.value.modular_mul_move_ref(&rhs.value, &self.modulus),
             modulus: self.modulus,
@@ -960,8 +960,8 @@ impl<'r, V: ModularReduce + Eq, M: Modulus<V>> Mul<&'r ModularInteger<V, M>>
     }
 }
 
-impl<'l, V: ModularReduce + Eq, M: Modulus<V>> Mul<ModularInteger<V, M>>
-    for &'l ModularInteger<V, M>
+impl<V: ModularReduce + Eq, M: Modulus<V>> Mul<ModularInteger<V, M>>
+    for &ModularInteger<V, M>
 {
     type Output = ModularInteger<V, M>;
     fn mul(self, rhs: ModularInteger<V, M>) -> Self::Output {
@@ -973,12 +973,12 @@ impl<'l, V: ModularReduce + Eq, M: Modulus<V>> Mul<ModularInteger<V, M>>
     }
 }
 
-impl<'l, 'r, V: ModularReduce + Eq, M: Modulus<V>> Mul<&'r ModularInteger<V, M>>
-    for &'l ModularInteger<V, M>
+impl<V: ModularReduce + Eq, M: Modulus<V>> Mul<&ModularInteger<V, M>>
+    for &ModularInteger<V, M>
 {
     type Output = ModularInteger<V, M>;
     fn mul(self, rhs: &ModularInteger<V, M>) -> Self::Output {
-        self.require_matching_moduli(&rhs);
+        self.require_matching_moduli(rhs);
         ModularInteger {
             value: self.value.modular_mul_ref_ref(&rhs.value, &self.modulus),
             modulus: self.modulus.clone(),
@@ -1061,8 +1061,8 @@ impl<V: ModularReduce + Eq + One + Zero + GCD<Output = V> + ExtendedGCD, M: Modu
     }
 }
 
-impl<'a, 'b, V: ModularReduce + Eq + One + Zero + GCD<Output = V> + ExtendedGCD, M: Modulus<V>>
-    Div<&'a ModularInteger<V, M>> for &'b ModularInteger<V, M>
+impl<V: ModularReduce + Eq + One + Zero + GCD<Output = V> + ExtendedGCD, M: Modulus<V>>
+    Div<&ModularInteger<V, M>> for &ModularInteger<V, M>
 {
     type Output = ModularInteger<V, M>;
     fn div(self, rhs: &ModularInteger<V, M>) -> ModularInteger<V, M> {
@@ -1110,13 +1110,13 @@ macro_rules! impl_exact_div {
             fn exact_div_assign(&mut self, rhs: $rhs) {
                 self.div_assign(rhs);
             }
-            fn checked_exact_div_assign(&mut self, rhs: $rhs) -> Result<(), ()> {
+            fn checked_exact_div_assign(&mut self, rhs: $rhs) -> Result<(), ExactDivAssignError> {
                 (&*self)
                     .checked_exact_div(rhs)
                     .map(|v| {
                         *self = v;
                     })
-                    .ok_or(())
+                    .ok_or(ExactDivAssignError)
             }
         }
 
